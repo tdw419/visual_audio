@@ -51,6 +51,13 @@ def parse_roadmap():
     """Parse ROADMAP.md and extract pending tasks"""
     content = ROADMAP.read_text()
 
+    # First, parse all tasks to check completion status
+    all_tasks = {}
+    for line in content.split('\n'):
+        m = re.match(r'- \[([ x])\]\s+\*\*([A-Z0-9_]+)\*\*', line)
+        if m:
+            all_tasks[m.group(2)] = m.group(1) == 'x'
+
     pending_tasks = []
     current_phase = None
 
@@ -103,6 +110,11 @@ def parse_roadmap():
 
             # Also check the task title line for blocked indicators
             if 'REOPENED' in description or 'falsely marked' in description:
+                blocked = True
+
+            # Check if all dependencies are complete
+            unmet_deps = [d for d in dependencies if not all_tasks.get(d, False)]
+            if unmet_deps:
                 blocked = True
 
             # Skip blocked tasks
