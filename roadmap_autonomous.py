@@ -69,6 +69,8 @@ def parse_roadmap():
             dependencies = []
             test_command = ""
             receipt_criteria = ""
+            blocked = False
+            status = ""
 
             lines_after = content.split('\n')[content.split('\n').index(line)+1:]
             for next_line in lines_after[:10]:
@@ -93,6 +95,19 @@ def parse_roadmap():
                     match = re.search(r'Receipt:\s*(.+)', next_line)
                     if match:
                         receipt_criteria = match.group(1).strip()
+                elif 'Status:' in next_line:
+                    match = re.search(r'Status:\s*(.+)', next_line)
+                    if match:
+                        status = match.group(1).strip()
+                        blocked = 'Blocked' in status or 'REOPENED' in status
+
+            # Also check the task title line for blocked indicators
+            if 'REOPENED' in description or 'falsely marked' in description:
+                blocked = True
+
+            # Skip blocked tasks
+            if blocked:
+                continue
 
             pending_tasks.append({
                 'id': task_id,
@@ -113,7 +128,12 @@ def get_next_task():
     pending = parse_roadmap()
 
     if not pending:
+        print("DEBUG: No pending tasks found after filtering")
         return None
+
+    print(f"DEBUG: Found {len(pending)} pending tasks:")
+    for t in pending:
+        print(f"  - {t['id']}: {t['priority']} (test: {t['test_command'][:50] if t['test_command'] else 'none'})")
 
     priority_order = {'CRITICAL': 0, 'HIGH': 1, 'MEDIUM': 2, 'LOW': 3}
     pending.sort(key=lambda t: priority_order.get(t['priority'], 99))
