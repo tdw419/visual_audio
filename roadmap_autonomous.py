@@ -122,9 +122,9 @@ def get_next_task():
 
 
 def commit_task(task_id, receipt=""):
-    """Git commit per verified task completion"""
-    # First stage ROADMAP.md
-    subprocess.run(['git', 'add', str(ROADMAP)], cwd=ROOT, check=True)
+    """Git commit per verified task completion - stages all changed files"""
+    # Stage ALL changed files so each task is one complete, revertible unit
+    subprocess.run(['git', 'add', '-A'], cwd=ROOT, check=True)
 
     # Commit with message linking to task
     message = f"Complete {task_id}\n\n{receipt}"
