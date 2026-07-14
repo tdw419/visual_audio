@@ -61,6 +61,9 @@ def parse_tasks():
 
 
 def run_test(cmd: str) -> tuple:
+    # Use venv Python for python3 commands
+    if cmd.strip().startswith('python3 '):
+        cmd = cmd.replace('python3 ', './venv/bin/python3 ', 1)
     # Compound commands (&&, ||, |, ;) need a shell; simple ones run directly.
     shell = any(op in cmd for op in ('&&', '||', '|', ';', '>'))
     try:

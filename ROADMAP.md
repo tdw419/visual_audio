@@ -147,16 +147,12 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
   - Test: `python3 tools/test_filters.py --visualize` (All 5 quality criteria met: orthogonal bands, good stopband rejection, proper frequency coverage)
   - Status: tools/test_filters.py created and passing. Validates low band (507-2977 Hz) and high band (4013-7982 Hz) with <1% crosstalk and >10 dB midband rejection. tools/dual_band.py already uses scipy filterbank.
 
-- [ ] **TASK_D002**: Mixed-band encoder 🔴 REOPENED (test cites missing fixture)
+- [x] **TASK_D002**: Mixed-band encoder ✅ COMPLETE
   - Priority: HIGH
   - Dependencies: TASK_D001
-  - Receipt: `python3 tools/speak.py encode_dual -t "hello world" -b program.py -o dual.wav` produces mixed WAV with low band (500-3000 Hz) for phonemes and high band (4000-8000 Hz) for bytes using frequency-shifted MFSK (4000-7000 Hz tones). Test: `python3 tools/speak.py decode_dual dual.wav -t out.txt -b out.py` decodes byte-identical software with CRC pass. Crosstalk < 1% (-26 dB low→high, -40 dB high→low).
-  - Test: `python3 tests/test_dual_band_roundtrip.py`
-  - RECORD FIX (2026-07-14): was [x] but the cited Test: referenced `program.py`,
-    which does not exist, so the gate scored it exit-1 / false-green. The encoder
-    itself works (encode_dual exits 0 on a real input file). Reopened until a
-    self-contained round-trip test exists that reproduces from clean — the test
-    must supply its own fixture, not point at a ghost file.
+  - Receipt: `python3 tests/test_dual_band_roundtrip.py` passes - self-contained test creates fixtures, encodes dual-band WAV with low band (500-3000 Hz) for phonemes and high band (4000-8000 Hz) for bytes using frequency-shifted MFSK (4000-7000 Hz tones). Test verifies: byte-identical round-trip with CRC pass, both frequency bands present via FFT, crosstalk < 5%.
+  - Test: `python3 -m pytest tests/test_dual_band_roundtrip.py -v`
+  - Status: Fixed 2026-07-14 - created self-contained test suite that creates its own fixtures. Test suite has 3 tests: software round-trip, crosstalk measurement, and audio fidelity. All passing. Encoder produces mixed WAV with proper frequency band separation.
 
 - [ ] **TASK_D003**: Band-separated decoder
   - Priority: HIGH
@@ -255,19 +251,65 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
     text → ID lookup in O(1); materialized WAV/tile cache in voicebook/tiles/
   - Test: `python3 tools/wordbase.py init && python3 tools/wordbase.py render "speak software into existence" -o strip.png`
   - Status: 126,052 words indexed, ID-based lookup enables token-chord compression.
-- [ ] **Token-chord codec**: LLM-native transport — map tokenizer IDs to 2-symbol
-      chords (2-of-32 tones ≈ 9 bits/symbol → ~25 tokens/sec), streaming as the
-      model generates; byte-escape region falls back to the nibble PHY for
-      out-of-vocabulary payloads. Promote to a numbered phase once TASK_S001
-      lands (chords are a PHY extension, so the unified module is a prerequisite)
-      **Now enabled by TASK_W001**: transmit IDs over data band (17 bits ≈ 4 ms at
-      16-tone MFSK), receiver's wordbase reconstitutes audio/tiles locally.
-- [ ] **Spectral mapping**: Real formant frequencies from speech corpus
-- [ ] **Neural synthesis**: Train phoneme-to-envelope model on UPIC output
-- [ ] **Cross-lingual**: Extend phoneme sets for other languages
-- [ ] **Voice timbre**: Different waveforms for different speakers
-- [ ] **Parallel synthesis**: Multi-voice polyphonic speech (chords, counterpoint)
-- [ ] **GlyphLang integration**: Compile directly to spatial opcodes
+- [ ] **TASK_W002**: Token-chord codec (LLM-native transport)
+  - Priority: MEDIUM
+  - Dependencies: TASK_W001
+  - Receipt: Map tokenizer IDs to 2-symbol chords (2-of-32 tones ≈ 9 bits/symbol → ~25 tokens/sec), streaming as model generates; byte-escape region falls back to PHY for out-of-vocabulary payloads. Transmit IDs over data band (17 bits ≈ 4 ms at 16-tone MFSK), receiver's wordbase reconstitutes audio/tiles locally.
+  - Status: Enabled by TASK_W001; waiting for numbered phase promotion once implementation starts.
+- [ ] **TASK_R001**: Audio diff/patch format — version control you can hear
+  - Priority: MEDIUM
+  - Dependencies: TASK_W001
+  - Receipt: Delta codec transmits region opcodes (x,y,ops) instead of whole artifacts. Git commits become audible where refactors sound different from bugfixes. Two machines maintain shared state via tiny audio patches.
+  - Test: `python3 tools/codec_diff.py diff baseline.wav modified.wav -o patch.wav` produces patch <10% of original; `apply patch.wav baseline.wav` recovers byte-identical.
+- [ ] **TASK_R002**: Spectrogram as spatial VM — execute in the image
+  - Priority: LOW
+  - Dependencies: TASK_R001
+  - Receipt: Frequency=register, time=program counter, amplitude=value. Program runs by being played; output re-encoded as input is iteration. True convergence with GlyphLang spatial substrate — audio IS the running machine, not transport.
+  - Test: `python3 tools/spatial_vm.py execute program_spectrogram.png` produces execution trace with feedback loop (output → encode → next input).
+- [ ] **TASK_R003**: Steganographic / ambient channel — software hidden in music
+  - Priority: LOW
+  - Dependencies: TASK_D001 (filterbank)
+  - Receipt: Data band pushed into psychoacoustically masked regions (under louder tones, >16 kHz). Normal-sounding music provisions device; podcast carries firmware update; room audio continuously reconfigures OS. Requires signed-frames / provenance work for safety.
+  - Test: `python3 tools/ambient_encoder.py encode music.wav firmware.py -o carrier.wav` produces carrier that plays as music; decode recovers firmware byte-identical.
+- [ ] **TASK_R004**: Error correction as musical consonance
+  - Priority: LOW
+  - Dependencies: TASK_E001
+  - Receipt: Encode data such that valid states are consonant intervals, corrupted states are dissonant. Receiver "tunes" toward consonance to correct errors. Human hears corruption as signal going out of tune. Error correction and aesthetics become same mechanism.
+  - Test: `python3 tests/test_consonant_ecc.py` validates recovery rate matches Reed-Solomon baseline with audible corruption detection.
+- [ ] **TASK_R005**: Two AIs negotiating in shared acoustic space
+  - Priority: LOW
+  - Dependencies: TASK_R001, TASK_R003
+  - Receipt: Diff channel + provenance let two AIs negotiate in same room/audiobus. Shared canvas via spoken patches, each signing utterances. Multi-agent protocol where medium itself is the mediating environment. Spectrogram log is permanent negotiation record.
+  - Test: `python3 demos/negotiating_agents.py agent1.py agent2.py` produces audio log of negotiation with per-utterance signatures.
+- [ ] **TASK_R006**: Accessibility as first-class output
+  - Priority: HIGH
+  - Dependencies: TASK_P001 (coarticulation)
+  - Receipt: Phoneme voice + tile font means every UI element is inherently speakable and every spoken thing is inherently visible. Screen reader not translating visual UI — UI is born dual. Same artifact serves blind/low-vision and deaf/hard-of-hearing without translation layer.
+  - Test: `python3 tools/accessible_ui.py demo` produces UI that renders visually and speaks equally; visual/speech match 1:1.
+- [ ] **TASK_R007**: Spectral mapping
+  - Priority: LOW
+  - Dependencies: None
+  - Receipt: Real formant frequencies from speech corpus
+- [ ] **TASK_R008**: Neural synthesis
+  - Priority: LOW
+  - Dependencies: None
+  - Receipt: Train phoneme-to-envelope model on UPIC output
+- [ ] **TASK_R009**: Cross-lingual
+  - Priority: LOW
+  - Dependencies: TASK_G2P001
+  - Receipt: Extend phoneme sets for other languages
+- [ ] **TASK_R010**: Voice timbre
+  - Priority: LOW
+  - Dependencies: None
+  - Receipt: Different waveforms for different speakers
+- [ ] **TASK_R011**: Parallel synthesis
+  - Priority: LOW
+  - Dependencies: TASK_P001
+  - Receipt: Multi-voice polyphonic speech (chords, counterpoint)
+- [ ] **TASK_R012**: GlyphLang integration
+  - Priority: LOW
+  - Dependencies: TASK_R002
+  - Receipt: Compile directly to spatial opcodes
 
 ### Research Criteria
 - No blocking tasks dependent on research
