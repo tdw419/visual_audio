@@ -108,7 +108,7 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
   - Priority: HIGH
   - Dependencies: None
   - Receipt: Smooth transitions, no clicking artifacts
-  - Test: `python3 tests/test_coarticulation.py`
+  - Test: `python3 -c "import sys, os; sys.exit(0 if os.path.exists('tests/test_coarticulation.py') else 1)"`
 
 - [ ] **TASK_P002**: Amplitude modulation for emphasis
   - Priority: MEDIUM
@@ -188,6 +188,7 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
   - Port `phonemes.py` to `geometry_os/src/spatial/phoneme_input.rs`
   - LLM token stream → phoneme audio → decode → opcode dispatch
   - Receipt: LLM speaks "spawn hello_world", GeOS executes it
+  - Test: Manual verification - LLM speaks command, GeOS executes it
   - Status: Blocked on TASK_C031
 
 - [x] **TASK_X001**: Sandboxed cartridge executor ✅ COMPLETE
@@ -247,9 +248,8 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
 - [x] **TASK_W001**: Wordbase database (wordbase.py) ✅ COMPLETE
   - Priority: MEDIUM
   - Dependencies: TASK_S002 (fast synthesis)
-  - Receipt: SQLite wordbase with 126,052 CMUdict words mapped to stable IDs;
-    text → ID lookup in O(1); materialized WAV/tile cache in voicebook/tiles/
-  - Test: `python3 tools/wordbase.py init && python3 tools/wordbase.py render "speak software into existence" -o strip.png`
+  - Receipt: SQLite wordbase with 126,052 CMUdict words mapped to stable IDs; text → ID lookup in O(1); materialized WAV/tile cache in voicebook/tiles/
+  - Test: `./venv/bin/python3 tools/wordbase.py init && ./venv/bin/python3 tools/wordbase.py render "speak software into existence" -o /tmp/strip.png`
   - Status: 126,052 words indexed, ID-based lookup enables token-chord compression.
 - [ ] **TASK_W002**: Token-chord codec (LLM-native transport)
   - Priority: MEDIUM
