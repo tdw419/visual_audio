@@ -1,0 +1,20 @@
+{
+  "canvas": [400, 300, "#1a1a2e"],
+  "blocks": {
+    "button": {
+      "params": ["txt", "region_id"],
+      "ops": [
+        ["frame", 0, 0, 120, 30, "#7fb4ff"],
+        ["rect", 2, 2, 116, 26, "#5a9fd4"],
+        ["word", "$txt", 10, 8, "#ffffff"],
+        ["op", "spatial_set", 5, 5, 4278190335, "$region_id"]
+      ]
+    }
+  },
+  "main": [
+    ["place", "button", 20, 20, {"txt": "open", "region_id": 101}],
+    ["place", "button", 20, 70, {"txt": "save", "region_id": 102}],
+    ["place", "button", 160, 20, {"txt": "copy", "region_id": 103}],
+    ["place", "button", 160, 70, {"txt": "paste", "region_id": 104}]
+  ]
+}

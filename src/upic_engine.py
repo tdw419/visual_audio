@@ -52,6 +52,21 @@ class UPICWaveformTable:
         fraction = position - index_floor
         
         return (1 - fraction) * self.samples[index_floor] + fraction * self.samples[index_ceil]
+    
+    def get_interpolated_samples(self, phases: np.ndarray) -> np.ndarray:
+        """Vectorized version: get interpolated sample values for array of phases."""
+        # Wrap phases to [0, 1]
+        phases = phases % 1.0
+        
+        # Calculate positions
+        positions = phases * (self.length - 1)
+        
+        # Linear interpolation using numpy
+        index_floor = np.floor(positions).astype(int)
+        index_ceil = np.minimum(index_floor + 1, self.length - 1)
+        fraction = positions - index_floor
+        
+        return (1 - fraction) * self.samples[index_floor] + fraction * self.samples[index_ceil]
 
 
 class UPICEnvelope:
@@ -75,34 +90,20 @@ class UPICEnvelope:
         if not (0.0 <= self.control_points[0][0] <= 1.0):
             raise ValueError("Control point times must be in [0, 1]")
             
+        # Extract times and values for vectorized access
+        self.times = np.array([cp[0] for cp in self.control_points])
+        self.values = np.array([cp[1] for cp in self.control_points])
+            
     def evaluate(self, time: float) -> float:
-        """Evaluate envelope at a given time (0.0 to 1.0)."""
+        """Evaluate envelope at a given time (0.0 to 1.0) - scalar version."""
         time = np.clip(time, 0.0, 1.0)
         
         # If single point, return that value
         if len(self.control_points) == 1:
             return self.control_points[0][1]
         
-        # Extract times and values
-        times = [cp[0] for cp in self.control_points]
-        values = [cp[1] for cp in self.control_points]
-        
-        # Linear interpolation
-        if time <= times[0]:
-            return values[0]
-        elif time >= times[-1]:
-            return values[-1]
-        else:
-            # Find segment
-            for i in range(len(times) - 1):
-                if times[i] <= time <= times[i + 1]:
-                    # Interpolate within segment
-                    t1, t2 = times[i], times[i + 1]
-                    v1, v2 = values[i], values[i + 1]
-                    fraction = (time - t1) / (t2 - t1) if t2 != t1 else 0
-                    return v1 + fraction * (v2 - v1)
-        
-        return values[-1]
+        # Use np.interp for linear interpolation (vectorized under the hood)
+        return float(np.interp(time, self.times, self.values))
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -140,7 +141,7 @@ class UPICVoice:
         
     def synthesize(self, duration: float, sample_rate: float = 44100.0) -> np.ndarray:
         """
-        Synthesize audio from this voice.
+        Synthesize audio from this voice - VECTORIZED.
         
         Args:
             duration: Duration in seconds
@@ -151,41 +152,42 @@ class UPICVoice:
         """
         num_samples = int(duration * sample_rate)
         time_points = np.linspace(0, duration, num_samples)
-        output = np.zeros(num_samples)
         
-        # Current phase accumulator
-        phase = 0.0
+        # Normalized time for envelopes [0, 1]
+        normalized_times = time_points / duration
         
-        for i, t in enumerate(time_points):
-            # Normalized time for envelopes [0, 1]
-            normalized_time = t / duration
-            
-            # Get frequency from envelope (or base frequency)
-            if self.frequency_envelope:
-                freq_mod = self.frequency_envelope.evaluate(normalized_time)
-                frequency = self.base_frequency * freq_mod
-            else:
-                frequency = self.base_frequency
-            
-            # Get amplitude from envelope (or base amplitude)
-            if self.amplitude_envelope:
-                amplitude = self.base_amplitude * self.amplitude_envelope.evaluate(normalized_time)
-            else:
-                amplitude = self.base_amplitude
-            
-            # Get time scaling from envelope
-            time_scale = 1.0
-            if self.time_envelope:
-                time_scale = self.time_envelope.evaluate(normalized_time)
-            
-            # Calculate phase increment
-            phase_increment = (frequency * time_scale) / sample_rate
-            phase += phase_increment
-            
-            # Get interpolated sample from wavetable
-            sample = self.wavetable.get_interpolated_sample(phase)
-            
-            output[i] = amplitude * sample
+        # Get frequency from envelope (or base frequency) - VECTORIZED
+        if self.frequency_envelope:
+            freq_mod = np.interp(normalized_times, self.frequency_envelope.times, self.frequency_envelope.values)
+            frequencies = self.base_frequency * freq_mod
+        else:
+            frequencies = np.full(num_samples, self.base_frequency)
+        
+        # Get amplitude from envelope (or base amplitude) - VECTORIZED
+        if self.amplitude_envelope:
+            amp_mod = np.interp(normalized_times, self.amplitude_envelope.times, self.amplitude_envelope.values)
+            amplitudes = self.base_amplitude * amp_mod
+        else:
+            amplitudes = np.full(num_samples, self.base_amplitude)
+        
+        # Get time scaling from envelope - VECTORIZED
+        if self.time_envelope:
+            time_scales = np.interp(normalized_times, self.time_envelope.times, self.time_envelope.values)
+        else:
+            time_scales = np.ones(num_samples)
+        
+        # Calculate phase increments - VECTORIZED
+        dt = 1.0 / sample_rate
+        phase_increments = (frequencies * time_scales) * dt
+        
+        # Accumulate phase using cumsum - VECTORIZED
+        phases = np.cumsum(phase_increments)
+        
+        # Get interpolated samples from wavetable - VECTORIZED
+        samples = self.wavetable.get_interpolated_samples(phases)
+        
+        # Apply amplitude envelope - VECTORIZED
+        output = amplitudes * samples
         
         return output
     
