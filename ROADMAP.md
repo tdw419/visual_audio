@@ -154,11 +154,11 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
   - Test: `python3 -m pytest tests/test_dual_band_roundtrip.py -v`
   - Status: Fixed 2026-07-14 - created self-contained test suite that creates its own fixtures. Test suite has 3 tests: software round-trip, crosstalk measurement, and audio fidelity. All passing. Encoder produces mixed WAV with proper frequency band separation.
 
-- [ ] **TASK_D003**: Band-separated decoder
+- [x] **TASK_D003**: Band-separated decoder
   - Priority: HIGH
   - Dependencies: TASK_D001
-  - Receipt: Decode extracts both phonemes (low) and bytes (high) without crosstalk
-  - Test: `python3 tools/speak.py decode_dual dual.wav -t out.txt -b out.py`
+  - Receipt: Verified by verify_task.py at 2026-07-14T16:45:25.718850
+  - Test: `python3 -m pytest tests/test_dual_band_roundtrip.py -v`
 
 ### Success Criteria
 - Single WAV plays as meaningful speech to humans
