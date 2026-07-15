@@ -255,7 +255,7 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
   - Priority: MEDIUM
   - Dependencies: TASK_W001
   - Receipt: Map tokenizer IDs to 2-symbol chords (2-of-32 tones ≈ 9 bits/symbol → ~25 tokens/sec), streaming as model generates; byte-escape region falls back to PHY for out-of-vocabulary payloads. Transmit IDs over data band (17 bits ≈ 4 ms at 16-tone MFSK), receiver's wordbase reconstitutes audio/tiles locally.
-  - Status: Enabled by TASK_W001; waiting for numbered phase promotion once implementation starts.
+  - Status: Blocked - Autopark: No test command defined in ROADMAP. Needs definition before verification can proceed.
 - [ ] **TASK_R001**: Audio diff/patch format — version control you can hear
   - Priority: MEDIUM
   - Dependencies: TASK_W001
