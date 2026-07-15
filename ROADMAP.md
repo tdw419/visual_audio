@@ -254,28 +254,28 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
   - Priority: MEDIUM
   - Dependencies: TASK_W001
   - Receipt: Delta codec transmits region opcodes (x,y,ops) instead of whole artifacts. Git commits become audible where refactors sound different from bugfixes. Two machines maintain shared state via tiny audio patches.
-  - Test: `python3 tools/codec_diff.py diff baseline.wav modified.wav -o patch.wav` produces patch <10% of original; `apply patch.wav baseline.wav` recovers byte-identical.
+  - Test: python3 tools/codec_diff.py diff baseline.wav modified.wav -o patch.wav && python3 tools/codec_diff.py apply patch.wav baseline.wav
 - [ ] **TASK_R002**: Spectrogram as spatial VM — execute in the image
   - Priority: LOW
   - Dependencies: TASK_R001
   - Receipt: Frequency=register, time=program counter, amplitude=value. Program runs by being played; output re-encoded as input is iteration. True convergence with GlyphLang spatial substrate — audio IS the running machine, not transport.
-  - Test: `python3 tools/spatial_vm.py execute program_spectrogram.png` produces execution trace with feedback loop (output → encode → next input).
+  - Test: python3 tools/spatial_vm.py execute program_spectrogram.png
 - [ ] **TASK_R003**: Steganographic / ambient channel — software hidden in music
   - Priority: LOW
   - Dependencies: TASK_D001 (filterbank)
   - Status: Blocked - Autopark: Test references missing tool (tools/ambient_encoder.py). Cannot verify without test file.
   - Receipt: Data band pushed into psychoacoustically masked regions (under louder tones, >16 kHz). Normal-sounding music provisions device; podcast carries firmware update; room audio continuously reconfigures OS. Requires signed-frames / provenance work for safety.
-  - Test: `python3 tools/ambient_encoder.py encode music.wav firmware.py -o carrier.wav` produces carrier that plays as music; decode recovers firmware byte-identical.
+  - Test: python3 tools/ambient_encoder.py encode music.wav firmware.py -o carrier.wav && python3 tools/ambient_encoder.py decode carrier.wav -o recovered.py
 - [ ] **TASK_R004**: Error correction as musical consonance
   - Priority: LOW
   - Dependencies: TASK_E001
   - Receipt: Encode data such that valid states are consonant intervals, corrupted states are dissonant. Receiver "tunes" toward consonance to correct errors. Human hears corruption as signal going out of tune. Error correction and aesthetics become same mechanism.
-  - Test: `python3 tests/test_consonant_ecc.py` validates recovery rate matches Reed-Solomon baseline with audible corruption detection.
+  - Test: python3 tests/test_consonant_ecc.py
 - [ ] **TASK_R005**: Two AIs negotiating in shared acoustic space
   - Priority: LOW
   - Dependencies: TASK_R001, TASK_R003
   - Receipt: Diff channel + provenance let two AIs negotiate in same room/audiobus. Shared canvas via spoken patches, each signing utterances. Multi-agent protocol where medium itself is the mediating environment. Spectrogram log is permanent negotiation record.
-  - Test: `python3 demos/negotiating_agents.py agent1.py agent2.py` produces audio log of negotiation with per-utterance signatures.
+  - Test: python3 demos/negotiating_agents.py agent1.py agent2.py
 - [x] **TASK_R006**: Accessibility as first-class output
   - Priority: HIGH
   - Dependencies: TASK_P001 (coarticulation)
@@ -285,32 +285,32 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
   - Priority: LOW
   - Dependencies: None
   - Receipt: Real formant frequencies from speech corpus
-  - Test: python3 tests/test_spectral_mapping.py extracts formants from a sample corpus and verifies extracted values are within typical formant ranges
+  - Test: python3 tests/test_spectral_mapping.py
 - [ ] **TASK_R008**: Neural synthesis
   - Priority: LOW
   - Dependencies: None
   - Receipt: Train phoneme-to-envelope model on UPIC output
-  - Test: python3 tests/test_neural_synthesis.py validates that a trained model can generate envelopes that match UPIC output within acceptable MAE tolerance
+  - Test: python3 tests/test_neural_synthesis.py
 - [ ] **TASK_R009**: Cross-lingual
   - Priority: LOW
   - Dependencies: TASK_G2P001
   - Receipt: Extend phoneme sets for other languages
-  - Test: python3 tests/test_cross_lingual.py validates phoneme encoding for at least two non-English languages with accurate round-trip text recovery
+  - Test: python3 tests/test_cross_lingual.py
 - [ ] **TASK_R010**: Voice timbre
   - Priority: LOW
   - Dependencies: None
   - Receipt: Different waveforms for different speakers
-  - Test: python3 tests/test_voice_timbre.py generates speech using two different timbre presets and verifies distinct spectral profiles
+  - Test: python3 tests/test_voice_timbre.py
 - [ ] **TASK_R011**: Parallel synthesis
   - Priority: LOW
   - Dependencies: TASK_P001
   - Receipt: Multi-voice polyphonic speech (chords, counterpoint)
-  - Test: python3 tests/test_parallel_synthesis.py generates a polyphonic sequence and verifies all voices are present in the output
+  - Test: python3 tests/test_parallel_synthesis.py
 - [ ] **TASK_R012**: GlyphLang integration
   - Priority: LOW
   - Dependencies: TASK_R002
   - Receipt: Compile directly to spatial opcodes
-  - Test: python3 tests/test_glyphlang_integration.py compiles a program to spatial opcodes and verifies bytecode correctness
+  - Test: python3 tests/test_glyphlang_integration.py
 
 ### Research Criteria
 - No blocking tasks dependent on research
