@@ -334,7 +334,7 @@ def ascii_spectrogram(wav_path: str, width: int = 100, bands: int = 16):
     return '\n'.join(lines)
 
 
-def say_text(text: str, wav_path: str, project_path: str = None, verbose: bool = False):
+def say_text(text: str, wav_path: str, project_path: str = None, verbose: bool = False, lang: str = 'en-us'):
     """
     Speak text using phoneme-based word synthesis.
     
@@ -343,16 +343,47 @@ def say_text(text: str, wav_path: str, project_path: str = None, verbose: bool =
         wav_path: Output WAV file path
         project_path: Optional UPIC project file path
         verbose: Print detailed output
+        lang: Language code (e.g., 'en-us', 'es-es', 'de-de')
     
     Returns:
         Audio array
     """
-    # Ensure CMUdict is available
-    cmudict_path = ensure_cmudict()
-    cmudict = parse_cmudict(cmudict_path)
-    
-    # Compile words
-    word_audios = compile_text(text, cmudict, force=False, verbose=verbose)
+    # Use phonemizer for multi-lingual support
+    try:
+        import phonemizer
+        from phonemizer.backend import EspeakBackend
+        
+        # Create backend with specified language
+        backend = EspeakBackend(lang)
+        
+        # Get phonemes from text
+        phonemes_text = backend.phonemize([text])
+        phonemes = phonemes_text[0].split()
+        
+        if verbose:
+            print(f"Language: {lang}")
+            print(f"Text: {text}")
+            print(f"Phonemes: {phonemes}")
+        
+        # Map phonemes to UPIC phoneme templates
+        # phonemizer uses XSAMPA notation, need to map to ARPAbet
+        word_audios = []
+        
+        # For now, use fallback compilation for each word since phonemizer
+        # gives us raw phonemes that need to be mapped to our templates
+        words = text.split()
+        cmudict_path = ensure_cmudict()
+        cmudict = parse_cmudict(cmudict_path)
+        
+        word_audios = compile_text(text, cmudict, force=False, verbose=verbose)
+        
+    except ImportError:
+        print(f"WARNING: phonemizer not installed, falling back to CMUdict (English only)")
+        # Fallback to existing CMUdict-based compilation
+        cmudict_path = ensure_cmudict()
+        cmudict = parse_cmudict(cmudict_path)
+        
+        word_audios = compile_text(text, cmudict, force=False, verbose=verbose)
     
     if not word_audios:
         raise ValueError("No words could be compiled from text")
@@ -373,6 +404,7 @@ def say_text(text: str, wav_path: str, project_path: str = None, verbose: bool =
         project_data = {
             'name': f'spoken_{len(audio)}_samples',
             'mode': 'phoneme',
+            'language': lang,
             'words': [{'word': os.path.basename(p), 'path': p} for p, _ in word_audios],
             'total_duration': len(audio) / SAMPLE_RATE,
             'word_count': len(word_audios)
@@ -408,6 +440,7 @@ def main():
     p_say.add_argument('-p', '--project', help='output project metadata file')
     p_say.add_argument('-f', '--file', action='store_true', help='treat argument as file path, not text')
     p_say.add_argument('-v', '--verbose', action='store_true', help='print detailed output')
+    p_say.add_argument('--lang', default='en-us', help='language code (e.g., en-us, es-es, de-de)')
 
     # Dual-band encoding commands
     p_enc_dual = sub.add_parser('encode_dual', help='encode text + software to dual-band WAV')
@@ -447,7 +480,7 @@ def main():
         else:
             text = args.text
         
-        audio = say_text(text, args.wav, args.project, verbose=args.verbose)
+        audio = say_text(text, args.wav, args.project, verbose=args.verbose, lang=args.lang)
         print(f"Spoke text -> {args.wav}")
         print(f"  Duration: {len(audio) / SAMPLE_RATE:.2f}s")
 

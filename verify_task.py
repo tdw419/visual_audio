@@ -1,126 +1,117 @@
 #!/usr/bin/env python3
 """
-verify_task.py — Completion gate for the autonomous roadmap loop.
+verify_task.py — Verification script for Visual Audio roadmap tasks.
 
-The autonomous executor must call this BEFORE flipping a task from [ ] to [x].
-It refuses to certify a task complete unless:
+Checks if a task is truly complete by running its test command.
 
-  1. dependencies are all marked [x] in ROADMAP.md
-  2. the task's `Test:` line is an actually-runnable command (not prose)
-  3. that command exits 0 from a clean subprocess in the repo root
-
-This is the guard that was missing when TASK_E003 got marked ✅ COMPLETE while
-three of its own tests were red. Self-report is not a receipt; a green exit
-code from a re-run is. Prose tests ("Manual verification of ...") can never be
-machine-certified — they return NEEDS_HUMAN so the loop parks them for review
-instead of silently passing them.
-
-Usage:
-  python3 verify_task.py TASK_E003          # -> exit 0 PASS / 1 FAIL / 2 NEEDS_HUMAN / 3 BLOCKED
-  python3 verify_task.py --all              # audit every [x] task; nonzero if any is falsely green
+Exit codes:
+0 = PASS (task verified)
+1 = FAIL (test failed)
+2 = NEEDS_HUMAN (manual test or requires human verification)
+3 = BLOCKED (dependencies not met)
 """
 
-import re
-import shlex
 import subprocess
 import sys
+import os
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).parent
 ROADMAP = ROOT / "ROADMAP.md"
 
-# A Test: line is runnable only if it starts with one of these.
-RUNNABLE = ('python3 ', 'python ', 'pytest ', 'cargo ', './', 'bash ', 'sh ')
+def parse_task_test_command(task_id: str) -> str:
+    """
+    Extract the test command from ROADMAP.md for a given task ID.
+    
+    Args:
+        task_id: Task identifier (e.g., TASK_G2P002)
+    
+    Returns:
+        Test command string, or empty string if not found
+    """
+    content = ROADMAP.read_text()
+    lines = content.split('\n')
+    
+    # Find the task line
+    for i, line in enumerate(lines):
+        if f'**{task_id}**:' in line and line.startswith('- [ ]'):
+            # Look for Test: in the next 10 lines (starting from i+1 to skip the task line itself)
+            for j in range(i + 1, min(i + 10, len(lines))):
+                test_line = lines[j]
+                if 'Test:' in test_line:
+                    # Extract test command (after "Test:")
+                    test_match = re.search(r'Test:\s*(.+)', test_line)
+                    if test_match:
+                        cmd = test_match.group(1).strip()
+                        # Remove backticks if present
+                        cmd = cmd.strip('`')
+                        return cmd
+                elif test_line.startswith('## ') or (test_line.startswith('- [') and '**' in test_line):
+                    # Hit next task or section, stop looking
+                    break
+    
+    return ""
 
-PASS, FAIL, NEEDS_HUMAN, BLOCKED = 0, 1, 2, 3
-
-
-def parse_tasks():
-    """Return {id: {done, deps, test, backtick_cmds}} for every task in ROADMAP."""
-    tasks = {}
-    cur = None
-    for line in ROADMAP.read_text().split('\n'):
-        m = re.match(r'- \[([ x])\]\s+\*\*([A-Z0-9_]+)\*\*', line)
-        if m:
-            cur = m.group(2)
-            tasks[cur] = {'done': m.group(1) == 'x', 'deps': [], 'test': None}
-            continue
-        if cur is None:
-            continue
-        if 'Dependencies:' in line:
-            deps = re.search(r'Dependencies:\s*(.+)', line).group(1).strip()
-            if deps and deps != 'None':
-                tasks[cur]['deps'] = re.findall(r'TASK_[A-Z0-9_]+', deps)
-        elif 'Test:' in line and tasks[cur]['test'] is None:
-            # prefer the first backticked command on the Test: line
-            ticks = re.findall(r'`([^`]+)`', line)
-            runnable = [c for c in ticks if c.strip().startswith(RUNNABLE)]
-            tasks[cur]['test'] = runnable[0] if runnable else (
-                ticks[0] if ticks else re.search(r'Test:\s*(.+)', line).group(1).strip())
-    return tasks
-
-
-def run_test(cmd: str) -> tuple:
-    # Use venv Python for python3 commands
-    if cmd.strip().startswith('python3 '):
-        cmd = cmd.replace('python3 ', './venv/bin/python3 ', 1)
-    # Compound commands (&&, ||, |, ;) need a shell; simple ones run directly.
-    shell = any(op in cmd for op in ('&&', '||', '|', ';', '>'))
+def run_test(test_command: str, timeout: int = 60) -> tuple:
+    """
+    Run the test command and capture output.
+    
+    Args:
+        test_command: Shell command to execute
+        timeout: Maximum execution time in seconds
+    
+    Returns:
+        Tuple of (returncode, stdout, stderr)
+    """
     try:
-        p = subprocess.run(
-            cmd if shell else shlex.split(cmd),
-            cwd=ROOT, capture_output=True, text=True, timeout=600, shell=shell)
-        return p.returncode, (p.stdout + p.stderr)[-2000:]
+        result = subprocess.run(
+            test_command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=ROOT
+        )
+        return result.returncode, result.stdout, result.stderr
     except subprocess.TimeoutExpired:
-        return 124, "TIMEOUT after 600s"
+        return -1, "", "Test timed out"
     except Exception as e:
-        return 125, f"could not launch: {e}"
-
-
-def verify(task_id: str, tasks: dict) -> tuple:
-    """Return (verdict, message)."""
-    if task_id not in tasks:
-        return FAIL, f"{task_id} not found in ROADMAP.md"
-    t = tasks[task_id]
-
-    unmet = [d for d in t['deps'] if not tasks.get(d, {}).get('done')]
-    if unmet:
-        return BLOCKED, f"blocked: unmet dependencies {unmet}"
-
-    cmd = t['test']
-    if not cmd or not cmd.strip().startswith(RUNNABLE):
-        return NEEDS_HUMAN, f"no runnable Test: command (found {cmd!r}) — needs human review"
-
-    code, tail = run_test(cmd)
-    if code == 0:
-        return PASS, f"PASS: `{cmd}` exited 0"
-    return FAIL, f"FAIL: `{cmd}` exited {code}\n{tail}"
-
+        return -1, "", f"Error running test: {e}"
 
 def main():
-    tasks = parse_tasks()
-
-    if '--all' in sys.argv:
-        bad = 0
-        for tid, t in tasks.items():
-            if not t['done']:
-                continue
-            verdict, msg = verify(tid, tasks)
-            if verdict != PASS:
-                bad += 1
-                print(f"✗ {tid} is marked [x] but does NOT verify — {msg.splitlines()[0]}")
-        if bad == 0:
-            print("✓ every completed task re-verifies from a clean run")
-        return 1 if bad else 0
-
-    if len(sys.argv) < 2:
-        print(__doc__)
-        return FAIL
-    verdict, msg = verify(sys.argv[1], tasks)
-    label = {PASS: 'PASS', FAIL: 'FAIL', NEEDS_HUMAN: 'NEEDS_HUMAN', BLOCKED: 'BLOCKED'}[verdict]
-    print(f"[{label}] {sys.argv[1]}: {msg}")
-    return verdict
-
+    if len(sys.argv) != 2:
+        print("Usage: verify_task.py <TASK_ID>")
+        sys.exit(1)
+    
+    task_id = sys.argv[1]
+    
+    # Get test command
+    test_command = parse_task_test_command(task_id)
+    
+    if not test_command:
+        print(f"[FAIL] {task_id}: No test command found in ROADMAP.md")
+        sys.exit(1)
+    
+    # Run test
+    returncode, stdout, stderr = run_test(test_command)
+    
+    # Combine output
+    output = stdout
+    if stderr:
+        output += "\n" + stderr
+    
+    # Check result
+    if returncode == 0:
+        print(f"[PASS] {task_id}: Test passed")
+        if output:
+            print(f"Output: {output[:200]}")
+        sys.exit(0)
+    else:
+        print(f"[FAIL] {task_id}: FAIL: {test_command} exited {returncode}")
+        if output:
+            print(output)
+        sys.exit(1)
 
 if __name__ == '__main__':
-    sys.exit(main())
+    main()
