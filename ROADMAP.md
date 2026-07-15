@@ -285,26 +285,32 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
   - Priority: LOW
   - Dependencies: None
   - Receipt: Real formant frequencies from speech corpus
+  - Test: python3 tests/test_spectral_mapping.py extracts formants from a sample corpus and verifies extracted values are within typical formant ranges
 - [ ] **TASK_R008**: Neural synthesis
   - Priority: LOW
   - Dependencies: None
   - Receipt: Train phoneme-to-envelope model on UPIC output
+  - Test: python3 tests/test_neural_synthesis.py validates that a trained model can generate envelopes that match UPIC output within acceptable MAE tolerance
 - [ ] **TASK_R009**: Cross-lingual
   - Priority: LOW
   - Dependencies: TASK_G2P001
   - Receipt: Extend phoneme sets for other languages
+  - Test: python3 tests/test_cross_lingual.py validates phoneme encoding for at least two non-English languages with accurate round-trip text recovery
 - [ ] **TASK_R010**: Voice timbre
   - Priority: LOW
   - Dependencies: None
   - Receipt: Different waveforms for different speakers
+  - Test: python3 tests/test_voice_timbre.py generates speech using two different timbre presets and verifies distinct spectral profiles
 - [ ] **TASK_R011**: Parallel synthesis
   - Priority: LOW
   - Dependencies: TASK_P001
   - Receipt: Multi-voice polyphonic speech (chords, counterpoint)
+  - Test: python3 tests/test_parallel_synthesis.py generates a polyphonic sequence and verifies all voices are present in the output
 - [ ] **TASK_R012**: GlyphLang integration
   - Priority: LOW
   - Dependencies: TASK_R002
   - Receipt: Compile directly to spatial opcodes
+  - Test: python3 tests/test_glyphlang_integration.py compiles a program to spatial opcodes and verifies bytecode correctness
 
 ### Research Criteria
 - No blocking tasks dependent on research
