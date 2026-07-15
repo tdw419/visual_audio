@@ -216,10 +216,10 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
 **Goal**: Replace basic fallback with production G2P engine.
 
 ### Tasks
-- [ ] **TASK_G2P001**: Integrate `phonemizer` library
+- [x] **TASK_G2P001**: Integrate `phonemizer` library
   - Priority: MEDIUM
   - Dependencies: None
-  - Receipt: Unknown words get accurate ARPAbet transcriptions
+  - Receipt: Verified by verify_task.py at 2026-07-14T20:38:13.550777
   - Test: `python3 tools/word_compiler.py word "supercalifragilistic" -v`
 
 - [ ] **TASK_G2P002**: Extend beyond English

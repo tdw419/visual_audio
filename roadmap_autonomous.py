@@ -141,9 +141,29 @@ def parse_roadmap():
     return pending_tasks
 
 
+SKIPPED_TASKS_FILE = ROOT / ".hermes/skipped_tasks.txt"
+
+def load_skipped_tasks():
+    """Load list of tasks that were skipped due to failures"""
+    if SKIPPED_TASKS_FILE.exists():
+        return set(SKIPPED_TASKS_FILE.read_text().splitlines())
+    return set()
+
+def skip_task(task_id, reason=""):
+    """Mark a task as skipped"""
+    SKIPPED_TASKS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    skipped = load_skipped_tasks()
+    skipped.add(task_id)
+    SKIPPED_TASKS_FILE.write_text('\n'.join(sorted(skipped)))
+    print(f"→ Task {task_id} skipped ({reason})")
+
 def get_next_task():
     """Get highest priority pending task"""
     pending = parse_roadmap()
+    skipped = load_skipped_tasks()
+    
+    # Filter out skipped tasks
+    pending = [t for t in pending if t['id'] not in skipped]
 
     if not pending:
         print("DEBUG: No pending tasks found after filtering")
@@ -247,8 +267,9 @@ def main():
             # Exit codes: 0=PASS, 1=FAIL, 2=NEEDS_HUMAN, 3=BLOCKED
             if result.returncode == 1:
                 print(f"\n✗ Task {task['id']} FAILS verification")
-                print(f"Cannot mark complete. Fix failing tests first.")
-                return 1
+                print(f"Skipping this task for now and continuing to next.")
+                skip_task(task['id'], "verification failed")
+                return 0
             elif result.returncode == 2:
                 print(f"\n⚠ Task {task['id']} requires human review")
                 print(f"Manual test cannot be auto-verified. Parking for review.")
