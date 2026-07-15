@@ -276,10 +276,10 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
   - Dependencies: TASK_R001, TASK_R003
   - Receipt: Diff channel + provenance let two AIs negotiate in same room/audiobus. Shared canvas via spoken patches, each signing utterances. Multi-agent protocol where medium itself is the mediating environment. Spectrogram log is permanent negotiation record.
   - Test: `python3 demos/negotiating_agents.py agent1.py agent2.py` produces audio log of negotiation with per-utterance signatures.
-- [ ] **TASK_R006**: Accessibility as first-class output
+- [x] **TASK_R006**: Accessibility as first-class output
   - Priority: HIGH
   - Dependencies: TASK_P001 (coarticulation)
-  - Receipt: Phoneme voice + tile font means every UI element is inherently speakable and every spoken thing is inherently visible. Screen reader not translating visual UI — UI is born dual. Same artifact serves blind/low-vision and deaf/hard-of-hearing without translation layer.
+  - Receipt: Verified by verify_task.py at 2026-07-14T20:37:09.938795
   - Test: `python3 tools/accessible_ui.py demo` produces UI that renders visually and speaks equally; visual/speech match 1:1.
 - [ ] **TASK_R007**: Spectral mapping
   - Priority: LOW
