@@ -128,19 +128,24 @@ class CMUdictFuzzyMatcher:
     def _build_phoneme_index(self):
         """Build index for fast phoneme pattern lookup."""
         self.phoneme_to_words = defaultdict(list)
+        self.first_phoneme_to_words = defaultdict(set)  # NEW: words starting with phoneme
         self.bigram_to_words = defaultdict(list)
         self.trigram_to_words = defaultdict(list)
-        
+
         for word, phonemes in self.cmudict.items():
+            # Index words by first phoneme (NEW - for fast prefix matching)
+            if phonemes:
+                self.first_phoneme_to_words[phonemes[0]].add(word)
+
             # Index single phonemes
             for i, ph in enumerate(phonemes):
                 self.phoneme_to_words[ph].append((word, i))
-            
+
             # Index bigrams
             for i in range(len(phonemes) - 1):
                 bigram = (phonemes[i], phonemes[i + 1])
                 self.bigram_to_words[bigram].append((word, i))
-            
+
             # Index trigrams
             for i in range(len(phonemes) - 2):
                 trigram = (phonemes[i], phonemes[i + 1], phonemes[i + 2])
@@ -153,22 +158,50 @@ class CMUdictFuzzyMatcher:
     ) -> List[Tuple[str, List[str], int]]:
         """
         Find words that match phoneme pattern with allowed errors.
-        
+
+        Optimized version: Uses phoneme index and bigram filtering to narrow 
+        candidates before computing expensive edit distance calculations.
+
         Args:
             phonemes: Partial or corrupted phoneme sequence
             max_errors: Maximum number of insertions/deletions/substitutions
-        
+
         Returns:
             List of (word, phonemes, errors) tuples, sorted by errors
         """
         candidates = []
-        
-        # Direct match
-        for word, word_phonemes in self.cmudict.items():
+
+        # Use first phoneme to get candidate words (huge optimization!)
+        # This avoids scanning all 133k words
+        if phonemes:
+            first_ph = phonemes[0]
+            if first_ph in self.first_phoneme_to_words:
+                # Only check words that start with the first phoneme
+                candidate_words = self.first_phoneme_to_words[first_ph].copy()
+
+                # Additional optimization: use bigram filter if we have 2+ phonemes
+                if len(phonemes) >= 2:
+                    bigram = (phonemes[0], phonemes[1])
+                    if bigram in self.bigram_to_words:
+                        # Keep only words containing this bigram at position 0
+                        bigram_words = set(word for word, pos in self.bigram_to_words[bigram] if pos == 0)
+                        candidate_words &= bigram_words
+                    # If bigram not found, no candidates (fail fast)
+                    else:
+                        return []
+            else:
+                # No words start with this phoneme
+                return []
+        else:
+            candidate_words = set(self.cmudict.keys())
+
+        # Compute edit distance only for filtered candidates
+        for word in candidate_words:
+            word_phonemes = self.cmudict[word]
             errors = self._edit_distance(phonemes, word_phonemes)
             if errors <= max_errors:
                 candidates.append((word, word_phonemes, errors))
-        
+
         # Sort by errors (fewest first)
         candidates.sort(key=lambda x: x[2])
         return candidates[:10]  # Return top 10
