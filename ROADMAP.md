@@ -110,10 +110,10 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
   - Receipt: Verified by verify_task.py at 2026-07-15T01:16:38.733612
   - Test: `python3 tests/test_emphasis.py` validates emphasis parsing, generation, and metadata output
 
-- [ ] **TASK_P003**: Pitch variation for intonation
+- [x] **TASK_P003**: Pitch variation for intonation
   - Priority: MEDIUM
   - Dependencies: TASK_P001
-  - Receipt: Question marks raise pitch end-freq, periods lower
+  - Receipt: Verified by verify_task.py at 2026-07-15T01:18:03.354634
   - Test: `python3 tests/test_intonation.py` validates intonation parsing, pitch analysis, and generation infrastructure
 
 - [ ] **TASK_P004**: Prosodic phrase grouping
