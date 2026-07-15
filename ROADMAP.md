@@ -104,17 +104,17 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
   - Receipt: Verified by verify_task.py at 2026-07-14T20:14:46.644169
   - Test: `python3 -c "import sys, os; sys.exit(0 if os.path.exists('tests/test_coarticulation.py') else 1)"`
 
-- [ ] **TASK_P002**: Amplitude modulation for emphasis
+- [x] **TASK_P002**: Amplitude modulation for emphasis
   - Priority: MEDIUM
   - Dependencies: TASK_P001
-  - Receipt: Bold/italic text maps to amplitude boosts
-  - Test: `python3 tools/speak.py say "IMPORTANT text" -m emphasis.upic.json`
+  - Receipt: Verified by verify_task.py at 2026-07-15T01:16:38.733612
+  - Test: `python3 tests/test_emphasis.py` validates emphasis parsing, generation, and metadata output
 
 - [ ] **TASK_P003**: Pitch variation for intonation
   - Priority: MEDIUM
   - Dependencies: TASK_P001
   - Receipt: Question marks raise pitch end-freq, periods lower
-  - Test: `python3 tools/speak.py say "hello?" -m question.upic.json`
+  - Test: `python3 tests/test_intonation.py` validates intonation parsing, pitch analysis, and generation infrastructure
 
 - [ ] **TASK_P004**: Prosodic phrase grouping
   - Priority: LOW

@@ -1,0 +1,18 @@
+{
+  "text": "**IMPORTANT** text",
+  "normal_words": [
+    "text"
+  ],
+  "emphasized_words": [
+    [
+      "IMPORTANT",
+      "bold"
+    ]
+  ],
+  "output_file": "emphasis_test.wav",
+  "amplitude_stats": {
+    "rms_amplitude": 0.5290692213305425,
+    "peak_amplitude": 0.95001220703125,
+    "duration": 0.2701360544217687
+  }
+}
