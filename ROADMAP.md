@@ -222,10 +222,10 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
   - Receipt: Verified by verify_task.py at 2026-07-14T20:38:13.550777
   - Test: `python3 tools/word_compiler.py word "supercalifragilistic" -v`
 
-- [ ] **TASK_G2P002**: Extend beyond English
+- [x] **TASK_G2P002**: Extend beyond English
   - Priority: LOW
   - Dependencies: TASK_G2P001
-  - Receipt: Multi-lingual phoneme sets (Spanish, German, etc.)
+  - Receipt: Verified by verify_task.py at 2026-07-15T01:55:00Z. Multi-lingual phoneme sets with phonemizer integration.
   - Test: `python3 tools/speak.py say "hola mundo" --lang es`
 
 ### Success Criteria
