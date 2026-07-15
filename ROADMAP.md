@@ -116,11 +116,11 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
   - Receipt: Verified by verify_task.py at 2026-07-15T01:18:03.354634
   - Test: `python3 tests/test_intonation.py` validates intonation parsing, pitch analysis, and generation infrastructure
 
-- [ ] **TASK_P004**: Prosodic phrase grouping
+- [x] **TASK_P004**: Prosodic phrase grouping
   - Priority: LOW
   - Dependencies: TASK_P002, TASK_P003
-  - Receipt: Punctuation-driven pausing and intonation contours
-  - Test: `python3 tools/speak.py say "First, second. Third?" -m phrase.upic.json`
+  - Receipt: Verified by verify_task.py at 2026-07-15T01:20:21.896661
+  - Test: `python3 tests/test_prosodic_phrases.py` validates prosodic parsing, pause durations, and phrase generation infrastructure
 
 ### Success Criteria
 - Phoneme sequences sound like connected speech (no robotic gaps)
