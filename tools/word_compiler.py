@@ -5,6 +5,8 @@ word_compiler.py — Compile words from text to phoneme-based UPIC voices.
 Fetches pronunciations from CMUdict (135k+ words), synthesizes each word as
 a sequence of phoneme envelopes, and caches the results to voicebook/ for
 fast reuse. Words are normalized to lowercase and mapped to ARPAbet phonemes.
+
+TASK_P001: Added 5ms crossfade between phonemes for smooth transitions.
 """
 
 import argparse
@@ -28,6 +30,49 @@ SAMPLE_RATE = 44100
 CMUDICT_URL = "https://raw.githubusercontent.com/cmusphinx/cmudict/master/cmudict.dict"
 CMUDICT_PATH = os.path.expanduser("~/.cmudict/cmudict.dict")
 VOICEBOOK_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'voicebook')
+
+# TASK_P001: 5ms crossfade between phonemes
+CROSSFADE_DURATION_MS = 5.0
+
+
+def crossfade_audio(a: np.ndarray, b: np.ndarray, fade_samples: int) -> np.ndarray:
+    """
+    Crossfade two audio segments using linear interpolation.
+    
+    Args:
+        a: First audio segment
+        b: Second audio segment
+        fade_samples: Number of samples to crossfade
+    
+    Returns:
+        Crossfaded audio (len(a) + len(b) - fade_samples)
+    """
+    if fade_samples == 0:
+        return np.concatenate([a, b])
+    
+    # Determine actual fade length (don't exceed segment lengths)
+    fade_len = min(fade_samples, len(a), len(b))
+    
+    if fade_len == 0:
+        return np.concatenate([a, b])
+    
+    # Create crossfade windows
+    fade_out = np.linspace(1.0, 0.0, fade_len)
+    fade_in = np.linspace(0.0, 1.0, fade_len)
+    
+    # Crossfade the overlapping region
+    overlap_a = a[-fade_len:] * fade_out
+    overlap_b = b[:fade_len] * fade_in
+    overlap = overlap_a + overlap_b
+    
+    # Concatenate: start of a + crossfade + rest of b
+    result = np.concatenate([
+        a[:-fade_len],
+        overlap,
+        b[fade_len:]
+    ])
+    
+    return result
 
 
 def ensure_cmudict() -> str:
@@ -176,9 +221,67 @@ def get_phonemes_for_word(word: str, cmudict: Dict[str, List[str]]) -> List[str]
     return fallback_phonemes
 
 
+def build_word_project_with_crossfade(word: str, phonemes_list: List[str]) -> np.ndarray:
+    """
+    Build a word from phonemes with crossfade between adjacent phonemes.
+    
+    TASK_P001: Synthesizes each phoneme individually and applies 5ms crossfade
+    between adjacent phonemes to eliminate clicking artifacts.
+    
+    Args:
+        word: The word being synthesized
+        phonemes_list: List of ARPAbet phonemes
+    
+    Returns:
+        Audio array with crossfaded phonemes
+    """
+    if not phonemes_list:
+        return np.array([])
+    
+    # Create phoneme envelopes
+    all_envelopes = phonemes.create_phoneme_envelopes()
+    
+    # Calculate crossfade length in samples
+    crossfade_samples = int(CROSSFADE_DURATION_MS / 1000.0 * SAMPLE_RATE)
+    
+    # Synthesize each phoneme individually
+    phoneme_audios = []
+    for ph in phonemes_list:
+        if ph not in all_envelopes:
+            print(f"  Warning: Unknown phoneme '{ph}', skipping")
+            continue
+        
+        ph_envelope = all_envelopes[ph]
+        
+        # Create project for single phoneme
+        project = UPICProject(f"phoneme_{ph}")
+        wavetable = UPICWaveformTable('sine', create_basic_waveform('sine'), SAMPLE_RATE)
+        project.add_wavetable(wavetable)
+        
+        voice = UPICVoice(ph, wavetable)
+        voice.base_frequency = 1.0
+        voice.base_amplitude = 0.7
+        voice.set_frequency_envelope(ph_envelope)
+        project.add_voice(voice)
+        
+        # Synthesize this phoneme
+        audio = project.synthesize(phonemes.DURATION, SAMPLE_RATE)
+        phoneme_audios.append(audio)
+    
+    # Crossfade adjacent phonemes
+    result = phoneme_audios[0]
+    for i in range(1, len(phoneme_audios)):
+        result = crossfade_audio(result, phoneme_audios[i], crossfade_samples)
+    
+    return result
+
+
 def build_word_project(word: str, phonemes_list: List[str]) -> UPICProject:
     """
     Build a UPIC project for a single word from its phonemes.
+    
+    Note: This function builds the legacy project structure without crossfade.
+    For crossfaded audio, use build_word_project_with_crossfade().
     
     Args:
         word: The word being synthesized
@@ -235,6 +338,8 @@ def compile_word(word: str, cmudict: Dict[str, List[str]],
     """
     Compile a single word: synthesize audio and cache it.
     
+    TASK_P001: Uses crossfade between phonemes for smooth transitions.
+    
     Args:
         word: The word to compile
         cmudict: Parsed CMUdict mapping
@@ -269,17 +374,19 @@ def compile_word(word: str, cmudict: Dict[str, List[str]],
     if verbose:
         print(f"    Phonemes: {' '.join(phonemes_list)}")
     
-    # Build project and synthesize
-    duration = len(phonemes_list) * phonemes.DURATION
-    project = build_word_project(word, phonemes_list)
-    audio = project.synthesize(duration, SAMPLE_RATE)
+    # TASK_P001: Build word with crossfade
+    audio = build_word_project_with_crossfade(word, phonemes_list)
     
     # Save
     sf.write(wav_path, audio, SAMPLE_RATE)
+    
+    # Also save project for reference (legacy format without crossfade)
+    duration = len(phonemes_list) * phonemes.DURATION
+    project = build_word_project(word, phonemes_list)
     project.save_project(upic_path)
     
     if verbose:
-        print(f"    Saved: {wav_path} ({duration*1000:.0f}ms)")
+        print(f"    Saved: {wav_path} ({len(audio)/SAMPLE_RATE*1000:.0f}ms with {CROSSFADE_DURATION_MS}ms crossfade)")
     
     return wav_path, audio
 
