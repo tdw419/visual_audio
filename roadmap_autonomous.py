@@ -81,7 +81,7 @@ def parse_roadmap():
 
             lines_after = content.split('\n')[content.split('\n').index(line)+1:]
             for next_line in lines_after[:10]:
-                if next_line.startswith('## ') or (next_line.startswith('- ') and '\*\*' in next_line):
+                if next_line.startswith('## ') or (next_line.startswith('- ') and '**' in next_line):
                     break
 
                 if 'Priority:' in next_line:
@@ -93,7 +93,13 @@ def parse_roadmap():
                     if match:
                         deps = match.group(1)
                         if deps != 'None':
-                            dependencies = [d.strip() for d in deps.split(',')]
+                            # Extract task IDs from dependencies like "TASK_P001 (coarticulation)"
+                            dependencies = []
+                            for dep in deps.split(','):
+                                dep = dep.strip()
+                                task_id_match = re.match(r'([A-Z0-9_]+)', dep)
+                                if task_id_match:
+                                    dependencies.append(task_id_match.group(1))
                 elif 'Test:' in next_line:
                     match = re.search(r'Test:\s*(.+)', next_line)
                     if match:

@@ -214,6 +214,26 @@ The question isn't "what else can we do with audio?" but "what can we do that au
 
 These 6 directions aren't just cool features. They're fundamentally new ways to think about computation, collaboration, and accessibility.
 
+## References
+
+### Primary Research
+- [**Prioritizing Audio Computation Pipelines**](~/zion/docs/research/Prioritizing_Audio_Computation_Pipelines.md) — Complete technical foundations for phase-accurate delta reconstruction, spectrogram VMs, and consonance-based ECC (Sethares, photonic computing, sample-accurate sync)
+
+### Historical Precedents
+- **ANS synthesizer** — Murzin's rotating glass disks with 720 microtones, direct drawing-to-sound (1937–1957)
+- **LeCaine Spectrogram machine** — 108 oscillators controlled by ink curves on paper (1950s)
+- **UPIC system** — Xenakis' digitizing tablet with X=time/Y=pitch, polyphonic voices (1977)
+
+### Key Papers
+- **Sethares on Adaptive Tuning** — "Adaptive tunings for musical scales" — consonance optimization via gradient descent
+- **Caltech Photonic Computing** — Cellular automata on-chip at GHz rates, proving Turing-complete spectrum-based computation
+- **Consonance/Dissonance** — Pairwise beating model with critical bandwidth scaling
+
+### Hardware Requirements
+- **Sample-accurate sync** — Not phase-locked (frame-level) but exact sample locations (<21μs at 48kHz)
+- **NOS R2R DACs** — Non-Oversampling preserves native phase-to-amplitude (no interpolation artifacts)
+- **Cochlea engine** — Block-based rendering at event boundaries for deterministic PCM
+
 ---
 
 *Where each direction lives in the roadmap:*
