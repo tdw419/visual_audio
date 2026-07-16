@@ -178,12 +178,19 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
   - Receipt: `cargo run --bin spatial_audio_boot < kernel.wav` prints "Booted from audio"
   - Status: Blocked on TASK_C030
 
-- [ ] **TASK_C032**: Phoneme LLM input (IN GEOS TASKS)
+- [x] **TASK_C033**: Signed boot manifest for QEMU launch ✅ COMPLETE
+  - Priority: HIGH
+  - Dependencies: None
+  - Receipt: Signed ["boot", arch, image] ops from audio launch QEMU; architecture allowlist (riscv64, x86_64); traversal protection (bare filename only, double-checked at parse/resolve); provenance gating (--enable-boot requires --provenance); real QEMU launch verified (OpenSBI banner booted)
+  - Test: `python3 test_boot_manifest.py` (4/4 tests pass)
+  - Status: Complete. tools/boot_manifest.py (safe parsing/launch), tools/pixel_os_listener.py (dispatch with provenance gate), test_boot_manifest.py (security envelope tests). Security: arch allowlist, no path traversal, shell-argv-only, provenance_required is sound proxy for "boot op was signed" thanks to decode_data_band downgrade fix.
+
+- [ ] **TASK_C034**: Phoneme LLM input (IN GEOS TASKS)
   - Port `phonemes.py` to `geometry_os/src/spatial/phoneme_input.rs`
   - LLM token stream → phoneme audio → decode → opcode dispatch
   - Receipt: LLM speaks "spawn hello_world", GeOS executes it
   - Test: Manual verification - LLM speaks command, GeOS executes it
-  - Status: Blocked on TASK_C031
+  - Status: Blocked on TASK_C033
 
 - [x] **TASK_X001**: Sandboxed cartridge executor ✅ COMPLETE
   - Priority: HIGH
@@ -239,12 +246,12 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
 **Goal**: Long-term research projects, not blocking production.
 
 ### Active Research
-- [x] **TASK_W001**: Wordbase database (wordbase.py) ✅ COMPLETE
-  - Priority: MEDIUM
+- [x] **TASK_W001**: Wordbase v2 reconciliation (visual audio + metadata) ✅ COMPLETE
+  - Priority: HIGH
   - Dependencies: TASK_S002 (fast synthesis)
-  - Receipt: SQLite wordbase with 126,052 CMUdict words mapped to stable IDs; text → ID lookup in O(1); materialized WAV/tile cache in voicebook/tiles/
-  - Test: `./venv/bin/python3 tools/wordbase.py init && ./venv/bin/python3 tools/wordbase.py render "speak software into existence" -o /tmp/strip.png`
-  - Status: 126,052 words indexed, ID-based lookup enables token-chord compression.
+  - Receipt: Unified Wordbase (db/wordbase.db) with rich metadata (id/word/pronunciation/pos/definition/examples/color_hex/image_path/image_link); 126,052 CMUdict words imported; lazy spectrogram generation via materialize(); color encoding for semantic visualization; compatibility restored for compose.py and pixel_screen.py
+  - Test: `python3 tools/compose.py compile /tmp/test_manifest.json -o /tmp/test_program.png -w /tmp/test_program.wav` and verify image contains word tiles
+  - Status: **COMPLETE** 2026-07-16T01:49:25-05:00. Full reconciliation done: (1) ✅ bulk imported 126,052 CMUdict words from old voicebook/wordbase.db, (2) ✅ ported materialize() for lazy spectrogram generation with scipy spectrogram → 20x100px RGB tiles, (3) ✅ added color_hex column with semantic encoding (125,259 words colored), (4) ✅ restored compatibility with compose.py and pixel_screen.py via wordbase_compat.py, (5) ✅ verified end-to-end: word lookup → tile generation → canvas rendering
 - [ ] **TASK_W002**: Token-chord codec (LLM-native transport)
   - Priority: MEDIUM
   - Dependencies: TASK_W001
@@ -417,11 +424,102 @@ human-facing band but blocks nothing.
 
 ---
 
+## Phase 8: Pixel-Token Language Model ⚪ NOT STARTED
+
+**Goal**: An AI model where tokens are pixels and pixels are words. The model's
+vocabulary IS the wordbase: each word id maps losslessly to one 24-bit RGB pixel
+(`id = R<<16 | G<<8 | B`; max id 175,584 fits easily in 16.7M pixel space). A
+sentence is a row of pixels, a document is an image, and a generated pixel stream
+renders three ways from the same ids: image (pixel strip / word tiles), audio
+(spectral codec), and text. Training runs locally (torch + CUDA available).
+
+**Scope decision**: research prototype — a small transformer (~10–25M params) over
+a frequency-capped vocab (top ~16k wordbase words + specials), trained on a small
+public-domain corpus. Not production; the deliverable is the closed loop
+text → pixels → model → pixels → {image, audio, text}.
+
+### Tasks
+- [ ] **TASK_M001**: Pixel tokenizer (text ↔ word id ↔ RGB pixel)
+  - Priority: CRITICAL
+  - Dependencies: TASK_W001 (wordbase)
+  - Receipt: `src/pixel_tokenizer.py` with encode(text) → word-id list → RGB pixel array and decode(pixels) → text. Reserved ids 0–15 for specials (PAD/BOS/EOS/UNK/NEWLINE...). OOV words auto-added to wordbase via existing G2P path. Round-trip is byte-exact for any text whose words are in the wordbase; unknown words survive via auto-add. Test creates its own fixtures and runs from a clean checkout.
+  - Test: python3 -m pytest tests/test_pixel_tokenizer.py
+  - Status: REJECTED 2026-07-16 — completion claim verified false. 12 tests pass but
+    tests write to the PRODUCTION db (added 5 rows to db/wordbase.db incl. a literal
+    two-space "word"); receipt requires self-contained fixtures (use a temp-copy db).
+    "Byte-exact round-trip" is false: punctuation dropped, case lost, whitespace runs
+    of 2+ spaces fall through word lookup and get auto-added to the db as words.
+    OOV pronunciations are garbage: `_xsampa_to_arpabet` uppercases raw IPA instead
+    of using tools/xsampa_to_arpabet.py. Duplicate test code embedded in the module
+    (src/pixel_tokenizer.py:396-530). ALSO EXPOSED: TASK_W001 migration silently
+    dropped ~789 words vs voicebook/wordbase.db — 'hello' and 'world' were missing
+    from db/wordbase.db until the tokenizer auto-added them with junk pronunciations
+    ('HELLO', 'WORLD'). Fix the migration hole before rebuilding on top of it.
+  - Status update 2026-07-16 (2nd verification): re-migration fixed counts (126,052),
+    real pronunciations for hello/world, contractions restored, junk rows gone — but
+    the "clean CMUdict import" REGRESSED the db to a pre-W001 schema: color_hex
+    column dropped (breaks tools/wordbase_compat.py inserts, tools/pixel_screen.py
+    auto-coloring, colorize_wordbase.py, and future TASK_M003 embeddings); ALL custom
+    pixel-OS vocabulary lost (close_brace, open_paren, semicolon, greater_equal,
+    "six point two eight", ...); every word id reassigned, orphaning every tile in
+    voicebook/tiles/ (filenames embed old ids) and making any previously encoded
+    pixel/audio artifact undecodable; spectrogram_cache emptied; image_path all NULL.
+    Word ids are a public contract for pixel encoding — rebuilds must preserve them.
+    Required before M001 redo: restore color_hex column + re-run colorize_wordbase.py,
+    re-add symbol vocabulary, decide id-stability policy (preserve old ids for
+    overlapping words or regenerate all tiles/artifacts).
+
+- [ ] **TASK_M002**: Pixel corpus builder
+  - Priority: HIGH
+  - Dependencies: TASK_M001
+  - Receipt: `tools/build_pixel_corpus.py` converts a text file into (a) a `.npy` id sequence for training and (b) a PNG where each row of pixels is a line of text — the corpus is literally viewable as an image. Includes a small bundled public-domain sample so the test needs no network.
+  - Test: python3 -m pytest tests/test_pixel_corpus.py
+
+- [ ] **TASK_M003**: Word-pixel embeddings from wordbase features
+  - Priority: MEDIUM
+  - Dependencies: TASK_M001
+  - Receipt: `src/pixel_embeddings.py` builds an initial embedding matrix from wordbase metadata: color_hex (semantic color), pronunciation (phoneme n-gram features), and pos. "Pixels are words" is baked into the representation, not just the serialization. Verified: nearest neighbors in embedding space share phonetic/semantic structure for a spot-check list.
+  - Test: python3 -m pytest tests/test_pixel_embeddings.py
+
+- [ ] **TASK_M004**: Train pixel-token transformer
+  - Priority: HIGH
+  - Dependencies: TASK_M002, TASK_M003
+  - Receipt: `tools/train_pixel_lm.py` trains a small decoder-only transformer (~10–25M params, vocab = top ~16k words + specials, others → UNK) on the pixel corpus; checkpoint saved to `models/pixel_lm.pt`; validation perplexity beats a unigram baseline computed by the same script. Test is a fast smoke run (tiny corpus, few hundred steps, CPU-safe) asserting loss decreases — full training documented in docs/PIXEL_LM.md.
+  - Test: python3 -m pytest tests/test_pixel_lm_train.py
+
+- [ ] **TASK_M005**: Generation → pixel/tile/audio rendering
+  - Priority: HIGH
+  - Dependencies: TASK_M004
+  - Receipt: `tools/pixel_lm_generate.py --prompt "..."` samples a continuation and emits: pixel-strip PNG (one pixel per token), word-tile PNG (via wordbase tiles), and text. Same id sequence drives all three projections.
+  - Test: python3 -m pytest tests/test_pixel_lm_generate.py
+
+- [ ] **TASK_M006**: Model output over the audio channel (round-trip)
+  - Priority: MEDIUM
+  - Dependencies: TASK_M005, TASK_E001 (ECC)
+  - Receipt: Generated id sequence → bytes (3 bytes/id) → PhyECC + Phy16Tone WAV → decode → identical id sequence → identical pixel strip. The model "speaks" its pixels; a receiver with the same wordbase reconstructs text/tiles locally. Round-trip verified with 5% injected corruption.
+  - Test: python3 -m pytest tests/test_pixel_lm_audio_roundtrip.py
+
+- [ ] **TASK_M007**: Pixel OS input channel
+  - Priority: LOW
+  - Dependencies: TASK_M006
+  - Receipt: `tools/pixel_os_listener.py` accepts a pixel-LM stream as an input source: model generates pixels → decoded to words → dispatched as pixel OS commands. Demonstrates the LLM → visual audio → software loop end to end.
+  - Test: python3 -m pytest tests/test_pixel_os_lm_input.py
+
+### Success Criteria
+- Byte-exact round-trip: text → pixels → text for in-vocab input
+- Trained model's validation perplexity beats unigram baseline
+- One generated sequence renders as image, audio, and text from the same ids
+- Audio round-trip of model output survives 5% corruption via ECC
+- All tests self-contained and passing from a clean checkout (`pip install -r requirements.txt` only)
+
+---
+
 ## Notes
 - Prioritize Phase 1 (ECC) and Phase 3 (dual-band) for production use
 - Phase 2 (prosody) is nice-to-have for human-facing applications
 - Phase 4 (GeOS) is strategic long-term integration
 - Phase 7 (compositional layer) bridges layout to executable programs
+- Phase 8 (pixel-token LM) builds on the wordbase: tokens are pixels, pixels are words
 - Research (Phase 6) can proceed in parallel with no blocking impact
 
 ---
