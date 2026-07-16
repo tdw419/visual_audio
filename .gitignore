@@ -54,3 +54,12 @@ Thumbs.db
 # Backup files
 *.bak
 *.tmp
+
+# Secrets — never commit provenance private keys (public keys are fine)
+keys/*private*.pem
+keys/*_private.pem
+
+# Local wordbase backups/snapshots (db/wordbase.db itself is tracked)
+db/wordbase*.backup
+db/*_backup.db
+db/wordbase.sqlite
