@@ -180,9 +180,13 @@ def get_next_task():
 
 
 def commit_task(task_id, receipt=""):
-    """Git commit per verified task completion - stages all changed files"""
-    # Stage ALL changed files so each task is one complete, revertible unit
-    subprocess.run(['git', 'add', '-A'], cwd=ROOT, check=True)
+    """Git commit per verified task completion - stages only ROADMAP.md"""
+    # Stage only ROADMAP.md to avoid coupling unrelated changes or adding stray files
+    result = subprocess.run(['git', 'add', 'ROADMAP.md'], cwd=ROOT, capture_output=True, text=True)
+
+    if result.returncode != 0:
+        print(f"⚠ Failed to stage ROADMAP.md: {result.stderr}")
+        return False
 
     # Commit with message linking to task
     message = f"Complete {task_id}\n\n{receipt}"
