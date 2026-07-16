@@ -89,7 +89,18 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
 - Spectral codec survives 10% symbol loss without CRC failure ✅ DONE (ECC recovers 5-15% byte corruption)
 - Dense codec detects and recovers from single-bit errors ✅ DONE
 - All round-trip tests include noise injection ✅ DONE
-- One real speaker→mic round trip decodes byte-identical
+- One real speaker→mic round trip decodes byte-identical ⏳ AWAITING HARDWARE
+  - Channel characterized in simulation (test_boot_over_air.py, 5/5): the signed
+    boot data band survives −3 dB SNR, hard clipping, and heavy speaker HF
+    roll-off; the only realistic failure mode is sample-clock drift (survives
+    ≤1000 ppm, breaks ~3000 ppm — consumer cards sit within ±100 ppm).
+  - End-to-end proven in simulation: a signed boot manifest passed through the
+    modeled acoustic channel decodes (Ed25519-verified) and boots real QEMU —
+    hello.img and xv6-to-shell — via `tools/boot_over_air.py --simulate`.
+  - The physical transducer step is NOT yet verified (no audio hardware in the
+    dev env; aplay/arecord are unavailable). Run on real hardware with:
+    `python3 tools/boot_over_air.py --play --image hello.img`. Provenance holds
+    across the channel: tampered and unsigned audio are rejected (tested).
 
 ---
 
@@ -323,6 +334,56 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
 - No blocking tasks dependent on research
 - Experimental branches under `research/` directory
 - Results documented in `docs/RESEARCH_*.md`
+
+---
+
+## Phase 9: Interactive Visual Interfaces 🟢 NOT STARTED
+
+**Goal**: Transform visual audio from static rendering to interactive, manipulable interfaces where pixels, audio, and text are all live-editable.
+
+### Tasks
+- [ ] **TASK_I001**: Live audio-visual sync
+  - Priority: HIGH
+  - Dependencies: TASK_M004 (pixel LM), TASK_W001 (wordbase)
+  - Receipt: During playback, highlight current word tile in sync with audio; tile pulses on phoneme boundaries; scrub through audio by dragging across tile grid
+  - Test: `python3 tools/visual_player.py demo.wav --visual-sync` shows tiles lighting up in real-time
+  - Status: NOT STARTED
+- [ ] **TASK_I002**: Interactive tile manipulation
+  - Priority: HIGH
+  - Dependencies: TASK_I001
+  - Receipt: Drag-and-drop reordering of word tiles; click-to-edit word updates underlying text; tile selection for deletion/duplication; realtime regeneration of audio from modified tile arrangement
+  - Test: `python3 tools/tile_editor.py edit program.png` launches interactive editor; dragging tiles changes audio output
+  - Status: NOT STARTED
+- [ ] **TASK_I003**: Semantic color exploration
+  - Priority: MEDIUM
+  - Dependencies: TASK_W001 (color_hex encoding)
+  - Receipt: Click any color to filter/show all words with that semantic category; color legend explains categories; hover shows pronunciation/definition from wordbase
+  - Test: `python3 tools/color_explorer.py analyze tiles.png` lists all semantic color groups
+  - Status: NOT STARTED
+- [ ] **TASK_I004**: Cross-modal translation tools
+  - Priority: MEDIUM
+  - Dependencies: TASK_M004 (pixel LM), TASK_M001 (tokenizer)
+  - Receipt: Image → tiles → audio (describe what you see); audio → tiles → image (draw what you hear); text → tiles → audio → image (full round-trip with visual feedback at each stage)
+  - Test: `python3 tools/cross_modal.py from-image scene.png --output scene.wav && tools/cross_modal.py from-audio scene.wav --output scene_reconstructed.png`
+  - Status: NOT STARTED
+- [ ] **TASK_I005**: Collaborative visual editing
+  - Priority: LOW
+  - Dependencies: TASK_I002
+  - Receipt: Multiple users edit same tile canvas simultaneously; real-time sync of visual + audio state; visual diff shows tile movements between edits
+  - Test: Manual verification - two browser tabs editing same canvas see each other's changes
+  - Status: NOT STARTED
+- [ ] **TASK_I006**: Visual version control
+  - Priority: LOW
+  - Dependencies: TASK_I005
+  - Receipt: Git commits expressed as tile movements; "git show" renders before/after tile states side-by-side; visual merge conflict resolution via tile manipulation
+  - Test: `python3 tools/visual_git.py diff HEAD~1 --visual` shows tile diff grid
+  - Status: NOT STARTED
+
+### Success Criteria
+- Tiles respond to mouse/touch input with immediate visual feedback
+- Audio playback stays synchronized with visual tile highlighting
+- Text/audio/image can all be edited through visual manipulation
+- Collaborative sessions support 2+ concurrent editors without conflicts
 
 ---
 
