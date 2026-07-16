@@ -10,7 +10,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from codec.phy import Phy16Tone, frame, unframe, encode_framed, decode_framed, MAGIC
+from codec.phy import Phy16Tone, frame, unframe, encode_framed, decode_framed, MAGIC_UNAUTH
 
 
 class TestPhy16Tone:
@@ -130,7 +130,7 @@ class TestFraming:
         payload = b'hello'
         framed = frame(payload)
 
-        assert framed[:2] == MAGIC
+        assert framed[:2] == MAGIC_UNAUTH
         assert len(framed) >= 8  # magic(2) + len(2) + payload + crc(4)
 
     def test_frame_length_field(self):

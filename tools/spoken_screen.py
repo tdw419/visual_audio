@@ -25,6 +25,7 @@ import argparse
 import json
 import os
 import sys
+from typing import Optional
 
 import numpy as np
 import soundfile as sf
@@ -33,11 +34,15 @@ from scipy.signal import butter, sosfilt
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from speak import (
-    SAMPLE_RATE, SYMBOL_SEC, MAGIC, frame, bytes_to_symbols, symbols_to_bytes,
+    SAMPLE_RATE, SYMBOL_SEC, frame, bytes_to_symbols, symbols_to_bytes,
     CHUNK_BYTES, say_text,
 )
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src'))
 from upic_engine import UPICWaveformTable, UPICEnvelope, UPICVoice, UPICProject, create_basic_waveform
+from codec.phy import (
+    Phy16Tone, frame as phy_frame, unframe as phy_unframe,
+    frame_authenticated, unframe_authenticated, MAGIC_UNAUTH, MAGIC_AUTH
+)
 
 import binascii
 import struct
@@ -47,6 +52,7 @@ HB_TONE_BASE = 4200.0     # high-band nibble 0x0
 HB_TONE_STEP = 220.0      # 4200..7500 Hz, well clear of the narration band
 NARRATION_CUTOFF = 3500.0
 SCREEN_W, SCREEN_H = 48, 14
+MAGIC = b'UA'  # Legacy compatibility
 
 
 def hb_tone(nibble: int) -> float:
@@ -100,7 +106,21 @@ def render(rows) -> str:
 # ---------- high-band data carrier (through the UPIC engine) ----------
 
 def synth_data_band(payload: bytes) -> np.ndarray:
-    symbols = bytes_to_symbols(frame(payload))
+    """
+    Synthesize data band audio from payload bytes.
+
+    Args:
+        payload: Pre-framed payload bytes (from phy_frame or frame_authenticated)
+
+    Returns:
+        Audio samples
+    """
+    symbols = bytes_to_symbols(payload)
+    return encode_symbols_to_audio(symbols)
+
+
+def encode_symbols_to_audio(symbols: list) -> np.ndarray:
+    """Encode symbols to high-band audio using UPIC engine."""
     wavetable = UPICWaveformTable('sine', create_basic_waveform('sine'), SAMPLE_RATE)
     pieces = []
     chunk_syms = CHUNK_BYTES * 2
@@ -125,7 +145,8 @@ def synth_data_band(payload: bytes) -> np.ndarray:
     return np.concatenate(pieces)
 
 
-def decode_data_band(audio: np.ndarray, sr: float) -> bytes:
+def decode_data_band(audio: np.ndarray, sr: float, public_key_path: Optional[str] = None) -> bytes:
+    """Decode high band data with optional authentication."""
     sym_len = int(round(sr * SYMBOL_SEC))
     n_syms = len(audio) // sym_len
     lo, hi = int(sym_len * 0.25), int(sym_len * 0.75)
@@ -136,19 +157,36 @@ def decode_data_band(audio: np.ndarray, sr: float) -> bytes:
     symbols = np.abs(windows @ probe.T).argmax(axis=1).tolist()
 
     data = symbols_to_bytes(symbols)
-    if data[:2] != MAGIC:
-        raise ValueError("no data frame found in high band")
-    (length,) = struct.unpack('>H', data[2:4])
-    payload = data[4:4 + length]
-    (crc,) = struct.unpack('>I', data[4 + length:8 + length])
-    if crc != (binascii.crc32(payload) & 0xFFFFFFFF):
-        raise ValueError("CRC mismatch in high band")
-    return payload
+
+    # Determine frame type by magic bytes
+    if len(data) >= 2:
+        if data[:2] == MAGIC_AUTH:
+            # Authenticated frame - requires public key
+            if public_key_path is None:
+                raise ValueError("authenticated frame requires --public-key")
+            payload, valid, error = unframe_authenticated(data, public_key_path)
+            if not valid:
+                raise ValueError(f"authentication failed: {error}")
+            return payload
+        elif data[:2] == MAGIC_UNAUTH:
+            # Legacy unauthenticated frame. When a public key is supplied,
+            # provenance is required, so an unsigned frame must be rejected
+            # rather than silently accepted (prevents downgrade attacks).
+            if public_key_path is not None:
+                raise ValueError("provenance required: unsigned (legacy) frame rejected")
+            payload, valid = phy_unframe(data)
+            if not valid:
+                raise ValueError("invalid unauthenticated frame")
+            return payload
+        else:
+            raise ValueError(f"unknown frame magic: {data[:2]}")
+
+    raise ValueError("no valid data frame found")
 
 
 # ---------- dual-band mixing ----------
 
-def utter(narration: str, ops, wav_path: str):
+def utter(narration: str, ops, wav_path: str, private_key_path: Optional[str] = None):
     with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tf:
         say_text(narration, tf.name)
         voice_audio, _ = sf.read(tf.name)
@@ -160,7 +198,27 @@ def utter(narration: str, ops, wav_path: str):
     sos = butter(8, NARRATION_CUTOFF, 'low', fs=SAMPLE_RATE, output='sos')
     voice_audio = sosfilt(sos, voice_audio)
 
-    data_audio = synth_data_band(json.dumps(ops, separators=(',', ':')).encode('utf-8'))
+    # Encode payload with or without authentication
+    payload_bytes = json.dumps(ops, separators=(',', ':')).encode('utf-8')
+
+    if private_key_path:
+        # Authenticated utterance
+        from cryptography.hazmat.primitives.asymmetric import ed25519
+        from cryptography.hazmat.primitives import serialization
+
+        with open(private_key_path, 'rb') as f:
+            private_key = serialization.load_pem_private_key(f.read(), password=None)
+
+        signature = private_key.sign(payload_bytes)
+        framed = frame_authenticated(payload_bytes, signature)
+        print(f"  ✓ Signed with Ed25519 (64-byte signature + timestamp)")
+    else:
+        # Legacy unauthenticated utterance
+        framed = phy_frame(payload_bytes)
+        print(f"  ℹ Unauthenticated (legacy mode)")
+
+    # Encode framed payload to high band
+    data_audio = synth_data_band(framed)
 
     n = max(len(voice_audio), len(data_audio))
     mixed = np.zeros(n)
@@ -181,10 +239,12 @@ def main():
     p_u.add_argument('narration')
     p_u.add_argument('--ops', required=True, help='JSON list of screen ops (or @file.json)')
     p_u.add_argument('-o', '--wav', default='utterance.wav')
+    p_u.add_argument('--private-key', help='Path to Ed25519 private key for signing (creates authenticated utterance)')
 
     p_l = sub.add_parser('listen')
     p_l.add_argument('wav')
     p_l.add_argument('--screen', default='screen.json')
+    p_l.add_argument('--public-key', help='Path to Ed25519 public key for verification (required for authenticated utterances)')
 
     p_s = sub.add_parser('show')
     p_s.add_argument('--screen', default='screen.json')
@@ -197,7 +257,7 @@ def main():
             with open(ops_src[1:]) as f:
                 ops_src = f.read()
         ops = json.loads(ops_src)
-        mixed = utter(args.narration, ops, args.wav)
+        mixed = utter(args.narration, ops, args.wav, args.private_key)
         print(f"uttered {len(mixed) / SAMPLE_RATE:.1f}s -> {args.wav} "
               f"(voice: {args.narration!r}, ops: {len(ops)})")
 
@@ -205,7 +265,7 @@ def main():
         audio, sr = sf.read(args.wav)
         if audio.ndim > 1:
             audio = audio.mean(axis=1)
-        ops = json.loads(decode_data_band(audio, sr).decode('utf-8'))
+        ops = json.loads(decode_data_band(audio, sr, args.public_key).decode('utf-8'))
         rows = apply_ops(load_screen(args.screen), ops)
         save_screen(args.screen, rows)
         print(f"heard {len(ops)} ops in high band, screen updated:")
