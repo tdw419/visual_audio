@@ -181,9 +181,9 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
 - [x] **TASK_C033**: Signed boot manifest for QEMU launch ✅ COMPLETE
   - Priority: HIGH
   - Dependencies: None
-  - Receipt: Signed ["boot", arch, image, {opts}] ops from audio launch QEMU; architecture allowlist (riscv64, x86_64); traversal protection (bare filename only, double-checked at parse/resolve); provenance gating (--enable-boot requires --provenance); optional bios field ("default"|"none" only, no path smuggling); a signed spoken command boots a real RISC-V kernel that prints its own banner (both OpenSBI and -bios none paths verified end-to-end)
-  - Test: `python3 test_boot_manifest.py` (5/5 tests pass); demo kernels via `make -C boot_images/src`
-  - Status: Complete. tools/boot_manifest.py (safe parsing/launch + bios option), tools/pixel_os_listener.py (dispatch with provenance gate), test_boot_manifest.py (security envelope tests), boot_images/ (hello.img S-mode/OpenSBI + bare.img M-mode/-bios none, sources + Makefile). Security: arch allowlist, no path traversal, bios allowlist, shell-argv-only, provenance_required is sound proxy for "boot op was signed" thanks to decode_data_band downgrade fix.
+  - Receipt: Signed ["boot", arch, image, {opts}] ops from audio launch QEMU; architecture allowlist (riscv64, x86_64); traversal protection (bare image/drive filenames only, double-checked at parse/resolve); provenance gating (--enable-boot requires --provenance); optional bios ("default"|"none") and drive (riscv virtio-blk) fields, both allowlisted/path-safe; a signed spoken "boot xv6" command boots REAL xv6-riscv to its shell (init: starting sh, $), plus in-repo demo kernels for the OpenSBI and -bios none paths — all verified end-to-end
+  - Test: `python3 test_boot_manifest.py` (6/6 tests pass); demo kernels via `make -C boot_images/src`; xv6 build steps in boot_images/README.md
+  - Status: Complete. tools/boot_manifest.py (safe parsing/launch + bios/drive options), tools/pixel_os_listener.py (dispatch with provenance gate), test_boot_manifest.py (security envelope tests), boot_images/ (hello.img S-mode/OpenSBI + bare.img M-mode/-bios none, sources + Makefile + README; xv6.img/fs.img gitignored as third-party). Security: arch allowlist, no path traversal, bios/drive allowlist, shell-argv-only, provenance_required is sound proxy for "boot op was signed" thanks to decode_data_band downgrade fix.
 
 - [ ] **TASK_C034**: Phoneme LLM input (IN GEOS TASKS)
   - Port `phonemes.py` to `geometry_os/src/spatial/phoneme_input.rs`

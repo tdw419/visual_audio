@@ -104,6 +104,37 @@ def test_bios_option():
     return True
 
 
+def test_drive_option():
+    print("Test: drive option (virtio disk wiring + safety)")
+    with tempfile.TemporaryDirectory() as d:
+        _make_image(d)                       # xv6.img stand-in
+        _make_image(d, name='fs.img')        # disk stand-in
+        argv = launch_boot(
+            ["boot", "riscv64", "xv6.img", {"bios": "none", "drive": "fs.img"}],
+            d, dry_run=True)
+        assert "-drive" in argv, argv
+        assert any(a.startswith("file=") and a.endswith("fs.img,if=none,format=raw,id=x0")
+                   for a in argv), argv
+        assert "virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0" in argv, argv
+        # disk wiring must precede the kernel flag
+        assert argv.index("-drive") < argv.index("-kernel"), argv
+
+        # drive must be a bare filename in the trusted dir
+        try:
+            launch_boot(["boot", "riscv64", "xv6.img", {"drive": "../fs.img"}], d, dry_run=True)
+            print("  FAIL: drive traversal accepted"); return False
+        except BootManifestError:
+            pass
+        # drive is riscv-only (x86 has no virtio-mmio-bus here)
+        try:
+            launch_boot(["boot", "x86_64", "xv6.img", {"drive": "fs.img"}], d, dry_run=True)
+            print("  FAIL: drive accepted for x86_64"); return False
+        except BootManifestError:
+            pass
+    print("  PASS")
+    return True
+
+
 def test_daemon_refuses_unsigned_boot():
     print("Test: daemon refuses boot without provenance/enable")
     with tempfile.TemporaryDirectory() as d:
@@ -179,6 +210,7 @@ if __name__ == '__main__':
     results = [
         ("manifest validation", test_manifest_validation()),
         ("bios option", test_bios_option()),
+        ("drive option", test_drive_option()),
         ("refuse unsigned boot", test_daemon_refuses_unsigned_boot()),
         ("signed boot end-to-end", test_signed_boot_end_to_end()),
         ("mixed op routing", test_mixed_ops_route_correctly()),
