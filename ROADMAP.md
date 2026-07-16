@@ -299,10 +299,10 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
   - Dependencies: TASK_P001 (coarticulation)
   - Receipt: Verified by verify_task.py at 2026-07-14T20:37:09.938795
   - Test: `python3 tools/accessible_ui.py demo` produces UI that renders visually and speaks equally; visual/speech match 1:1.
-- [ ] **TASK_R007**: Spectral mapping
-  - Priority: LOW
+- [x] **TASK_R007**: Spectral mapping
+  - Priority: CRITICAL
   - Dependencies: None
-  - Receipt: Real formant frequencies from speech corpus
+  - Receipt: Verified by verify_task.py at 2026-07-16T16:25:11.831011
   - Test: python3 tests/test_spectral_mapping.py
 - [ ] **TASK_R008**: Neural synthesis
   - Priority: LOW
