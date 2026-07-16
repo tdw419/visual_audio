@@ -79,6 +79,31 @@ def test_manifest_validation():
     return True
 
 
+def test_bios_option():
+    print("Test: bios option (default / none / rejected)")
+    with tempfile.TemporaryDirectory() as d:
+        _make_image(d)
+        # default: no -bios in argv
+        argv = launch_boot(["boot", "riscv64", "xv6.img"], d, dry_run=True)
+        assert "-bios" not in argv, argv
+        # explicit default: still no -bios
+        argv = launch_boot(["boot", "riscv64", "xv6.img", {"bios": "default"}], d, dry_run=True)
+        assert "-bios" not in argv, argv
+        # none: -bios none present, before -kernel
+        argv = launch_boot(["boot", "riscv64", "xv6.img", {"bios": "none"}], d, dry_run=True)
+        assert argv[argv.index("-bios") + 1] == "none", argv
+        assert argv.index("-bios") < argv.index("-kernel"), argv
+        # rejected: arbitrary bios value (no smuggling a path)
+        for bad in [{"bios": "/boot/fw.bin"}, {"bios": "hax"}, {"unknown": 1}]:
+            try:
+                launch_boot(["boot", "riscv64", "xv6.img", bad], d, dry_run=True)
+                print(f"  FAIL: bad opts accepted: {bad!r}"); return False
+            except BootManifestError:
+                pass
+    print("  PASS")
+    return True
+
+
 def test_daemon_refuses_unsigned_boot():
     print("Test: daemon refuses boot without provenance/enable")
     with tempfile.TemporaryDirectory() as d:
@@ -153,6 +178,7 @@ if __name__ == '__main__':
     print("=" * 60)
     results = [
         ("manifest validation", test_manifest_validation()),
+        ("bios option", test_bios_option()),
         ("refuse unsigned boot", test_daemon_refuses_unsigned_boot()),
         ("signed boot end-to-end", test_signed_boot_end_to_end()),
         ("mixed op routing", test_mixed_ops_route_correctly()),

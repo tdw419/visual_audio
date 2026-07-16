@@ -181,9 +181,9 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
 - [x] **TASK_C033**: Signed boot manifest for QEMU launch ✅ COMPLETE
   - Priority: HIGH
   - Dependencies: None
-  - Receipt: Signed ["boot", arch, image] ops from audio launch QEMU; architecture allowlist (riscv64, x86_64); traversal protection (bare filename only, double-checked at parse/resolve); provenance gating (--enable-boot requires --provenance); real QEMU launch verified (OpenSBI banner booted)
-  - Test: `python3 test_boot_manifest.py` (4/4 tests pass)
-  - Status: Complete. tools/boot_manifest.py (safe parsing/launch), tools/pixel_os_listener.py (dispatch with provenance gate), test_boot_manifest.py (security envelope tests). Security: arch allowlist, no path traversal, shell-argv-only, provenance_required is sound proxy for "boot op was signed" thanks to decode_data_band downgrade fix.
+  - Receipt: Signed ["boot", arch, image, {opts}] ops from audio launch QEMU; architecture allowlist (riscv64, x86_64); traversal protection (bare filename only, double-checked at parse/resolve); provenance gating (--enable-boot requires --provenance); optional bios field ("default"|"none" only, no path smuggling); a signed spoken command boots a real RISC-V kernel that prints its own banner (both OpenSBI and -bios none paths verified end-to-end)
+  - Test: `python3 test_boot_manifest.py` (5/5 tests pass); demo kernels via `make -C boot_images/src`
+  - Status: Complete. tools/boot_manifest.py (safe parsing/launch + bios option), tools/pixel_os_listener.py (dispatch with provenance gate), test_boot_manifest.py (security envelope tests), boot_images/ (hello.img S-mode/OpenSBI + bare.img M-mode/-bios none, sources + Makefile). Security: arch allowlist, no path traversal, bios allowlist, shell-argv-only, provenance_required is sound proxy for "boot op was signed" thanks to decode_data_band downgrade fix.
 
 - [ ] **TASK_C034**: Phoneme LLM input (IN GEOS TASKS)
   - Port `phonemes.py` to `geometry_os/src/spatial/phoneme_input.rs`

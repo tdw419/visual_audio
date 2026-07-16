@@ -35,6 +35,13 @@ ARCH_QEMU = {
     "x86_64": ("qemu-system-x86_64", ["-nographic", "-kernel"]),
 }
 
+# Allowed values for the optional "bios" manifest field. Only these two symbolic
+# values are accepted — never an arbitrary path — so the field can't smuggle a
+# file into the qemu command line. "default" uses qemu's built-in firmware
+# (OpenSBI on riscv virt); "none" passes `-bios none` for kernels that carry
+# their own machine-mode boot code (e.g. xv6-riscv).
+ALLOWED_BIOS = ("default", "none")
+
 
 class BootManifestError(ValueError):
     """Raised when a boot op is malformed or fails a safety check."""
@@ -44,18 +51,24 @@ class BootManifestError(ValueError):
 class BootManifest:
     arch: str
     image: str  # bare filename, validated against the image directory later
+    bios: str = "default"  # one of ALLOWED_BIOS
 
 
 def parse_boot_op(op) -> BootManifest:
-    """Parse and structurally validate a ["boot", arch, image] op.
+    """Parse and structurally validate a boot op.
 
-    Raises BootManifestError on anything that is not exactly a boot op with an
-    allowlisted architecture and a syntactically safe image name.
+    Accepts either ["boot", arch, image] or, with an options dict,
+    ["boot", arch, image, {"bios": "none"}]. Raises BootManifestError on
+    anything that is not a boot op with an allowlisted architecture, a
+    syntactically safe image name, and (if present) an allowlisted bios value.
     """
-    if not isinstance(op, (list, tuple)) or len(op) != 3:
-        raise BootManifestError(f"boot op must be [\"boot\", arch, image], got {op!r}")
+    if not isinstance(op, (list, tuple)) or len(op) not in (3, 4):
+        raise BootManifestError(
+            f"boot op must be [\"boot\", arch, image] or [..., opts], got {op!r}"
+        )
 
-    kind, arch, image = op
+    kind, arch, image = op[0], op[1], op[2]
+    opts = op[3] if len(op) == 4 else {}
     if kind != "boot":
         raise BootManifestError(f"not a boot op: {kind!r}")
     if not isinstance(arch, str) or arch not in ARCH_QEMU:
@@ -69,7 +82,18 @@ def parse_boot_op(op) -> BootManifest:
     if os.path.basename(image) != image or image in (".", ".."):
         raise BootManifestError(f"image must be a bare filename, got {image!r}")
 
-    return BootManifest(arch=arch, image=image)
+    if not isinstance(opts, dict):
+        raise BootManifestError(f"boot options must be an object, got {opts!r}")
+    unknown = set(opts) - {"bios"}
+    if unknown:
+        raise BootManifestError(f"unknown boot options: {sorted(unknown)}")
+    bios = opts.get("bios", "default")
+    if bios not in ALLOWED_BIOS:
+        raise BootManifestError(
+            f"bios must be one of {list(ALLOWED_BIOS)}, got {bios!r}"
+        )
+
+    return BootManifest(arch=arch, image=image, bios=bios)
 
 
 def resolve_image(manifest: BootManifest, image_dir: str) -> Path:
@@ -90,7 +114,8 @@ def resolve_image(manifest: BootManifest, image_dir: str) -> Path:
 def build_qemu_argv(manifest: BootManifest, image_path: Path) -> List[str]:
     """Build the qemu argv list for a validated manifest and resolved image."""
     binary, template = ARCH_QEMU[manifest.arch]
-    return [binary, *template, str(image_path)]
+    bios = ["-bios", "none"] if manifest.bios == "none" else []
+    return [binary, *bios, *template, str(image_path)]
 
 
 def launch_boot(
