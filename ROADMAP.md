@@ -268,10 +268,10 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
   - Dependencies: TASK_W001
   - Receipt: Map tokenizer IDs to 2-symbol chords (2-of-32 tones ≈ 9 bits/symbol → ~25 tokens/sec), streaming as model generates; byte-escape region falls back to PHY for out-of-vocabulary payloads. Transmit IDs over data band (17 bits ≈ 4 ms at 16-tone MFSK), receiver's wordbase reconstitutes audio/tiles locally.
   - Status: Blocked - Autopark: No test command defined in ROADMAP. Needs definition before verification can proceed.
-- [ ] **TASK_R001**: Audio diff/patch format — version control you can hear
+- [x] **TASK_R001**: Audio diff/patch format — version control you can hear
   - Priority: MEDIUM
   - Dependencies: TASK_W001
-  - Receipt: Delta codec transmits region opcodes (x,y,ops) instead of whole artifacts. Git commits become audible where refactors sound different from bugfixes. Two machines maintain shared state via tiny audio patches.
+  - Receipt: Verified by verify_task.py at 2026-07-16T16:28:09.297270
   - Test: python3 tools/codec_diff.py diff baseline.wav modified.wav -o patch.wav && python3 tools/codec_diff.py apply patch.wav baseline.wav
 - [ ] **TASK_R002**: Spectrogram as spatial VM — execute in the image
   - Priority: LOW
