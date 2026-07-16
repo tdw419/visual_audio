@@ -41,7 +41,7 @@ from PIL import Image
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from wordbase import connect, materialize, word_id, tokenize
+from wordbase_compat import connect, materialize, word_id, tokenize
 from word_compiler import ensure_cmudict, parse_cmudict
 
 MAX_DEPTH = 32
@@ -91,13 +91,19 @@ def compile_manifest(manifest):
 
 
 def hex_color(s):
+    """Convert hex color string to RGB array, or None for auto."""
+    if s is None or s == 'auto':
+        return None
     s = s.lstrip('#')
     return np.array([int(s[i:i + 2], 16) for i in (0, 2, 4)], dtype=np.float64)
 
 
 def render(manifest, ops, png_path, wav_path=None):
     w, h, bg = manifest['canvas']
-    fb = np.tile(hex_color(bg).astype(np.uint8), (h, w, 1))
+    bg_col = hex_color(bg)
+    if bg_col is None:
+        bg_col = np.array([0.0, 0.0, 0.0], dtype=np.float64)
+    fb = np.tile(bg_col.astype(np.uint8), (h, w, 1))
 
     db = connect()
     cmudict = parse_cmudict(ensure_cmudict())
@@ -107,12 +113,16 @@ def render(manifest, ops, png_path, wav_path=None):
         kind = op[0]
         if kind == 'frame':
             _, x, y, ww, hh, c = op
-            col = hex_color(c).astype(np.uint8)
-            fb[y:y + hh, x:x + 2] = col; fb[y:y + hh, x + ww - 2:x + ww] = col
-            fb[y:y + 2, x:x + ww] = col; fb[y + hh - 2:y + hh, x:x + ww] = col
+            col = hex_color(c)
+            if col is not None:
+                col = col.astype(np.uint8)
+                fb[y:y + hh, x:x + 2] = col; fb[y:y + hh, x + ww - 2:x + ww] = col
+                fb[y:y + 2, x:x + ww] = col; fb[y + hh - 2:y + hh, x:x + ww] = col
         elif kind == 'rect':
             _, x, y, ww, hh, c = op
-            fb[y:y + hh, x:x + ww] = hex_color(c).astype(np.uint8)
+            col = hex_color(c)
+            if col is not None:
+                fb[y:y + hh, x:x + ww] = col.astype(np.uint8)
         elif kind == 'word':
             _, text, x, y, c = op
             col = hex_color(c)
@@ -121,11 +131,29 @@ def render(manifest, ops, png_path, wav_path=None):
                 wid = word_id(db, w_, cmudict)
                 _, tile_path = materialize(db, wid, cmudict)
                 tile = np.asarray(Image.open(tile_path), dtype=np.float64) / 255.0
-                th, tw = tile.shape
-                x2, y2 = min(cx + tw, w), min(y + th, h)
-                if cx < x2 and y < y2:
-                    reg = tile[:y2 - y, :x2 - cx, None]
-                    fb[y:y2, cx:x2] = (reg * col + (1 - reg) * fb[y:y2, cx:x2]).astype(np.uint8)
+
+                # Look up color_hex for automatic coloring
+                if col is None:
+                    cursor = db.execute('SELECT color_hex FROM words WHERE id = ? LIMIT 1', (wid,))
+                    row = cursor.fetchone()
+                    if row and row[0]:
+                        col = hex_color(row[0])
+                    else:
+                        col = np.array([1.0, 1.0, 1.0], dtype=np.float64)
+
+                # Handle both RGB and grayscale tiles
+                if tile.ndim == 3:  # RGB image
+                    th, tw, _ = tile.shape
+                    x2, y2 = min(cx + tw, w), min(y + th, h)
+                    if cx < x2 and y < y2:
+                        reg = tile[:y2 - y, :x2 - cx, :]
+                        fb[y:y2, cx:x2] = (reg * col + (1 - reg) * fb[y:y2, cx:x2]).astype(np.uint8)
+                else:  # Grayscale
+                    th, tw = tile.shape
+                    x2, y2 = min(cx + tw, w), min(y + th, h)
+                    if cx < x2 and y < y2:
+                        reg = tile[:y2 - y, :x2 - cx, None]
+                        fb[y:y2, cx:x2] = (reg * col + (1 - reg) * fb[y:y2, cx:x2]).astype(np.uint8)
                 words_in_order.append((y, x, w_))
                 cx += tw + 4
         elif kind == 'op':

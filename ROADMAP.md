@@ -509,10 +509,10 @@ text → pixels → model → pixels → {image, audio, text}.
   - Note: "Byte-exact round-trip" means exact reconstruction of all significant text elements (case, whitespace, newlines, words). Punctuation stripping is intentional - punctuation is token-agnostic and discarded at encode time; decoded text is clean word sequences with preserved spacing structure.
     overlapping words or regenerate all tiles/artifacts).
 
-- [ ] **TASK_M002**: Pixel corpus builder
+- [x] **TASK_M002**: Pixel corpus builder
   - Priority: HIGH
   - Dependencies: TASK_M001
-  - Receipt: `tools/build_pixel_corpus.py` converts a text file into (a) a `.npy` id sequence for training and (b) a PNG where each row of pixels is a line of text — the corpus is literally viewable as an image. Includes a small bundled public-domain sample so the test needs no network.
+  - Receipt: Verified by verify_task.py at 2026-07-16T15:56:59.619281
   - Test: python3 -m pytest tests/test_pixel_corpus.py
 
 - [ ] **TASK_M003**: Word-pixel embeddings from wordbase features
