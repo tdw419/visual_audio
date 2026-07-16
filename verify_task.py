@@ -63,16 +63,36 @@ def parse_task_test_command(task_id: str) -> tuple:
 
                     cmd_lower = cmd.lower()
 
-                    # Detect test type
-                    if 'manual' in cmd_lower:
+                    # Detect test type by checking if it's a real executable command
+                    # Executable: starts with python3, pytest, bash, node, etc.
+                    # Prose/manual: starts with verify, check, or no recognized interpreter
+                    executable_patterns = [
+                        r'^python3\b',
+                        r'^pytest\b',
+                        r'^python\b',
+                        r'^bash\b',
+                        r'^sh\b',
+                        r'^node\b',
+                        r'^npm\b',
+                        r'^make\b',
+                        r'^cargo\b',
+                        r'^go\b',
+                        r'^java\b',
+                        r'^javac\b',
+                    ]
+
+                    if 'manual' in cmd_lower or '(manual)' in test_line.lower():
                         return cmd, "manual"
+                    elif any(re.match(pattern, cmd_lower) for pattern in executable_patterns):
+                        return cmd, "shell"
                     elif cmd.startswith('verify') or 'check' in cmd_lower:
                         # These are prose descriptions, not executable commands
                         return cmd, "prose"
                     elif not cmd or cmd == 'none':
                         return "", "none"
                     else:
-                        return cmd, "shell"
+                        # Unknown format - treat as prose to be safe
+                        return cmd, "prose"
                 elif test_line.startswith('## ') or (test_line.startswith('- [') and '**' in test_line):
                     # Hit next task or section, stop looking
                     break

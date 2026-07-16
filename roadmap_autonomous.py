@@ -180,13 +180,30 @@ def get_next_task():
 
 
 def commit_task(task_id, receipt=""):
-    """Git commit per verified task completion - stages only ROADMAP.md"""
-    # Stage only ROADMAP.md to avoid coupling unrelated changes or adding stray files
-    result = subprocess.run(['git', 'add', 'ROADMAP.md'], cwd=ROOT, capture_output=True, text=True)
+    """Git commit per verified task completion - stages code + ROADMAP, never untracked files.
 
+    Strategy:
+    - git add -u: stages all modified tracked files (code changes + ROADMAP)
+    - git add src/ tools/ tests/: stages new files created in code directories
+    - Never stages untracked files like keys/*private*.pem (blocked by .gitignore)
+
+    This commits the task as one revertible unit without leaking secrets.
+    """
+    # Stage modified tracked files (code + ROADMAP)
+    result = subprocess.run(['git', 'add', '-u'], cwd=ROOT, capture_output=True, text=True)
     if result.returncode != 0:
-        print(f"⚠ Failed to stage ROADMAP.md: {result.stderr}")
+        print(f"⚠ Failed to stage tracked changes: {result.stderr}")
         return False
+
+    # Stage new files in code directories (src/, tools/, tests/)
+    # These are directories where autonomous agents create new code
+    for code_dir in ['src', 'tools', 'tests']:
+        code_path = ROOT / code_dir
+        if code_path.exists():
+            result = subprocess.run(['git', 'add', str(code_path)], cwd=ROOT, capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"⚠ Failed to stage {code_dir}/: {result.stderr}")
+                return False
 
     # Commit with message linking to task
     message = f"Complete {task_id}\n\n{receipt}"
@@ -197,7 +214,16 @@ def commit_task(task_id, receipt=""):
         text=True
     )
 
-    return result.returncode == 0
+    if result.returncode != 0:
+        # Check if nothing to commit (possible if task only touched ignored files)
+        if 'nothing to commit' in result.stdout.lower() or 'nothing to commit' in result.stderr.lower():
+            print(f"⚠ No changes staged for {task_id} (may have only touched ignored files)")
+            return True  # Not a failure, just no changes to commit
+
+        print(f"⚠ Failed to commit {task_id}: {result.stderr}")
+        return False
+
+    return True
 
 
 def mark_task_complete(task_id, receipt=""):
