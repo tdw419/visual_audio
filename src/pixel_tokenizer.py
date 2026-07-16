@@ -240,7 +240,7 @@ class PixelTokenizer:
 
         return ids
 
-    def decode(self, ids: List[int], skip_special_tokens: bool = True) -> str:
+    def decode(self, ids: List[int], skip_special_tokens: bool = False) -> str:
         """
         Decode word ID sequence to text.
 
@@ -360,7 +360,7 @@ class PixelTokenizer:
         ids = self.encode(text, add_special_tokens=add_special_tokens)
         return self.ids_to_pixels(ids)
 
-    def decode_from_pixels(self, pixels: np.ndarray, skip_special_tokens: bool = True) -> str:
+    def decode_from_pixels(self, pixels: np.ndarray, skip_special_tokens: bool = False) -> str:
         """
         Decode pixel array directly to text.
 
