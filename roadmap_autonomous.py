@@ -24,6 +24,11 @@ ROADMAP = ROOT / "ROADMAP.md"
 VERIFY_SCRIPT = ROOT / "verify_task.py"
 LOCKFILE = ROOT / ".hermes/roadmap_autonomous.lock"
 
+# Blocked phase status indicators - skip tasks in phases with these status indicators
+BLOCKED_PHASE_INDICATORS = {"BLOCKED", "EXPLORATORY"}
+# Minimum priority to consider (skip LOW priority tasks)
+MIN_PRIORITY = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2}
+
 
 def acquire_lock():
     """Acquire exclusive lock to prevent concurrent runs"""
@@ -48,97 +53,98 @@ def release_lock(lock_fd):
 
 
 def parse_roadmap():
-    """Parse ROADMAP.md and extract pending tasks"""
+    """Parse ROADMAP.md and extract pending tasks with phase blocking and priority filtering"""
     content = ROADMAP.read_text()
-
-    # First, parse all tasks to check completion status
-    all_tasks = {}
-    for line in content.split('\n'):
-        m = re.match(r'- \[([ x])\]\s+\*\*([A-Z0-9_]+)\*\*', line)
-        if m:
-            all_tasks[m.group(2)] = m.group(1) == 'x'
-
+    
     pending_tasks = []
     current_phase = None
-
-    for line in content.split('\n'):
-        phase_match = re.match(r'## Phase \d+:(.+?)\s+([🔴🟡🟢⚪])', line)
+    current_task_id = None
+    current_task_data = {}
+    
+    for line_num, line in enumerate(content.split('\n'), 1):
+        phase_match = re.match(r'## Phase \d+:(.+?)\s+([🔴🟡🟢⚪])(.*)', line)
         if phase_match:
-            current_phase = phase_match.group(1).strip()
+            phase_title = phase_match.group(1).strip()
+            phase_status = phase_match.group(2)
+            phase_text = phase_match.group(3).strip()
+            
+            # Check if phase is blocked by looking for keywords in phase text
+            is_blocked = any(indicator in phase_text.upper() for indicator in BLOCKED_PHASE_INDICATORS)
+            current_phase = None if is_blocked else phase_title
+            # Finalize any pending task data
+            if current_task_id and current_task_data:
+                pending_tasks.append(current_task_data)
+                current_task_id = None
+                current_task_data = {}
             continue
-
-        task_match = re.match(r'- \[ \]\s+\*\*([^*]+)\*\*:\s+(.+)', line)
+        
+        # Task marker line - both incomplete and complete
+        task_match = re.match(r'- \[(x| )\]\s+\*\*([^*]+)\*\*:\s+(.+)', line)
         if task_match:
-            task_id, description = task_match.groups()
-
-            # Extract metadata from following lines
-            priority = "MEDIUM"
-            dependencies = []
-            test_command = ""
-            receipt_criteria = ""
-            blocked = False
-            status = ""
-
-            lines_after = content.split('\n')[content.split('\n').index(line)+1:]
-            for next_line in lines_after[:10]:
-                if next_line.startswith('## ') or (next_line.startswith('- ') and '**' in next_line):
-                    break
-
-                if 'Priority:' in next_line:
-                    match = re.search(r'Priority:\s+(\w+)', next_line)
-                    if match:
-                        priority = match.group(1)
-                elif 'Dependencies:' in next_line:
-                    match = re.search(r'Dependencies:\s*(.+)', next_line)
-                    if match:
-                        deps = match.group(1)
-                        if deps != 'None':
-                            # Extract task IDs from dependencies like "TASK_P001 (coarticulation)"
-                            dependencies = []
-                            for dep in deps.split(','):
-                                dep = dep.strip()
-                                task_id_match = re.match(r'([A-Z0-9_]+)', dep)
-                                if task_id_match:
-                                    dependencies.append(task_id_match.group(1))
-                elif 'Test:' in next_line:
-                    match = re.search(r'Test:\s*(.+)', next_line)
-                    if match:
-                        test_command = match.group(1).strip()
-                elif 'Receipt:' in next_line:
-                    match = re.search(r'Receipt:\s*(.+)', next_line)
-                    if match:
-                        receipt_criteria = match.group(1).strip()
-                elif 'Status:' in next_line:
-                    match = re.search(r'Status:\s*(.+)', next_line)
-                    if match:
-                        status = match.group(1).strip()
-                        blocked = 'Blocked' in status or 'REOPENED' in status
-
-            # Also check the task title line for blocked indicators
-            if 'REOPENED' in description or 'falsely marked' in description:
-                blocked = True
-
-            # Check if all dependencies are complete
-            unmet_deps = [d for d in dependencies if not all_tasks.get(d, False)]
-            if unmet_deps:
-                blocked = True
-
-            # Skip blocked tasks
-            if blocked:
+            # Finalize previous task data if exists
+            if current_task_id and current_task_data:
+                pending_tasks.append(current_task_data)
+            
+            status, task_id, description = task_match.groups()
+            
+            # Skip completed tasks
+            if status == 'x':
+                current_task_id = None
+                current_task_data = {}
                 continue
-
-            pending_tasks.append({
+            
+            # Start new task data
+            # Skip tasks in blocked phases
+            if not current_phase:
+                current_task_id = None
+                current_task_data = {}
+                continue
+                
+            current_task_id = task_id
+            current_task_data = {
                 'id': task_id,
                 'title': f"{task_id}: {description}",
                 'description': description,
                 'phase': current_phase,
-                'priority': priority,
-                'dependencies': dependencies,
-                'test_command': test_command,
-                'receipt_criteria': receipt_criteria
-            })
-
-    return pending_tasks
+                'priority': "MEDIUM",
+                'dependencies': [],
+                'test_command': "",
+                'receipt_criteria': ""
+            }
+            continue
+        
+        # Process metadata lines for current task
+        if current_task_id:
+            if 'Priority:' in line:
+                match = re.search(r'Priority:\s+(\w+)', line)
+                if match:
+                    current_task_data['priority'] = match.group(1)
+            elif 'Dependencies:' in line:
+                match = re.search(r'Dependencies:\s*(.+)', line)
+                if match:
+                    deps = match.group(1)
+                    if deps != 'None':
+                        current_task_data['dependencies'] = [d.strip() for d in deps.split(',')]
+            elif 'Test:' in line:
+                match = re.search(r'Test:\s*(.+)', line)
+                if match:
+                    current_task_data['test_command'] = match.group(1).strip()
+            elif 'Receipt:' in line:
+                match = re.search(r'Receipt:\s*(.+)', line)
+                if match:
+                    current_task_data['receipt_criteria'] = match.group(1).strip()
+    
+    # Finalize last task data
+    if current_task_id and current_task_data:
+        pending_tasks.append(current_task_data)
+    
+    # Filter by minimum priority (skip LOW priority)
+    filtered_tasks = [
+        t for t in pending_tasks 
+        if t['priority'] in MIN_PRIORITY
+    ]
+    
+    return filtered_tasks
 
 
 SKIPPED_TASKS_FILE = ROOT / ".hermes/skipped_tasks.txt"
