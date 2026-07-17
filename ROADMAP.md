@@ -762,8 +762,9 @@ exit 0
   - Test: `python3 tools/speak.py encode tests/fixtures/codec_test.py -o /tmp/ecc_test.wav --ecc` produces ~0.8s longer audio than non-ECC; round-trip decode with --ecc produces byte-identical file (MD5 match)
   - Status: Complete. --ecc flag wired to encode/decode; PhyECC.encode_ecc() called before MFSK; decode_ecc() recovers from up to 5 byte errors; audio length difference confirms parity data present.
 
-- [ ] **TASK_C038**: Native in-hypervisor pixel boot
+- [x] **TASK_C038**: Native in-hypervisor pixel boot
   - Priority: MEDIUM
+  - Receipt: Verified by roadmap_autonomous_v2.py at 2026-07-17T13:13:00.148276
   - Dependencies: TASK_C035, TASK_C036
   - Implement spatial boot process within Geometry OS: read pixel region from framebuffer (simulating spatial memory), decode directly in-guest, and execute the kernel.
   - Test: Manual QEMU boot test asserting successful jump into the spatially decoded OS region.
