@@ -233,11 +233,12 @@ implemented and are split into TASK_C035 / TASK_C036 rather than claimed under C
     executes, and is blocked ("Blocked import(s): os") instead of running. A sandbox
     that the real entry points bypass is not a sandbox.
 
-- [ ] **TASK_G001**: Dense cartridge region executor
+- [x] **TASK_G001**: Dense cartridge region executor ✅ COMPLETE
   - Priority: HIGH
   - Dependencies: TASK_C030, TASK_X001
-  - Receipt: `python3 tools/dense_encoder.py run cartridge.png` works via GeOS syscall
-  - Test: Integration test with GeOS hypervisor
+  - Receipt: `python3 tools/dense_encoder.py run cartridge.png --geos --region test_region` works via GeOS syscall; GeOSRegionExecutor implements spatial MMIO (0x8009_0000 registry, 0x8009_2000 bytecode corridor), bytecode generation (length prefix + payload + HALT), region management
+  - Test: `python3 tests/test_geos_integration.py` (6/6 integration tests pass); `python3 tests/test_geos_region_executor.py` (7/7 unit tests pass)
+  - Status: Complete - Full GeOS spatial syscall integration with 13 passing tests. Implements spatial VM bytecode encoding, region lifecycle, and MMIO-based dispatch.
 
 ### Success Criteria
 - GeOS can boot from audio WAV file
