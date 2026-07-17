@@ -20,6 +20,10 @@ from pathlib import Path
 ROOT = Path(__file__).parent
 ROADMAP = ROOT / "ROADMAP.md"
 
+# Detect project venv
+PROJECT_VENV = ROOT / "venv"
+PROJECT_PYTHON = PROJECT_VENV / "bin" / "python3" if PROJECT_VENV.exists() else None
+
 def parse_task_test_command(task_id: str) -> tuple:
     """
     Extract the test command and its type from ROADMAP.md for a given task ID.
@@ -110,6 +114,12 @@ def run_test(test_command: str, timeout: int = 60) -> tuple:
     Returns:
         Tuple of (returncode, stdout, stderr)
     """
+    # Use project venv python if available, otherwise use system python
+    python_exe = str(PROJECT_PYTHON) if PROJECT_PYTHON and PROJECT_PYTHON.exists() else "python3"
+    
+    # Replace python3 with project python in test commands
+    test_command = test_command.replace("python3", python_exe, 1)
+    
     try:
         result = subprocess.run(
             test_command,
