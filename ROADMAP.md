@@ -172,22 +172,39 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
 
 ---
 
-## Phase 4: Geometry OS Integration 🟢 BLOCKED (waiting for TASK_C030)
+## Phase 4: Geometry OS Integration 🟡 IN PROGRESS (codec WAV+CRC delivered)
 
 **Goal**: Visual audio becomes native GeOS hypervisor codec for pixel-software transmission.
 
+Note (2026-07-17): TASK_C030 was found to be standalone-buildable — NOT blocked on
+the (still-unsettled) GeOS hypervisor core. Its WAV+CRC core shipped and is verified;
+the two other originally-listed capabilities (Reed-Solomon, pixel regions) were never
+implemented and are split into TASK_C035 / TASK_C036 rather than claimed under C030.
+
 ### Tasks
-- [ ] **TASK_C030**: Audio codec Rust port to GeOS (IN GEOS TASKS)
-  - Port `tools/speak.py` encode/decode to `geometry_os/src/spatial/audio_codec.rs`
-  - Support pixel regions → WAV, WAV → pixel regions, CRC, Reed-Solomon
-  - Receipt: `cargo test audio_codec --lib` passes
-  - Status: Blocked on GeOS hypervisor core
+- [x] **TASK_C030**: Audio codec Rust port to GeOS — WAV↔bytes + CRC32 ✅ COMPLETE
+  - Ported `tools/speak.py` byte↔symbol↔WAV framing to `geometry_os/src/spatial/audio_codec.rs` (wired via `src/spatial/mod.rs`); 16-tone MFSK encode/decode, WAV header build/parse, 'UA' frame + CRC32
+  - Receipt: `cargo test audio_codec --lib` → 24 passed, 0 failed (verified 2026-07-17, run in geometry_os)
+  - SCOPE NOTE: original entry also listed "Reed-Solomon" and "pixel regions → WAV". Those are NOT implemented — RS is a `// TODO` placeholder (audio_codec.rs:449); pixel handling appears only in a comment. Split to TASK_C035 / TASK_C036. The file's header comment currently OVERCLAIMS both ("Supports … CRC, Reed-Solomon") — fix that comment when implementing.
+
+- [ ] **TASK_C035**: Reed-Solomon ECC in audio_codec.rs
+  - Priority: MEDIUM
+  - Dependencies: TASK_C030
+  - Port the Python `PhyECC` layer (reedsolo: 10 parity bytes, corrects 5 byte errors, GF(256))
+  - DECISION TO MAKE: interop-matched (a WAV RS-encoded by `speak.py` must decode in Rust and vice-versa — requires matching reedsolo's generator/polynomial) vs standalone Rust RS. Pick before implementing.
+  - Test: Manual (verified in geometry_os, not the visual_audio cron): a NEW named RS test in audio_codec.rs recovers ≥5 injected byte errors, and `cargo test audio_codec --lib` passes with it present (+ Python↔Rust fixture if interop chosen). NOTE: a bare `cargo test audio_codec --lib` already passes without RS — it must NOT be used as this receipt.
+
+- [ ] **TASK_C036**: Pixel-region ↔ WAV in audio_codec.rs
+  - Priority: MEDIUM
+  - Dependencies: TASK_C030
+  - Encode an RGB pixel region → WAV and decode WAV → region, mirroring `tools/dense_encoder.py` (3 bytes/pixel)
+  - Test: Manual (verified in geometry_os): a NEW named pixel-region round-trip test in audio_codec.rs passes byte-identical, present in `cargo test audio_codec --lib`. NOTE: bare `cargo test audio_codec --lib` already passes without this — not a valid receipt on its own.
 
 - [ ] **TASK_C031**: Audio boot loader (IN GEOS TASKS)
   - Create `geometry_os/src/boot/audio_boot.rs`
   - Boot from WAV via stdin, decode to kernel image, load into spatial memory
   - Receipt: `cargo run --bin spatial_audio_boot < kernel.wav` prints "Booted from audio"
-  - Status: Blocked on TASK_C030
+  - Status: Codec dependency (TASK_C030 WAV→bytes decode) now available; still needs the boot-loader + spatial-memory load path. RS (TASK_C035) optional for robustness, not required for a first boot.
 
 - [x] **TASK_C033**: Signed boot manifest for QEMU launch ✅ COMPLETE
   - Priority: HIGH
