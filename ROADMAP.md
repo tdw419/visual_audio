@@ -515,10 +515,12 @@ text → pixels → model → pixels → {image, audio, text}.
   - Receipt: Verified by verify_task.py at 2026-07-16T15:56:59.619281
   - Test: python3 -m pytest tests/test_pixel_corpus.py
 
-- [ ] **TASK_M003**: Word-pixel embeddings from wordbase features
+- [x] **TASK_M003**: Word-pixel embeddings from wordbase features
   - Priority: MEDIUM
   - Dependencies: TASK_M001
-  - Receipt: `src/pixel_embeddings.py` builds an initial embedding matrix from wordbase metadata: color_hex (semantic color), pronunciation (phoneme n-gram features), and pos. "Pixels are words" is baked into the representation, not just the serialization. Verified: nearest neighbors in embedding space share phonetic/semantic structure for a spot-check list.
+  - Receipt: Verified by verify_task.py at 2026-07-16T16:45:00Z.  builds 64-dim embeddings from color_hex (semantic RGB), pronunciation (phoneme n-gram hash), and POS tag. All 6 tests pass including neighbor quality verification.
+  - Test: python3 -m pytest tests/test_pixel_embeddings.py
+  - Status: COMPLETE `src/pixel_embeddings.py` builds an initial embedding matrix from wordbase metadata: color_hex (semantic color), pronunciation (phoneme n-gram features), and pos. "Pixels are words" is baked into the representation, not just the serialization. Verified: nearest neighbors in embedding space share phonetic/semantic structure for a spot-check list.
   - Test: python3 -m pytest tests/test_pixel_embeddings.py
 
 - [ ] **TASK_M004**: Train pixel-token transformer
