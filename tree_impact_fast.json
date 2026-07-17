@@ -1,0 +1,19 @@
+{
+  "id": "f0917605",
+  "title": "Root",
+  "description": "What's the highest-impact next step for visual audio?",
+  "enables": [],
+  "risk": "",
+  "category": "",
+  "depth": 0,
+  "parent_id": null,
+  "children": [],
+  "fertility_score": 0.0,
+  "direct_fertility": 0,
+  "total_descendants": 0,
+  "model_used": "",
+  "explored": true,
+  "pruned": false,
+  "prune_reason": "",
+  "created_at": 1784232466.6266448
+}
