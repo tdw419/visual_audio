@@ -276,6 +276,8 @@ def main():
     
     p_run = sub.add_parser('run', help='decode and execute dense PNG')
     p_run.add_argument('png', help='dense PNG')
+    p_run.add_argument('--geos', action='store_true', help='execute via GeOS spatial syscall')
+    p_run.add_argument('--region', default='default', help='GeOS region identifier (default: default)')
     
     p_place = sub.add_parser('place', help='place dense cartridge on canvas')
     p_place.add_argument('dense', help='dense PNG')
@@ -302,7 +304,15 @@ def main():
         decode_dense(args.png, args.output)
     
     elif args.cmd == 'run':
-        run_dense(args.png)
+        if args.geos:
+            # Execute via GeOS spatial syscall
+            sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src', 'geos'))
+            from region_executor import run_cartridge_with_geos
+            success = run_cartridge_with_geos(args.png, args.region)
+            sys.exit(0 if success else 1)
+        else:
+            # Execute locally with sandbox
+            run_dense(args.png)
     
     elif args.cmd == 'place':
         place_on_canvas(args.dense, args.canvas, args.x, args.y)
