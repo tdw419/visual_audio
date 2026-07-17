@@ -602,3 +602,8 @@ text → pixels → model → pixels → {image, audio, text}.
   - Dependencies: None
   - Test: `python3 -m pytest tests/test_phonemes.py -v`
   - Receipt: All phonemes functionality tested
+- [ ] **TASK_C037**: Wire PhyECC into audio transmit path
+  - Priority: HIGH
+  - Dependencies: TASK_C035
+  - Integrate `PhyECC` (or standard reedsolo) directly into `tools/speak.py` or the MFSK transmit path so that parity bytes are actually embedded into the acoustic stream.
+  - Test: Manual check that `python3 tools/speak.py encode` outputs an audio file with parity data attached.
