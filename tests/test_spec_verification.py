@@ -205,6 +205,41 @@ def check_encoding_examples():
     return issues
 
 
+def check_throughput():
+    """Verify the raw throughput stated in SPEC.md is consistent with the
+    codec constants (this is a *derived* number — a wrong value here passed
+    the constant checks unnoticed before)."""
+    print("Verifying stated throughput matches the constants...")
+    print()
+
+    issues = []
+    import math
+
+    symbols_per_sec = 1.0 / Phy16Tone.SYMBOL_SEC
+    nibbles_per_symbol = math.log2(Phy16Tone.NUM_TONES) / 4.0  # 16 tones = 1 nibble
+    raw_bytes_per_sec = symbols_per_sec * nibbles_per_symbol / 2.0  # 2 nibbles/byte
+
+    spec_path = Path(__file__).parent.parent / 'docs' / 'SPEC.md'
+    spec_content = spec_path.read_text()
+
+    m = re.search(r'Raw throughput\s*\|\s*([\d.]+)\s*bytes/sec', spec_content)
+    if not m:
+        issues.append("Raw throughput line not found / not parseable in SPEC.md")
+        print("  ✗ Raw throughput line not found")
+    else:
+        stated = float(m.group(1))
+        if abs(stated - raw_bytes_per_sec) < 0.5:
+            print(f"  ✓ Raw throughput {stated} bytes/sec matches computed "
+                  f"{raw_bytes_per_sec:.1f} bytes/sec")
+        else:
+            issues.append(f"Raw throughput: SPEC={stated} bytes/sec, "
+                          f"computed={raw_bytes_per_sec:.1f} bytes/sec")
+            print(f"  ✗ Raw throughput: SPEC={stated}, computed={raw_bytes_per_sec:.1f}")
+
+    print()
+    return issues
+
+
 def main():
     """Run all verification checks."""
     print("=" * 70)
@@ -216,6 +251,7 @@ def main():
 
     all_issues.extend(check_spec_constants())
     all_issues.extend(check_tone_mapping())
+    all_issues.extend(check_throughput())
     all_issues.extend(check_frame_format())
     all_issues.extend(check_sandbox_limits())
     all_issues.extend(check_encoding_examples())

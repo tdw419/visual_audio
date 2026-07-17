@@ -121,7 +121,7 @@ Maximum frequency  | 3050.0 Hz
 Sample rate        | 44100 Hz
 Symbol duration    | 20 ms
 Symbols per second | 50
-Raw throughput     | 100 bytes/sec (2 nibbles per byte)
+Raw throughput     | 25 bytes/sec (50 nibbles/sec ÷ 2 nibbles per byte)
 Effective throughput| ~24 bytes/sec (with framing overhead)
 ```
 
