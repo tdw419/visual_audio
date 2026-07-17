@@ -607,3 +607,9 @@ text → pixels → model → pixels → {image, audio, text}.
   - Dependencies: TASK_C035
   - Integrate `PhyECC` (or standard reedsolo) directly into `tools/speak.py` or the MFSK transmit path so that parity bytes are actually embedded into the acoustic stream.
   - Test: Manual check that `python3 tools/speak.py encode` outputs an audio file with parity data attached.
+
+- [ ] **TASK_C038**: Native in-hypervisor pixel boot
+  - Priority: MEDIUM
+  - Dependencies: TASK_C035, TASK_C036
+  - Implement spatial boot process within Geometry OS: read pixel region from framebuffer (simulating spatial memory), decode directly in-guest, and execute the kernel.
+  - Test: Manual QEMU boot test asserting successful jump into the spatially decoded OS region.
