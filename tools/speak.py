@@ -33,6 +33,7 @@ from upic_engine import (
     create_basic_waveform,
 )
 from codec.phy import Phy16Tone, frame, unframe
+from codec.phy_ecc import encode_ecc, decode_ecc
 
 # For 'say' mode - phoneme word compiler
 from word_compiler import (
@@ -93,8 +94,15 @@ def build_chunk_project(symbols, chunk_index: int, wavetable: UPICWaveformTable)
     return project
 
 
-def encode(payload: bytes, wav_path: str, project_path: str = None) -> np.ndarray:
+def encode(payload: bytes, wav_path: str, project_path: str = None, use_ecc: bool = False) -> np.ndarray:
+    # Reed-Solomon is opt-in: it changes the on-air bytes (adds 10 parity per
+    # block), so it must NOT be the default — the clean/file paths, the provenance
+    # fixtures, and the Rust non-ECC interop guard all expect plain MFSK. The
+    # acoustic hop opts in via use_ecc=True (CLI: --ecc), which the Rust
+    # decode_from_wav_ecc path mirrors. Layering: payload -> frame -> RS -> MFSK.
     framed = frame(payload)
+    if use_ecc:
+        framed = encode_ecc(framed)
     symbols = bytes_to_symbols(framed)
 
     wavetable = UPICWaveformTable('sine', create_basic_waveform('sine'), SAMPLE_RATE)
@@ -121,7 +129,7 @@ def encode(payload: bytes, wav_path: str, project_path: str = None) -> np.ndarra
     return audio
 
 
-def decode(wav_path: str) -> bytes:
+def decode(wav_path: str, use_ecc: bool = False) -> bytes:
     audio, sr = sf.read(wav_path)
     if audio.ndim > 1:
         audio = audio.mean(axis=1)
@@ -141,6 +149,11 @@ def decode(wav_path: str) -> bytes:
     symbols = scores.argmax(axis=1).tolist()
 
     data = symbols_to_bytes(symbols)
+    if use_ecc:
+        data, valid = decode_ecc(data)
+        if not valid:
+            print("Warning: uncorrectable errors detected in ECC layer")
+
     if data[:2] != MAGIC:
         raise ValueError(f"bad magic: {data[:2]!r} (not a spoken-software wav?)")
     (length,) = struct.unpack('>H', data[2:4])
@@ -152,7 +165,7 @@ def decode(wav_path: str) -> bytes:
     return payload
 
 
-def encode_dual_band(text: str, software_path: str, wav_path: str):
+def encode_dual_band(text: str, software_path: str, wav_path: str, use_ecc: bool = False):
     """
     Encode both text (phonemes) and software (bytes) into a single dual-band WAV.
     
@@ -190,6 +203,8 @@ def encode_dual_band(text: str, software_path: str, wav_path: str):
     
     # Encode with high-band PHY
     framed_data = frame(software_bytes)
+    if use_ecc:
+        framed_data = encode_ecc(framed_data)
     high_band_symbols = HighBandPhy.bytes_to_symbols(framed_data)
     byte_audio = HighBandPhy.encode_symbols(high_band_symbols)
     
@@ -234,7 +249,7 @@ def encode_dual_band(text: str, software_path: str, wav_path: str):
     return mixed
 
 
-def decode_dual_band(wav_path: str, output_text_path: str = None, output_software_path: str = None):
+def decode_dual_band(wav_path: str, output_text_path: str = None, output_software_path: str = None, use_ecc: bool = False):
     """
     Decode both text (phonemes) and software (bytes) from dual-band audio.
     
@@ -294,6 +309,11 @@ def decode_dual_band(wav_path: str, output_text_path: str = None, output_softwar
         symbols = HighBandPhy.decode_symbols(high_band)
         framed_data = HighBandPhy.symbols_to_bytes(symbols)
         
+        if use_ecc:
+            framed_data, ecc_valid = decode_ecc(framed_data)
+            if not ecc_valid:
+                print("  WARNING: uncorrectable errors detected in ECC layer")
+
         # Unframe and validate CRC
         software_bytes, valid = unframe(framed_data)
         
@@ -425,10 +445,14 @@ def main():
     p_enc.add_argument('input', help='source file to speak')
     p_enc.add_argument('-o', '--wav', default='spoken.wav')
     p_enc.add_argument('-p', '--project', default='spoken.upic.json')
+    p_enc.add_argument('--ecc', action='store_true',
+                       help='add Reed-Solomon parity for the noisy acoustic channel (opt-in; changes on-air bytes)')
 
     p_dec = sub.add_parser('decode', help='WAV -> recovered file')
     p_dec.add_argument('wav')
     p_dec.add_argument('-o', '--output', required=True)
+    p_dec.add_argument('--ecc', action='store_true',
+                       help='decode a WAV that was encoded with --ecc')
 
     p_viz = sub.add_parser('viz', help='ASCII spectrogram of a spoken WAV')
     p_viz.add_argument('wav')
@@ -447,25 +471,27 @@ def main():
     p_enc_dual.add_argument('-t', '--text', required=True, help='text to encode with phonemes')
     p_enc_dual.add_argument('-b', '--software', required=True, help='software file to encode with bytes')
     p_enc_dual.add_argument('-o', '--output', default='dual_band.wav', help='output WAV file')
+    p_enc_dual.add_argument('--ecc', action='store_true', help='add Reed-Solomon parity (opt-in, for the acoustic channel)')
 
     p_dec_dual = sub.add_parser('decode_dual', help='decode text + software from dual-band WAV')
     p_dec_dual.add_argument('wav', help='dual-band WAV file')
     p_dec_dual.add_argument('-t', '--text', help='output text file (optional)')
     p_dec_dual.add_argument('-b', '--software', required=True, help='output software file')
+    p_dec_dual.add_argument('--ecc', action='store_true', help='decode a dual-band WAV encoded with --ecc')
 
     args = parser.parse_args()
 
     if args.cmd == 'encode':
         with open(args.input, 'rb') as f:
             payload = f.read()
-        audio = encode(payload, args.wav, args.project)
+        audio = encode(payload, args.wav, args.project, use_ecc=args.ecc)
         rate = len(payload) / (len(audio) / SAMPLE_RATE)
         print(f"spoke {len(payload)} bytes into {args.wav} "
               f"({len(audio) / SAMPLE_RATE:.1f}s, {rate:.0f} bytes/sec)")
         print(f"UPIC project: {args.project}")
 
     elif args.cmd == 'decode':
-        payload = decode(args.wav)
+        payload = decode(args.wav, use_ecc=args.ecc)
         with open(args.output, 'wb') as f:
             f.write(payload)
         print(f"decoded {len(payload)} bytes -> {args.output} (CRC verified)")
@@ -485,10 +511,10 @@ def main():
         print(f"  Duration: {len(audio) / SAMPLE_RATE:.2f}s")
 
     elif args.cmd == 'encode_dual':
-        encode_dual_band(args.text, args.software, args.output)
+        encode_dual_band(args.text, args.software, args.output, use_ecc=args.ecc)
 
     elif args.cmd == 'decode_dual':
-        decode_dual_band(args.wav, args.text, args.software)
+        decode_dual_band(args.wav, args.text, args.software, use_ecc=args.ecc)
 
 
 if __name__ == '__main__':
