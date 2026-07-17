@@ -69,12 +69,13 @@ Offset | Size | Field        | Description
 6      | N    | PAYLOAD      | Raw data bytes
 6+N    | 64   | SIGNATURE    | Ed25519 signature over payload
 70+N   | 8    | TIMESTAMP    | uint64 big-endian, Unix timestamp
-78+N   | 4    | CRC32        | uint32 big-endian, CRC over (MAGIC+...+TIMESTAMP)
+78+N   | 4    | CRC32        | uint32 big-endian, CRC over (MAGIC+TOTAL_LEN+PAYLOAD_LEN+PAYLOAD+SIGNATURE+TIMESTAMP)
 ```
 
 - **Signature algorithm**: Ed25519
 - **Timestamp validity**: 300 seconds from creation
 - **Maximum payload size**: 65535 bytes
+- **Note**: TOTAL_LEN field does not include the CRC32 field itself (only payload_len + 64 + 8)
 
 ### 1.3 Cartridge Execution
 
@@ -222,13 +223,15 @@ Layer 5: Output truncation (512KB stdout/stderr limits)
 
 | Resource | Limit | Enforcement |
 |----------|-------|-------------|
-| CPU time | 5 seconds | `setrlimit(RLIMIT_CPU)` |
-| Wall time | 10 seconds | `subprocess.communicate(timeout)` |
-| Memory | 64 MB | `setrlimit(RLIMIT_AS)` |
-| Disk writes | 10 MB | Post-execution temp dir check |
-| stdout/stderr | 512 KB each | Truncation |
-| File descriptors | 16 | `setrlimit(RLIMIT_NOFILE)` |
-| Processes | 1 | `setrlimit(RLIMIT_NPROC)` |
+|| CPU time | 5 seconds | `setrlimit(RLIMIT_CPU)` |
+|| Wall time | 10 seconds | `subprocess.communicate(timeout)` |
+|| Memory | 64 MB | `setrlimit(RLIMIT_AS)` |
+|| Disk writes | 10 MB | Post-execution temp dir check |
+|| stdout/stderr | 512 KB each | Truncation |
+|| File descriptors | 16 | `setrlimit(RLIMIT_NOFILE)` |
+|| Processes | 1 | `setrlimit(RLIMIT_NPROC)` |
+
+Note: The implementation defines MAX_OUTPUT_MB = 1 (combined limit), but truncation applies separately as 512KB for stdout and 512KB for stderr.
 
 ### 3.3 Import Allowlist
 

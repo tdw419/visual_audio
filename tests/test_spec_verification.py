@@ -222,6 +222,7 @@ def check_throughput():
     spec_path = Path(__file__).parent.parent / 'docs' / 'SPEC.md'
     spec_content = spec_path.read_text()
 
+    # Match table format: | Raw throughput     | 25 bytes/sec |
     m = re.search(r'Raw throughput\s*\|\s*([\d.]+)\s*bytes/sec', spec_content)
     if not m:
         issues.append("Raw throughput line not found / not parseable in SPEC.md")
@@ -235,6 +236,118 @@ def check_throughput():
             issues.append(f"Raw throughput: SPEC={stated} bytes/sec, "
                           f"computed={raw_bytes_per_sec:.1f} bytes/sec")
             print(f"  ✗ Raw throughput: SPEC={stated}, computed={raw_bytes_per_sec:.1f}")
+
+    print()
+    return issues
+
+
+def check_frame_crc_coverage():
+    """Verify the authenticated-frame CRC coverage BY EXERCISING the implementation.
+
+    We build a real frame via frame_authenticated() and confirm (a) the trailing
+    CRC equals crc32 over every byte except the CRC itself, and (b) TOTAL_LEN =
+    payload_len + SIGNATURE + TIMESTAMP (does NOT include the CRC). Only after
+    that do we require SPEC.md to describe it. This reads the code, so it catches
+    drift — the previous version only grepped SPEC.md against itself.
+    """
+    print("Verifying authenticated frame CRC coverage (against implementation)...")
+    print()
+
+    import binascii
+    from codec.phy import frame_authenticated
+
+    issues = []
+    payload = b'{"op":1}'
+    signature = bytes(range(SIGNATURE_LENGTH))  # 64 arbitrary bytes
+    ts = 1_700_000_000
+    frame = frame_authenticated(payload, signature, timestamp=ts)
+
+    # (a) CRC covers everything except the last 4 bytes
+    stated_crc = struct.unpack('>I', frame[-4:])[0]
+    computed = binascii.crc32(frame[:-4]) & 0xFFFFFFFF
+    if stated_crc == computed:
+        print("  ✓ CRC32 covers MAGIC+TOTAL_LEN+PAYLOAD_LEN+PAYLOAD+SIGNATURE+TIMESTAMP (not CRC)")
+    else:
+        issues.append("Authenticated frame CRC does not cover all-but-CRC as SPEC.md states")
+        print("  ✗ CRC coverage mismatch vs implementation")
+
+    # (b) TOTAL_LEN field (bytes 2..4) excludes the CRC
+    total_len = struct.unpack('>H', frame[2:4])[0]
+    expected_total = len(payload) + SIGNATURE_LENGTH + TIMESTAMP_LENGTH
+    if total_len == expected_total and total_len != len(frame):
+        print(f"  ✓ TOTAL_LEN={total_len} = payload+{SIGNATURE_LENGTH}+{TIMESTAMP_LENGTH}, excludes CRC")
+    else:
+        issues.append(f"TOTAL_LEN={total_len} != payload+sig+ts ({expected_total})")
+        print(f"  ✗ TOTAL_LEN mismatch: {total_len} != {expected_total}")
+
+    # (c) SPEC.md must actually describe this coverage
+    spec_content = (Path(__file__).parent.parent / 'docs' / 'SPEC.md').read_text()
+    if re.search(r'CRC over \(MAGIC\+TOTAL_LEN\+PAYLOAD_LEN\+PAYLOAD\+SIGNATURE\+TIMESTAMP\)', spec_content):
+        print("  ✓ SPEC.md documents the CRC coverage")
+    else:
+        issues.append("SPEC.md does not document authenticated-frame CRC coverage")
+        print("  ✗ SPEC.md missing CRC coverage description")
+
+    print()
+    return issues
+
+
+def check_sandbox_output_limit():
+    """Verify that SPEC.md accurately describes the output truncation behavior."""
+    print("Verifying sandbox output truncation behavior...")
+    print()
+
+    issues = []
+
+    # Read the ACTUAL per-stream limit from the implementation, not the SPEC.
+    from executor.sandbox import SandboxedExecutor
+    import inspect
+
+    per_stream_bytes = SandboxedExecutor.MAX_OUTPUT_MB * 512 * 1024  # mirrors sandbox.py:155/159
+    src = inspect.getsource(SandboxedExecutor)
+    applies_per_stream = src.count('MAX_OUTPUT_MB * 512 * 1024') >= 2  # stdout AND stderr
+
+    if per_stream_bytes == 512 * 1024 and applies_per_stream:
+        print(f"  ✓ Implementation truncates each of stdout/stderr at {per_stream_bytes//1024} KB")
+    else:
+        issues.append(f"Sandbox per-stream limit is {per_stream_bytes} B / applies_per_stream={applies_per_stream}")
+        print(f"  ✗ Sandbox output limit not 512 KB per stream as documented")
+
+    # And SPEC.md must state the same thing.
+    spec_content = (Path(__file__).parent.parent / 'docs' / 'SPEC.md').read_text()
+    if "512 KB each" in spec_content:
+        print(f"  ✓ SPEC.md states 512 KB per stream")
+    else:
+        issues.append("SPEC.md doesn't state 512 KB per stdout/stderr stream")
+        print(f"  ✗ Missing 512 KB per stream claim in SPEC.md")
+
+    print()
+    return issues
+
+
+def check_max_age_consistency():
+    """Verify timestamp max age consistency across SPEC.md and implementation."""
+    print("Verifying timestamp max age consistency...")
+    print()
+
+    issues = []
+
+    spec_path = Path(__file__).parent.parent / 'docs' / 'SPEC.md'
+    spec_content = spec_path.read_text()
+
+    # Check spec mentions 300 seconds
+    if "300 seconds" in spec_content or "5 minutes" in spec_content:
+        print(f"  ✓ SPEC.md mentions 300 seconds / 5 minutes")
+    else:
+        issues.append("SPEC.md doesn't mention 300 second timestamp max age")
+        print(f"  ✗ Missing timestamp max age claim")
+
+    # Verify it matches implementation constant
+    if TIMESTAMP_MAX_AGE_SECONDS == 300:
+        print(f"  ✓ Implementation constant matches (300s)")
+    else:
+        issues.append(f"Implementation constant {TIMESTAMP_MAX_AGE_SECONDS} != 300")
+        print(f"  ✗ Implementation constant mismatch")
 
     print()
     return issues
@@ -255,6 +368,9 @@ def main():
     all_issues.extend(check_frame_format())
     all_issues.extend(check_sandbox_limits())
     all_issues.extend(check_encoding_examples())
+    all_issues.extend(check_frame_crc_coverage())
+    all_issues.extend(check_sandbox_output_limit())
+    all_issues.extend(check_max_age_consistency())
 
     print("=" * 70)
     print("Summary")
