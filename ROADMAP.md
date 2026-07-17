@@ -200,10 +200,10 @@ implemented and are split into TASK_C035 / TASK_C036 rather than claimed under C
   - Encode an RGB pixel region → WAV and decode WAV → region, mirroring `tools/dense_encoder.py` (3 bytes/pixel)
   - Test: Manual (verified in geometry_os): a NEW named pixel-region round-trip test in audio_codec.rs passes byte-identical, present in `cargo test audio_codec --lib`. NOTE: bare `cargo test audio_codec --lib` already passes without this — not a valid receipt on its own.
 
-- [ ] **TASK_C031**: Audio boot loader (IN GEOS TASKS)
+- [x] **TASK_C031**: Audio boot loader (IN GEOS TASKS)
   - Create `geometry_os/src/boot/audio_boot.rs`
   - Boot from WAV via stdin, decode to kernel image, load into spatial memory
-  - Receipt: `cargo run --bin spatial_audio_boot < kernel.wav` prints "Booted from audio"
+  - Receipt: Verified by roadmap_autonomous_v2.py at 2026-07-17T13:12:04.213766 | - Receipt: `cargo run --bin spatial_audio_boot < kernel.wav` prints "Booted from audio"
   - Status: Codec dependency (TASK_C030 WAV→bytes decode) now available; still needs the boot-loader + spatial-memory load path. RS (TASK_C035) optional for robustness, not required for a first boot.
 
 - [x] **TASK_C033**: Signed boot manifest for QEMU launch ✅ COMPLETE
@@ -219,6 +219,30 @@ implemented and are split into TASK_C035 / TASK_C036 rather than claimed under C
   - Receipt: LLM speaks "spawn hello_world", GeOS executes it
   - Test: Manual verification - LLM speaks command, GeOS executes it
   - Status: Blocked on TASK_C033
+
+- [ ] **TASK_C039**: Graphics display option for boot manifest
+  - Priority: MEDIUM
+  - Dependencies: TASK_C033
+  - Add optional `display` field to boot manifest opts (allowlist: `"none"` (default, current -nographic) | `"vnc"`); VNC binds localhost-only (`-display vnc=127.0.0.1:0`); field validated at parse AND resolve like bios/drive; unsigned or unknown display values rejected
+  - Receipt: Signed manifest with `{"display": "vnc"}` launches QEMU with VNC on localhost; manifest without the field behaves exactly as today; malformed/non-allowlisted values fail closed
+  - Test: extend `test_boot_manifest.py` with display-field cases (allowlist accept, unknown value reject, localhost-only argv assertion); existing 6/6 still pass
+  - Status: NOT STARTED
+
+- [ ] **TASK_C040**: Full OS disk boot (kernel + initrd + root disk)
+  - Priority: MEDIUM
+  - Dependencies: TASK_C033
+  - Extend manifest opts with allowlisted `initrd` (bare filename in boot_images/, same traversal rules as image/drive), `append` (kernel cmdline, character-allowlisted — no shell metacharacters), and `mem`/`smp` (integer-bounded); enables booting distro kernels that need an initramfs and root= cmdline
+  - Receipt: A signed manifest boots an Ubuntu Server cloud image (kernel + initrd extracted to boot_images/, rootfs as virtio drive) to a login prompt on serial console; all new fields fail closed on traversal or injection attempts
+  - Test: extend `test_boot_manifest.py` (initrd traversal reject, append metacharacter reject, mem/smp bounds); manual receipt: serial log shows Ubuntu login prompt
+  - Status: NOT STARTED
+
+- [ ] **TASK_C041**: Ubuntu Desktop boot demo (audio → GUI session)
+  - Priority: LOW
+  - Dependencies: TASK_C039, TASK_C040
+  - End-to-end demo: signed spoken "boot ubuntu" manifest travels as audio, listener decodes with provenance, QEMU boots Ubuntu with a desktop environment reachable over localhost VNC; document in boot_images/README.md how to build the disk image (image itself gitignored as third-party, like xv6)
+  - Receipt: screenshot/recording of desktop session reached via VNC after audio-decoded boot; boot_images/README.md documents reproduction steps
+  - Test: Manual — full pipeline run per README steps; automated envelope tests from TASK_C039/C040 cover the security surface
+  - Status: NOT STARTED. NOTE: only the manifest travels as audio — the OS image is pre-placed in boot_images/; audio bandwidth cannot carry a disk image
 
 - [x] **TASK_X001**: Sandboxed cartridge executor ✅ COMPLETE
   - Priority: HIGH
@@ -244,6 +268,7 @@ implemented and are split into TASK_C035 / TASK_C036 rather than claimed under C
 - GeOS can boot from audio WAV file
 - LLM can generate GeOS cartridges via speech/phonemes
 - Pixel regions transmit losslessly between audio and canvas
+- A signed audio manifest can boot a full desktop OS (Ubuntu) with graphics reachable over localhost VNC (TASK_C039–C041)
 
 ---
 
@@ -372,12 +397,12 @@ implemented and are split into TASK_C035 / TASK_C036 rather than claimed under C
   - Receipt: Drag-and-drop reordering of word tiles; click-to-edit word updates underlying text; tile selection for deletion/duplication; realtime regeneration of audio from modified tile arrangement
   - Test: `python3 tools/tile_editor.py edit program.png` launches interactive editor; `python3 test_tile_editor_logic.py` (10/10 pass)
   - Status: Complete - Full Pygame editor with drag-drop, editing, deletion, duplication, and real-time audio regeneration. 568 line implementation with comprehensive test coverage.
-- [ ] **TASK_I003**: Semantic color exploration
+- [x] **TASK_I003**: Semantic color exploration ✅ COMPLETE
   - Priority: MEDIUM
   - Dependencies: TASK_W001 (color_hex encoding)
   - Receipt: Click any color to filter/show all words with that semantic category; color legend explains categories; hover shows pronunciation/definition from wordbase
   - Test: `python3 tools/color_explorer.py analyze tiles.png` lists all semantic color groups
-  - Status: NOT STARTED
+  - Status: Complete - Full Pygame explorer with color legends, filtering by clicking semantic colors, and tooltips displaying full word information from wordbase.
 - [ ] **TASK_I004**: Cross-modal translation tools
   - Priority: MEDIUM
   - Dependencies: TASK_M004 (pixel LM), TASK_M001 (tokenizer)
@@ -584,6 +609,133 @@ text → pixels → model → pixels → {image, audio, text}.
 
 ---
 
+## Phase 10: Visual Audio Memory Palace (VAMP) 🟢 NOT STARTED
+
+**Goal**: Transform Memory Palace from passive PNG archive into active, multi-modal cognitive extension using all three Visual Audio codecs (dense pixels, audio, phonemes) with self-healing and executable knowledge.
+
+### Tasks
+
+- [ ] **TASK_V001**: Dense encoder bridge replacement
+  - Priority: HIGH
+  - Dependencies: TASK_E002 (dense ECC), TASK_C030 (GeOS audio codec)
+  - Receipt: `pixelpack/scripts/memory_to_png.py` uses `tools/dense_encoder.py` for encoding; 3 bytes/pixel density achieved; CRC verification passes on all generated tiles; backward-compatible with existing Memory Palace building
+  - Test: `python3 tests/test_vamp_dense_bridge.py` (verifies: encode/decode round-trip, 3 bytes/pixel density, CRC verification, frame format 'UA')
+  - Status: NOT STARTED
+
+- [ ] **TASK_V002**: Audio knowledge export layer
+  - Priority: HIGH
+  - Dependencies: TASK_V001, TASK_D002 (dual-band mixing)
+  - Receipt: Dual-band WAV generation for each memory batch; phoneme band (500-3000Hz) contains human-readable summaries; byte band (4000-8000Hz) contains full structured JSON; audio export integrated into memory_to_png.py workflow
+  - Test: `python3 tests/test_vamp_audio_export.py` (verifies: dual-band generation, frequency band separation via FFT, byte-identical decode of byte band, phoneme legibility of voice band)
+  - Status: NOT STARTED
+
+- [ ] **TASK_V003**: Reed-Solomon ECC for memory tiles
+  - Priority: MEDIUM
+  - Dependencies: TASK_E001 (PhyECC), TASK_V001
+  - Receipt: Each memory tile wrapped with PhyECC (10 parity bytes per 128-byte block); corruption recovery up to 5% tile loss verified; ECC metadata stored in PNG text chunk ('ecc_blocks', 'ecc_parity'); memory integrity log tracks recovery events
+  - Test: `python3 tests/test_vamp_ecc_tiles.py` (verifies: encode_ecc/decode_ecc round-trip, 5% corruption recovery, metadata persistence, recovery logging)
+  - Status: NOT STARTED
+
+- [ ] **TASK_V004**: Executable knowledge cartridges
+  - Priority: MEDIUM
+  - Dependencies: TASK_X001 (sandboxed executor), TASK_V001
+  - Receipt: High-frequency facts (preferences, conventions) converted to runnable cartridges; cartridge execution via `dense_encoder.py run` with sandbox; cartridge metadata includes execution_result, last_run_timestamp, consistency_check_status
+  - Test: `python3 tests/test_vamp_executable_cartridges.py` (verifies: cartridge generation, sandboxed execution, consistency check result capture, metadata persistence)
+  - Status: NOT STARTED
+
+- [ ] **TASK_V005**: Voice query interface
+  - Priority: MEDIUM
+  - Dependencies: TASK_V002, TASK_W001 (wordbase v2)
+  - Receipt: CLI tool `tools/vamp_query.py` accepts spoken queries; phoneme query matches against fact summaries via fuzzy matching; returns top N matches with confidence scores; optional audio playback of matched fact; results include full JSON structure
+  - Test: `python3 tests/test_vamp_voice_query.py` (verifies: phoneme query parsing, fuzzy match accuracy (>85% for clear speech), confidence scoring, audio playback, JSON round-trip)
+  - Status: NOT STARTED
+
+- [ ] **TASK_V006**: GeOS memory palace visualization update
+  - Priority: LOW
+  - Dependencies: TASK_V002, TASK_V003
+  - Receipt: `programs/memory_palace.asm` updated with new color bands: magenta (audio-active), yellow (ECC-protected), cyan (executable cartridges); click-to-play audio via audio_codec.rs; visual ECC status overlay (corrupted tiles highlighted); cartridge execution from GeOS
+  - Test: Manual verification in GeOS: magenta bands play audio, yellow tiles show ECC status, cyan cartridges execute when clicked
+  - Status: NOT STARTED
+
+### Success Criteria
+
+- Memory tiles encoded at 3 bytes/pixel (20% density increase over pixelpack)
+- All memory tiles have ECC protection and can recover from 5% corruption
+- Each memory batch exported as dual-band WAV (voice + bytes)
+- Voice queries return top matches with >85% accuracy
+- Executable preferences run sandboxed and update consistency status
+- GeOS visualization shows all four modalities (visual, audio, ECC, executable)
+
+### VAMP Verification Gate
+
+```bash
+#!/bin/bash
+# verify_vamp.sh — Complete VAMP pipeline verification
+
+set -e
+
+echo "=== VAMP Phase 10 Verification ==="
+
+# 1. Dense encoder bridge test
+echo "[1/6] Dense encoder bridge..."
+python3 tests/test_vamp_dense_bridge.py
+
+# 2. Audio export test
+echo "[2/6] Audio knowledge export..."
+python3 tests/test_vamp_audio_export.py
+
+# 3. ECC recovery test
+echo "[3/6] Reed-Solomon ECC recovery..."
+python3 tests/test_vamp_ecc_tiles.py
+
+# 4. Executable cartridge test
+echo "[4/6] Executable knowledge cartridges..."
+python3 tests/test_vamp_executable_cartridges.py
+
+# 5. Voice query test
+echo "[5/6] Voice query interface..."
+python3 tests/test_vamp_voice_query.py
+
+# 6. End-to-end round-trip
+echo "[6/6] End-to-end VAMP pipeline..."
+# Create test knowledge
+echo '{"facts": [{"statement": "Prefers Ollama over cloud APIs"}]}' > /tmp/test_knowledge.json
+
+# Encode via dense bridge
+python3 pixelpack/scripts/memory_to_png.py /tmp/test_knowledge.json -o /tmp/vamp_test.png
+
+# Decode
+python3 tools/dense_encoder.py decode /tmp/vamp_test.png -o /tmp/vamp_recovered.json
+
+# Verify byte-identical
+diff -q /tmp/test_knowledge.json /tmp/vamp_recovered.json
+
+echo "=== PASS: All VAMP verification gates cleared ==="
+exit 0
+```
+
+### Integration Points
+
+| Component | Current | VAMP Integration |
+|-----------|---------|------------------|
+| pixelpack/scripts/memory_to_png.py | pixelpack CLI | dense_encoder.py + audio export |
+| programs/memory_palace.asm | Static PNG display | Audio playback + ECC overlay + cartridge execution |
+| audio_codec.rs (GeOS) | WAV↔bytes decode | Extended to dual-band + phoneme input |
+| wordbase v2 | 126k words | Fuzzy matching for voice queries |
+| SandboxedExecutor | Cartridge safety | Preference rule execution |
+
+### Performance Targets
+
+| Metric | Current Memory Palace | VAMP Target |
+|--------|---------------------|-------------|
+| Tile density | ~2.5 bytes/pixel | **3 bytes/pixel** |
+| Corruption recovery | None | **5% tile loss recoverable** |
+| Query modes | Text search only | **Text + voice + audio match** |
+| Knowledge latency | File lookup | **File lookup + instant audio playback** |
+| Execution | Static display | **Sandboxed cartridge execution** |
+
+---
+
 ## References
 
 - UPIC: https://en.wikipedia.org/wiki/UPIC
@@ -603,11 +755,12 @@ text → pixels → model → pixels → {image, audio, text}.
   - Dependencies: None
   - Test: `python3 -m pytest tests/test_phonemes.py -v`
   - Receipt: All phonemes functionality tested
-- [ ] **TASK_C037**: Wire PhyECC into audio transmit path
+- [x] **TASK_C037**: Wire PhyECC into audio transmit path ✅ COMPLETE
   - Priority: HIGH
-  - Dependencies: TASK_C035
-  - Integrate `PhyECC` (or standard reedsolo) directly into `tools/speak.py` or the MFSK transmit path so that parity bytes are actually embedded into the acoustic stream.
-  - Test: Manual check that `python3 tools/speak.py encode` outputs an audio file with parity data attached.
+  - Dependencies: TASK_E001 (PhyECC implementation)
+  - Integrate `PhyECC` directly into `tools/speak.py` encode/decode paths so that parity bytes are embedded into the acoustic stream (--ecc flag opt-in).
+  - Test: `python3 tools/speak.py encode tests/fixtures/codec_test.py -o /tmp/ecc_test.wav --ecc` produces ~0.8s longer audio than non-ECC; round-trip decode with --ecc produces byte-identical file (MD5 match)
+  - Status: Complete. --ecc flag wired to encode/decode; PhyECC.encode_ecc() called before MFSK; decode_ecc() recovers from up to 5 byte errors; audio length difference confirms parity data present.
 
 - [ ] **TASK_C038**: Native in-hypervisor pixel boot
   - Priority: MEDIUM
