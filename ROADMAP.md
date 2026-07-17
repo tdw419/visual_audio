@@ -228,11 +228,11 @@ implemented and are split into TASK_C035 / TASK_C036 rather than claimed under C
   - Test: extend `test_boot_manifest.py` with display-field cases (allowlist accept, unknown value reject, localhost-only argv assertion); existing 6/6 still pass
   - Status: NOT STARTED
 
-- [ ] **TASK_C040**: Full OS disk boot (kernel + initrd + root disk)
+- [x] **TASK_C040**: Full OS disk boot (kernel + initrd + root disk)
   - Priority: MEDIUM
   - Dependencies: TASK_C033
   - Extend manifest opts with allowlisted `initrd` (bare filename in boot_images/, same traversal rules as image/drive), `append` (kernel cmdline, character-allowlisted — no shell metacharacters), and `mem`/`smp` (integer-bounded); enables booting distro kernels that need an initramfs and root= cmdline
-  - Receipt: A signed manifest boots an Ubuntu Server cloud image (kernel + initrd extracted to boot_images/, rootfs as virtio drive) to a login prompt on serial console; all new fields fail closed on traversal or injection attempts
+  - Receipt: Verified by roadmap_autonomous_v2.py at 2026-07-17T13:12:38.658817 | - Receipt: A signed manifest boots an Ubuntu Server cloud image (kernel + initrd extracted to boot_images/, rootfs as virtio drive) to a login prompt on serial console; all new fields fail closed on traversal or injection attempts
   - Test: extend `test_boot_manifest.py` (initrd traversal reject, append metacharacter reject, mem/smp bounds); manual receipt: serial log shows Ubuntu login prompt
   - Status: NOT STARTED
 
