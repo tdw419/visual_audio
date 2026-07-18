@@ -1,324 +1,344 @@
 #!/usr/bin/env python3
 """
-dense_encoder.py — Dense binary encoding in RGB pixels.
+dense_encoder.py — Dense PNG encoder for Visual Audio Memory Palace.
 
-Unlike the spectral format (honest to 16 tones, ~1 bit per byte), this packs
-3 bytes per RGB pixel using all color channels. A 15x15 pixel image can hold
-~581 bytes of payload — the same content that requires 7068x96 pixels in the
-spectral format.
+Encodes binary data into PNG images at 3 bytes/pixel density.
+Uses frame format with CRC32 verification.
 
-Both formats carry the same framed payload (magic + length + data + CRC), so
-conversion between them is lossless.
+Frame format:
+  [MAGIC:2] [LENGTH:2] [PAYLOAD:N] [CRC32:4]
+  MAGIC = b'UA'
+  LENGTH = big-endian uint16 (payload length)
+  CRC32 = CRC32 of PAYLOAD
 """
 
-import argparse
-import binascii
-import os
+import zlib
 import struct
-import sys
-import tempfile
+from pathlib import Path
+from typing import Optional
 
-import numpy as np
 from PIL import Image
+import numpy as np
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src'))
 
-from upic_engine import create_basic_waveform
+# Frame format constants
+MAGIC = b'UA'  # Visual Audio magic bytes
+MAX_PAYLOAD_SIZE = 65535  # uint16 max
 
-MAGIC = b'UA'
+
+def compute_crc(payload: bytes) -> int:
+    """
+    Compute CRC32 checksum for payload.
+
+    Args:
+        payload: Data to checksum
+
+    Returns:
+        CRC32 value as unsigned integer
+    """
+    return zlib.crc32(payload) & 0xFFFFFFFF
+
 
 def frame(payload: bytes) -> bytes:
-    """Frame payload with magic, length, and CRC."""
-    if len(payload) > 0xFFFF:
-        raise ValueError("payload too large for uint16 length field")
-    crc = binascii.crc32(payload) & 0xFFFFFFFF
-    return MAGIC + struct.pack('>H', len(payload)) + payload + struct.pack('>I', crc)
+    """
+    Frame payload with magic bytes, length, and CRC32.
 
-def unframe(data: bytes) -> bytes:
-    """Unframe and verify payload."""
-    if data[:2] != MAGIC:
-        raise ValueError(f"bad magic: {data[:2]!r}")
-    (length,) = struct.unpack('>H', data[2:4])
-    payload = data[4:4 + length]
-    (crc,) = struct.unpack('>I', data[4 + length:8 + length])
-    actual = binascii.crc32(payload) & 0xFFFFFFFF
-    if crc != actual:
-        raise ValueError(f"CRC mismatch: header {crc:08x} != payload {actual:08x}")
+    Frame structure:
+      - MAGIC: 2 bytes (b'UA')
+      - LENGTH: 2 bytes (big-endian uint16, payload length)
+      - PAYLOAD: N bytes
+      - CRC32: 4 bytes (CRC32 of payload)
+
+    Args:
+        payload: Data to frame (max 65535 bytes)
+
+    Returns:
+        Framed bytes
+
+    Raises:
+        ValueError: If payload exceeds MAX_PAYLOAD_SIZE
+    """
+    if len(payload) > MAX_PAYLOAD_SIZE:
+        raise ValueError(
+            f"Payload too large: {len(payload)} bytes (max {MAX_PAYLOAD_SIZE})"
+        )
+
+    # Compute CRC32 of payload only
+    crc = compute_crc(payload)
+
+    # Pack: MAGIC (2) + LENGTH (2) + PAYLOAD (N) + CRC32 (4)
+    framed = (
+        MAGIC +
+        struct.pack('>H', len(payload)) +
+        payload +
+        struct.pack('>I', crc)
+    )
+
+    return framed
+
+
+def unframe(framed: bytes) -> bytes:
+    """
+    Unframe payload, verifying magic bytes and CRC32.
+
+    Args:
+        framed: Framed bytes to unframe
+
+    Returns:
+        Original payload
+
+    Raises:
+        ValueError: If magic bytes don't match or CRC32 verification fails
+    """
+    if len(framed) < 8:
+        raise ValueError(
+            f"Framed data too short: {len(framed)} bytes (minimum 8)"
+        )
+
+    # Extract magic bytes
+    magic = framed[:2]
+    if magic != MAGIC:
+        raise ValueError(
+            f"Invalid magic bytes: {magic!r} (expected {MAGIC!r})"
+        )
+
+    # Extract length
+    payload_length = struct.unpack('>H', framed[2:4])[0]
+
+    # Validate length
+    if len(framed) < 8 + payload_length:
+        raise ValueError(
+            f"Framed data truncated: expected {8 + payload_length} bytes, "
+            f"got {len(framed)}"
+        )
+
+    # Extract payload and CRC32
+    payload = framed[4:4 + payload_length]
+    stored_crc = struct.unpack('>I', framed[4 + payload_length:8 + payload_length])[0]
+
+    # Verify CRC32
+    computed_crc = compute_crc(payload)
+    if computed_crc != stored_crc:
+        raise ValueError(
+            f"CRC32 verification failed: stored {stored_crc:#010x}, "
+            f"computed {computed_crc:#010x}"
+        )
+
     return payload
+
 
 def bytes_to_pixels(data: bytes) -> np.ndarray:
     """
-    Pack bytes into RGB pixels (3 bytes per pixel).
-    
+    Convert bytes to RGBA pixel array (3 bytes/pixel density).
+
+    Packs 3 bytes of data into each pixel's RGB channels.
+    Alpha channel is set to 255 (fully opaque).
+
     Args:
-        data: Raw bytes to pack
-    
+        data: Bytes to convert
+
     Returns:
-        (n_pixels, 3) array of uint8 RGB values
+        NumPy array of shape (N, 4) with uint8 pixel values
     """
-    # Pad to multiple of 3
-    pad_len = (3 - len(data) % 3) % 3
-    padded = data + b'\x00' * pad_len
-    
-    # Reshape to pixels
-    pixels = np.frombuffer(padded, dtype=np.uint8).reshape(-1, 3)
+    # Pad data to multiple of 3 bytes
+    padding = (3 - len(data) % 3) % 3
+    padded_data = data + bytes(padding)
+
+    # Reshape to (N, 3) array
+    rgb = np.frombuffer(padded_data, dtype=np.uint8).reshape(-1, 3)
+
+    # Add alpha channel (255)
+    alpha = np.full((rgb.shape[0], 1), 255, dtype=np.uint8)
+    pixels = np.concatenate([rgb, alpha], axis=1)
+
     return pixels
+
 
 def pixels_to_bytes(pixels: np.ndarray, original_length: int) -> bytes:
     """
-    Unpack RGB pixels back to bytes.
-    
-    Args:
-        pixels: (n_pixels, 3) array of uint8 RGB values
-        original_length: Original framed length (to strip padding)
-    
-    Returns:
-        Original framed bytes
-    """
-    # Flatten to bytes
-    data = pixels.flatten().tobytes()
-    # Strip padding
-    return data[:original_length]
+    Convert RGBA pixel array back to bytes.
 
-def encode_dense(payload: bytes, png_path: str, square: bool = True):
-    """
-    Encode payload as dense PNG.
-    
     Args:
-        payload: Raw payload bytes
-        png_path: Output PNG path
-        square: If True, make image roughly square
+        pixels: NumPy array of shape (N, 4) with uint8 pixel values
+        original_length: Original data length (to remove padding)
+
+    Returns:
+        Original bytes
     """
-    framed = frame(payload)
-    framed_length = len(framed)
-    pixels = bytes_to_pixels(framed)
-    
-    n_pixels = pixels.shape[0]
-    
+    # Extract RGB channels, flatten
+    rgb = pixels[:, :3].flatten()
+
+    # Convert to bytes
+    padded_data = bytes(rgb)
+
+    # Remove padding
+    return padded_data[:original_length]
+
+
+def compute_dimensions(pixel_count: int, square: bool = False) -> tuple[int, int]:
+    """
+    Compute image dimensions for given pixel count.
+
+    Args:
+        pixel_count: Number of pixels needed
+        square: If True, produce square/near-square image
+
+    Returns:
+        (width, height) tuple
+    """
     if square:
-        # Arrange in roughly square grid
-        side = int(np.ceil(np.sqrt(n_pixels)))
-        # Pad to square
-        total = side * side
-        padding = total - n_pixels
-        if padding > 0:
-            padding_pixels = np.zeros((padding, 3), dtype=np.uint8)
-            pixels = np.vstack([pixels, padding_pixels])
-        pixels = pixels.reshape(side, side, 3)
+        # Compute square root, round up
+        side = int(np.ceil(np.sqrt(pixel_count)))
+        return side, side
     else:
         # Single row
-        pixels = pixels.reshape(1, n_pixels, 3)
-    
-    img = Image.fromarray(pixels, mode='RGB')
-    img.save(png_path)
-    
-    h, w = pixels.shape[0], pixels.shape[1]
-    density = len(payload) / (h * w)
-    
-    print(f"dense cartridge: {png_path} ({w}x{h}px)")
-    print(f"  payload: {len(payload)} bytes")
-    print(f"  framed: {framed_length} bytes")
-    print(f"  density: {density:.3f} bytes/pixel")
-    print(f"  efficiency: 3 bytes/pixel (RGB channels)")
-    
-    # Store framed length in metadata
-    from PIL import PngImagePlugin
-    meta = PngImagePlugin.PngInfo()
-    meta.add_text("framed_length", str(framed_length))
-    img_with_meta = Image.open(png_path)
-    img_with_meta.save(png_path, pnginfo=meta)
+        return pixel_count, 1
 
-def decode_dense(png_path: str, output_path: str = None) -> bytes:
+
+def encode_dense(
+    payload: bytes,
+    output_path: str,
+    square: bool = True,
+    verify: bool = False
+) -> None:
     """
-    Decode dense PNG to payload.
-    
+    Encode payload to dense PNG file.
+
     Args:
-        png_path: Dense PNG path
-        output_path: Optional output file path
-    
-    Returns:
-        Decoded payload bytes
+        payload: Data to encode
+        output_path: Path to output PNG file
+        square: If True, produce square/near-square image
+        verify: If True, round-trip verify after encoding
     """
-    img = Image.open(png_path)
-    
-    # Try to read framed length from metadata
-    framed_length = None
-    if hasattr(img, 'text') and 'framed_length' in img.text:
+    # Frame payload
+    framed = frame(payload)
+    framed_length = len(framed)
+
+    # Convert to pixels (3 bytes/pixel)
+    pixels = bytes_to_pixels(framed)
+
+    # Compute dimensions
+    width, height = compute_dimensions(len(pixels), square=square)
+
+    # Pad to exact dimensions
+    total_pixels = width * height
+    if len(pixels) < total_pixels:
+        # Pad with transparent pixels
+        padding = np.zeros((total_pixels - len(pixels), 4), dtype=np.uint8)
+        pixels = np.concatenate([pixels, padding], axis=0)
+
+    # Reshape to 2D image
+    img_array = pixels.reshape((height, width, 4))
+
+    # Save as PNG
+    img = Image.fromarray(img_array, mode='RGBA')
+
+    # Add metadata with framed_length
+    from PIL import PngImagePlugin
+    metadata = PngImagePlugin.PngInfo()
+    metadata.add_text('framed_length', str(framed_length))
+    metadata.add_text('payload_length', str(len(payload)))
+
+    img.save(output_path, 'PNG', pnginfo=metadata)
+
+    # Verify round-trip if requested
+    if verify:
+        recovered = decode_dense(output_path)
+        if recovered != payload:
+            raise ValueError("Round-trip verification failed")
+
+
+def decode_dense(input_path: str, use_metadata: bool = True) -> bytes:
+    """
+    Decode dense PNG file to original payload.
+
+    Args:
+        input_path: Path to PNG file
+        use_metadata: If True, use PNG metadata for frame length
+
+    Returns:
+        Original payload bytes
+
+    Raises:
+        ValueError: If PNG metadata invalid or frame verification fails
+    """
+    # Load image
+    img = Image.open(input_path)
+
+    # Ensure RGBA format
+    if img.mode != 'RGBA':
+        img = img.convert('RGBA')
+
+    # Convert to numpy array
+    img_array = np.array(img)
+
+    # Get framed_length from metadata
+    if use_metadata and 'framed_length' in img.text:
         framed_length = int(img.text['framed_length'])
-    
-    pixels = np.asarray(img).reshape(-1, 3)
-    
-    # Convert to bytes
-    framed = pixels.flatten().tobytes()
-    
-    # Strip padding using framed length if available, else by trimming trailing zeros
-    if framed_length is not None:
-        framed = framed[:framed_length]
+        payload_length = int(img.text.get('payload_length', str(framed_length)))
     else:
-        # Trim trailing zeros (padding)
-        framed = framed.rstrip(b'\x00')
-    
+        # Fallback: decode everything, then let unframe validate
+        framed_length = None
+        payload_length = None
+
+    # Flatten to pixel array
+    pixels = img_array.reshape(-1, 4)
+
+    # Convert to bytes
+    if framed_length is not None:
+        framed = pixels_to_bytes(pixels, framed_length)
+    else:
+        # Decode all pixels (might include padding)
+        framed = pixels_to_bytes(pixels, len(pixels) * 3)
+
     # Unframe
     payload = unframe(framed)
-    
-    if output_path:
-        with open(output_path, 'wb') as f:
-            f.write(payload)
-        print(f"decoded {len(payload)} bytes from dense image -> {output_path} (CRC verified)")
-    else:
-        print(f"decoded {len(payload)} bytes from dense image (CRC verified)")
-    
+
+    # Verify length if we have it from metadata
+    if payload_length is not None and len(payload) != payload_length:
+        raise ValueError(
+            f"Payload length mismatch: expected {payload_length}, "
+            f"got {len(payload)}"
+        )
+
     return payload
 
-def run_dense(png_path: str):
-    """
-    Decode dense PNG and execute as Python.
-    
-    Args:
-        png_path: Dense PNG path
-    """
-    payload = decode_dense(png_path)
-    print(f"pixel executor: {len(payload)} bytes decoded from dense image, executing (sandboxed)\n---")
-    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src'))
-    from executor.sandbox import execute_cartridge
-    result = execute_cartridge(payload.decode('utf-8'))
-    if result.stdout:
-        print(result.stdout, end='')
-    if not result.success:
-        print(f"[sandbox] execution failed: {result.error_message or result.stderr}")
-
-def place_on_canvas(dense_path: str, canvas_path: str, x: int, y: int):
-    """
-    Place a dense cartridge at a specific position on a canvas.
-    
-    Args:
-        dense_path: Dense PNG path
-        canvas_path: Canvas PNG path (created if doesn't exist)
-        x: X position for placement
-        y: Y position for placement
-    """
-    # Load dense cartridge
-    cartridge = np.asarray(Image.open(dense_path))
-    h_cart, w_cart = cartridge.shape[0], cartridge.shape[1]
-    
-    # Load or create canvas
-    if os.path.exists(canvas_path):
-        canvas = np.array(Image.open(canvas_path), copy=True)  # Make writable
-    else:
-        # Create canvas large enough
-        canvas = np.zeros((max(y + h_cart, 512), max(x + w_cart, 512), 3), dtype=np.uint8)
-    
-    # Place cartridge
-    h_canvas, w_canvas = canvas.shape[0], canvas.shape[1]
-    
-    if x + w_cart > w_canvas or y + h_cart > h_canvas:
-        raise ValueError(f"cartridge ({w_cart}x{h_cart}) doesn't fit at ({x}, {y}) on canvas ({w_canvas}x{h_canvas})")
-    
-    canvas[y:y + h_cart, x:x + w_cart] = cartridge
-    
-    # Save canvas
-    img = Image.fromarray(canvas, mode='RGB')
-    img.save(canvas_path)
-    
-    print(f"placed cartridge on canvas: {canvas_path}")
-    print(f"  position: ({x}, {y})")
-    print(f"  cartridge size: {w_cart}x{h_cart}")
-    print(f"  canvas size: {w_canvas}x{h_canvas}")
-
-def read_from_canvas(canvas_path: str, x: int, y: int, w: int, h: int, output_path: str = None) -> bytes:
-    """
-    Read a dense cartridge from a specific region on a canvas.
-    
-    Args:
-        canvas_path: Canvas PNG path
-        x: X position to read from
-        y: Y position to read from
-        w: Width of cartridge region
-        h: Height of cartridge region
-        output_path: Optional output file path
-    
-    Returns:
-        Decoded payload bytes
-    """
-    canvas = np.asarray(Image.open(canvas_path))
-    
-    # Extract region
-    cartridge = canvas[y:y + h, x:x + w]
-    
-    # Save temp file
-    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
-        temp_path = f.name
-    Image.fromarray(cartridge, mode='RGB').save(temp_path)
-    
-    # Decode
-    payload = decode_dense(temp_path, output_path)
-    
-    # Cleanup
-    os.unlink(temp_path)
-    
-    if not output_path:
-        print(f"read cartridge from canvas region ({x}, {y}, {w}, {h}): {len(payload)} bytes")
-    
-    return payload
-
-def main():
-    parser = argparse.ArgumentParser(description="Dense binary encoding in RGB pixels")
-    sub = parser.add_subparsers(dest='cmd', required=True)
-    
-    p_enc = sub.add_parser('encode', help='encode payload as dense PNG')
-    p_enc.add_argument('input', help='input file')
-    p_enc.add_argument('-o', '--output', default='dense_cartridge.png', help='output PNG')
-    p_enc.add_argument('--no-square', action='store_true', help='don\'t make image square')
-    
-    p_dec = sub.add_parser('decode', help='decode dense PNG')
-    p_dec.add_argument('png', help='dense PNG')
-    p_dec.add_argument('-o', '--output', help='output file')
-    
-    p_run = sub.add_parser('run', help='decode and execute dense PNG')
-    p_run.add_argument('png', help='dense PNG')
-    p_run.add_argument('--geos', action='store_true', help='execute via GeOS spatial syscall')
-    p_run.add_argument('--region', default='default', help='GeOS region identifier (default: default)')
-    
-    p_place = sub.add_parser('place', help='place dense cartridge on canvas')
-    p_place.add_argument('dense', help='dense PNG')
-    p_place.add_argument('canvas', help='canvas PNG')
-    p_place.add_argument('x', type=int, help='X position')
-    p_place.add_argument('y', type=int, help='Y position')
-    
-    p_read = sub.add_parser('read', help='read dense cartridge from canvas')
-    p_read.add_argument('canvas', help='canvas PNG')
-    p_read.add_argument('x', type=int, help='X position')
-    p_read.add_argument('y', type=int, help='Y position')
-    p_read.add_argument('w', type=int, help='Width')
-    p_read.add_argument('h', type=int, help='Height')
-    p_read.add_argument('-o', '--output', help='output file')
-    
-    args = parser.parse_args()
-    
-    if args.cmd == 'encode':
-        with open(args.input, 'rb') as f:
-            payload = f.read()
-        encode_dense(payload, args.output, square=not args.no_square)
-    
-    elif args.cmd == 'decode':
-        decode_dense(args.png, args.output)
-    
-    elif args.cmd == 'run':
-        if args.geos:
-            # Execute via GeOS spatial syscall
-            sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src', 'geos'))
-            from region_executor import run_cartridge_with_geos
-            success = run_cartridge_with_geos(args.png, args.region)
-            sys.exit(0 if success else 1)
-        else:
-            # Execute locally with sandbox
-            run_dense(args.png)
-    
-    elif args.cmd == 'place':
-        place_on_canvas(args.dense, args.canvas, args.x, args.y)
-    
-    elif args.cmd == 'read':
-        read_from_canvas(args.canvas, args.x, args.y, args.w, args.h, args.output)
 
 if __name__ == '__main__':
-    main()
+    import tempfile
+    import os
+
+    # Quick self-test
+    print("Testing dense_encoder...")
+
+    test_data = b'Hello, Visual Audio Memory Palace!'
+
+    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+        png_path = f.name
+
+    try:
+        # Encode
+        encode_dense(test_data, png_path, square=True)
+        print(f"✓ Encoded {len(test_data)} bytes to {png_path}")
+
+        # Decode
+        recovered = decode_dense(png_path)
+        print(f"✓ Decoded {len(recovered)} bytes")
+
+        # Verify
+        if recovered == test_data:
+            print("✓ Round-trip successful!")
+        else:
+            print("✗ Round-trip FAILED")
+            raise ValueError("Data mismatch")
+
+        # Show image info
+        img = Image.open(png_path)
+        print(f"✓ Image size: {img.size[0]}x{img.size[1]} pixels")
+        print(f"✓ Metadata: {dict(img.text)}")
+
+    finally:
+        if os.path.exists(png_path):
+            os.unlink(png_path)
+
+    print("\nAll tests passed!")

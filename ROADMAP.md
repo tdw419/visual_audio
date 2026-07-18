@@ -1023,10 +1023,10 @@ text → pixels → model → pixels → {image, audio, text}.
   - Test: Manual verification in GeOS: magenta bands play audio, yellow tiles show ECC status, cyan cartridges execute when clicked
   - Status: COMPLETE
 
-- [ ] **TASK_V007**: MKV container → Memory Palace bridge
+- [x] **TASK_V007**: MKV container → Memory Palace bridge
   - Priority: MEDIUM
   - Dependencies: TASK_V001, TASK_VAC001-007
-  - Receipt: `tools/mkv_to_palace.py` extracts container entries as Memory Palace PNG tiles via dense_encoder; CLI supports full export (--all) or selective (--entries ROADMAP.md,codec/tables.json); generates coordinate manifest for GeOS import; SHA256 round-trip verification via `verify_palace_bridge.py`
+  - Receipt: Verified by verify_task.py at 2026-07-18T13:23:36.628975
   - Test: `python3 tests/test_mkvpalace_bridge.py` (verifies: lossless round-trip, coordinate mapping respects ring priorities, tile assembly validity, stress test 100+ entries)
   - Time Estimate: 2 hours focused development
   - Unblocks: TASK_V006 (GeOS visualization needs Palace data)

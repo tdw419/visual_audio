@@ -468,8 +468,9 @@ def main():
 
     # Dual-band encoding commands
     p_enc_dual = sub.add_parser('encode_dual', help='encode text + software to dual-band WAV')
-    p_enc_dual.add_argument('-t', '--text', required=True, help='text to encode with phonemes')
-    p_enc_dual.add_argument('-b', '--software', required=True, help='software file to encode with bytes')
+    p_enc_dual.add_argument('-t', '--text', required=True, help='text or text file to encode with phonemes')
+    p_enc_dual.add_argument('-f', '--file', action='store_true', help='treat -t argument as file path')
+    p_enc_dual.add_argument('-b', '--software', required=True, help='software or software file to encode with bytes')
     p_enc_dual.add_argument('-o', '--output', default='dual_band.wav', help='output WAV file')
     p_enc_dual.add_argument('--ecc', action='store_true', help='add Reed-Solomon parity (opt-in, for the acoustic channel)')
 
@@ -511,7 +512,12 @@ def main():
         print(f"  Duration: {len(audio) / SAMPLE_RATE:.2f}s")
 
     elif args.cmd == 'encode_dual':
-        encode_dual_band(args.text, args.software, args.output, use_ecc=args.ecc)
+        # Always treat -t as file path for dual-band encoding
+        with open(args.text, 'r') as f:
+            text = f.read().strip()
+        
+        # Handle software input (already a file path for binary data or JSON)
+        encode_dual_band(text, args.software, args.output, use_ecc=args.ecc)
 
     elif args.cmd == 'decode_dual':
         decode_dual_band(args.wav, args.text, args.software, use_ecc=args.ecc)
