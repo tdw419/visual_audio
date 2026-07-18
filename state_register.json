@@ -1,0 +1,20 @@
+{"register": "visual_audio_state", "version": 1, "fields": [
+  {"offset": 0, "name": "playback_position", "type": "uint32", "description": "Current frame number in container timeline"},
+  {"offset": 4, "name": "cache_hit_ratio", "type": "float", "description": "Voicebook cache hit/miss ratio (normalized 0-1)"},
+  {"offset": 8, "name": "last_phoneme_decoded", "type": "uint8", "description": "Last phoneme ARPAbet code (0-38) or 255 if none"},
+  {"offset": 9, "name": "last_byte_decoded", "type": "uint8", "description": "Last byte decoded (0-255) or 255 if none"},
+  {"offset": 10, "name": "active_layer", "type": "uint8", "description": "Active layer: 0=phoneme, 1=byte, 2=dual-band"},
+  {"offset": 11, "name": "reserved_0", "type": "uint8", "description": "Reserved for future use"},
+  {"offset": 12, "name": "cache_entries_used", "type": "uint16", "description": "Number of active voicebook cache entries"},
+  {"offset": 14, "name": "total_bytes_encoded", "type": "uint32", "description": "Total bytes encoded in byte layer"},
+  {"offset": 18, "name": "total_phonemes_encoded", "type": "uint32", "description": "Total phonemes encoded in phoneme layer"},
+  {"offset": 22, "name": "error_count", "type": "uint16", "description": "Number of decode errors encountered"},
+  {"offset": 24, "name": "last_error_code", "type": "uint16", "description": "Last error code (if error_count > 0)"},
+  {"offset": 26, "name": "checksum", "type": "uint32", "description": "CRC32 of state register (offsets 0-25)"},
+  {"offset": 30, "name": "timestamp", "type": "uint64", "description": "Unix timestamp of last state update"},
+  {"offset": 38, "name": "reserved_1", "type": "uint16", "description": "Reserved for future use"},
+  {"offset": 40, "name": "cache_allocation_table", "type": "byte_array", "length": 1024, "description": "Voicebook cache allocation table (1 byte per cache entry)"},
+  {"offset": 1064, "name": "pixel_os_registers", "type": "byte_array", "length": 512, "description": "Pixel OS bridge registers for LLM integration"},
+  {"offset": 1576, "name": "reserved_2", "type": "byte_array", "length": 448, "description": "Reserved for future use"},
+  {"offset": 2024, "name": "total_size", "type": "uint16", "description": "Total size of state register in bytes"}
+]}

@@ -1,0 +1,115 @@
+{
+  "source_code": "\ndef greet(name):\n    return f\"Hello, {name}!\"\n\nprint(greet(\"World\"))\n",
+  "events": [
+    {
+      "construct": "function",
+      "start_time": 0.0,
+      "duration": 0.8,
+      "pitch": 261.63,
+      "amplitude": 0.7,
+      "waveform": "sine",
+      "text": "def greet"
+    },
+    {
+      "construct": "indent",
+      "start_time": 0.8,
+      "duration": 0.05,
+      "pitch": 293.66,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2192"
+    },
+    {
+      "construct": "return",
+      "start_time": 0.8500000000000001,
+      "duration": 0.5,
+      "pitch": 261.63,
+      "amplitude": 0.7,
+      "waveform": "sine",
+      "text": "return"
+    },
+    {
+      "construct": "string",
+      "start_time": 1.35,
+      "duration": 0.4,
+      "pitch": 587.33,
+      "amplitude": 0.6,
+      "waveform": "sine",
+      "text": "\"Hello, ...\""
+    },
+    {
+      "construct": "variable",
+      "start_time": 1.75,
+      "duration": 0.3,
+      "pitch": 440.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "name"
+    },
+    {
+      "construct": "string",
+      "start_time": 2.05,
+      "duration": 0.4,
+      "pitch": 587.33,
+      "amplitude": 0.6,
+      "waveform": "sine",
+      "text": "\"!...\""
+    },
+    {
+      "construct": "statement_end",
+      "start_time": 2.4499999999999997,
+      "duration": 0.1,
+      "pitch": 329.63,
+      "amplitude": 0.4,
+      "waveform": "sine",
+      "text": ";"
+    },
+    {
+      "construct": "dedent",
+      "start_time": 2.55,
+      "duration": 0.05,
+      "pitch": 261.63,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2190"
+    },
+    {
+      "construct": "function_call",
+      "start_time": 2.5999999999999996,
+      "duration": 0.25,
+      "pitch": 783.99,
+      "amplitude": 0.65,
+      "waveform": "triangle",
+      "text": "print"
+    },
+    {
+      "construct": "function_call",
+      "start_time": 2.8499999999999996,
+      "duration": 0.25,
+      "pitch": 783.99,
+      "amplitude": 0.65,
+      "waveform": "triangle",
+      "text": "greet"
+    },
+    {
+      "construct": "string",
+      "start_time": 3.0999999999999996,
+      "duration": 0.4,
+      "pitch": 523.25,
+      "amplitude": 0.6,
+      "waveform": "sine",
+      "text": "\"World...\""
+    },
+    {
+      "construct": "statement_end",
+      "start_time": 3.4999999999999996,
+      "duration": 0.1,
+      "pitch": 293.66,
+      "amplitude": 0.4,
+      "waveform": "sine",
+      "text": ";"
+    }
+  ],
+  "total_duration": 3.5999999999999996,
+  "sample_rate": 44100
+}

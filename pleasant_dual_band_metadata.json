@@ -1,0 +1,46 @@
+{
+  "description": "Python code with 1205 characters",
+  "code_length": 1205,
+  "code_lines": 48,
+  "audio_duration": 48.52,
+  "musical_events_count": 125,
+  "sample_rate": 44100,
+  "bands": {
+    "human_band": {
+      "frequency_range": "500-3000 Hz",
+      "content": "Pleasant musical code representation",
+      "constructs": {
+        "function": 4,
+        "class": 1,
+        "conditional": 3,
+        "for_loop": 1,
+        "while_loop": 0,
+        "exception": 0,
+        "variable": 26,
+        "constant": 0,
+        "string": 12,
+        "number": 13,
+        "assignment": 8,
+        "comparison": 3,
+        "operation": 4,
+        "function_call": 7,
+        "return": 4,
+        "indent": 9,
+        "dedent": 9,
+        "statement_end": 21,
+        "block_start": 0,
+        "block_end": 0
+      }
+    },
+    "machine_band": {
+      "frequency_range": "4000-8000 Hz",
+      "content": "Original code bytes (MFSK encoded)",
+      "byte_count": 1205
+    }
+  },
+  "musical_summary": {
+    "total_events": 125,
+    "unique_constructs": 15,
+    "nesting_depth": 0
+  }
+}
