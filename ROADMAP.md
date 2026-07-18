@@ -4,6 +4,18 @@
 
 Visual Audio enables software to exist as text, audio, or pixels. The foundation (Phase 0) is complete and working. This roadmap guides evolution toward production-grade systems: error correction, coarticulation, prosody, and full Geometry OS integration.
 
+### Current Status (2026-07-17)
+- **Progress**: 28/53 tasks complete (53%)
+- **Saturation Point Reached**: Autonomous executor blocked by missing test files and manual verification requirements
+- **Recent Wins**: TASK_M004 (pixel LM trained), TASK_M005 (generation rendering), TASK_C038 (native pixel boot)
+
+### Blocking Issues (High Priority)
+1. **Test Infrastructure Gap**: TASK_M006 and TASK_M007 cannot proceed without test files
+   - Missing: `tests/test_pixel_lm_audio_roundtrip.py`
+   - Missing: `tests/test_pixel_os_lm_input.py`
+2. **Undefined Test Commands**: TASK_W002 (token-chord codec) needs test approach definition
+3. **Manual Verification Required**: TASK_C035/C036 (GeOS integration) must be verified in geometry_os project
+
 ---
 
 ## Phase 0: Foundation ✅ COMPLETE
@@ -190,15 +202,28 @@ implemented and are split into TASK_C035 / TASK_C036 rather than claimed under C
 - [ ] **TASK_C035**: Reed-Solomon ECC in audio_codec.rs
   - Priority: MEDIUM
   - Dependencies: TASK_C030
+  - MANUAL VERIFICATION REQUIRED: This task lives in the `geometry_os` project at `geometry_os/src/spatial/audio_codec.rs`.
+  - Verification steps (run in geometry_os project):
+    1. Implement PhyECC layer (10 parity bytes, corrects 5 byte errors, GF(256))
+    2. Add named RS test in audio_codec.rs that recovers ≥5 injected byte errors
+    3. Run `cargo test audio_codec --lib` and verify new test passes
+    4. DECISION NEEDED: Choose interop-matched (Python↔Rust) vs standalone Rust RS before implementing
   - Port the Python `PhyECC` layer (reedsolo: 10 parity bytes, corrects 5 byte errors, GF(256))
   - DECISION TO MAKE: interop-matched (a WAV RS-encoded by `speak.py` must decode in Rust and vice-versa — requires matching reedsolo's generator/polynomial) vs standalone Rust RS. Pick before implementing.
   - Test: Manual (verified in geometry_os, not the visual_audio cron): a NEW named RS test in audio_codec.rs recovers ≥5 injected byte errors, and `cargo test audio_codec --lib` passes with it present (+ Python↔Rust fixture if interop chosen). NOTE: a bare `cargo test audio_codec --lib` already passes without RS — it must NOT be used as this receipt.
+  - Status: NOT STARTED
 
 - [ ] **TASK_C036**: Pixel-region ↔ WAV in audio_codec.rs
   - Priority: MEDIUM
   - Dependencies: TASK_C030
+  - MANUAL VERIFICATION REQUIRED: This task lives in the `geometry_os` project at `geometry_os/src/spatial/audio_codec.rs`.
+  - Verification steps (run in geometry_os project):
+    1. Implement encode_pixel_region() and decode_pixel_region() functions
+    2. Add named pixel-region round-trip test in audio_codec.rs
+    3. Run `cargo test audio_codec --lib` and verify new test passes byte-identical
   - Encode an RGB pixel region → WAV and decode WAV → region, mirroring `tools/dense_encoder.py` (3 bytes/pixel)
   - Test: Manual (verified in geometry_os): a NEW named pixel-region round-trip test in audio_codec.rs passes byte-identical, present in `cargo test audio_codec --lib`. NOTE: bare `cargo test audio_codec --lib` already passes without this — not a valid receipt on its own.
+  - Status: NOT STARTED
 
 - [x] **TASK_C031**: Audio boot loader (IN GEOS TASKS)
   - Create `geometry_os/src/boot/audio_boot.rs`
@@ -309,8 +334,12 @@ implemented and are split into TASK_C035 / TASK_C036 rather than claimed under C
 - [ ] **TASK_W002**: Token-chord codec (LLM-native transport)
   - Priority: MEDIUM
   - Dependencies: TASK_W001
+  - BLOCKER: Test command undefined. Requires design decision on verification approach.
+  - Subtask: Define test command that verifies token-chord encoding/decoding:
+    - Option A: `python3 tools/token_chord_codec.py encode --ids 1,2,3 -o test.wav && python3 tools/token_chord_codec.py decode test.wav`
+    - Option B: `python3 -m pytest tests/test_token_chord_codec.py`
   - Receipt: Map tokenizer IDs to 2-symbol chords (2-of-32 tones ≈ 9 bits/symbol → ~25 tokens/sec), streaming as model generates; byte-escape region falls back to PHY for out-of-vocabulary payloads. Transmit IDs over data band (17 bits ≈ 4 ms at 16-tone MFSK), receiver's wordbase reconstitutes audio/tiles locally.
-  - Status: Blocked - Autopark: No test command defined in ROADMAP. Needs definition before verification can proceed.
+  - Status: BLOCKED - Autopark: Test command undefined. Needs definition before verification can proceed.
 - [x] **TASK_R001**: Audio diff/patch format — version control you can hear
   - Priority: MEDIUM
   - Dependencies: TASK_W001
@@ -573,24 +602,48 @@ text → pixels → model → pixels → {image, audio, text}.
   - Test: python3 -m pytest tests/test_pixel_lm_train.py
   - Status: Complete. Training script works in fast mode with synthetic corpus, creates checkpoints with proper structure (model_state_dict, config, train_losses, val_losses), and loss decreases during training (verified with 3-epoch run: loss 7.05→6.84). Model with 5.32M parameters falls within target 10-25M range. Unigram baseline computed correctly. Full training documented in docs/PIXEL_LM.md.
 
-- [x] **TASK_M005**: Generation → pixel/tile/audio rendering
+- [x] **TASK_M005**: Generation → pixel/tile/audio rendering ✅ COMPLETE
   - Priority: HIGH
-  - Receipt: Executed by manual roadmap executor at 1784316709.3105557
   - Dependencies: TASK_M004
   - Receipt: `tools/pixel_lm_generate.py --prompt "..."` samples a continuation and emits: pixel-strip PNG (one pixel per token), word-tile PNG (via wordbase tiles), and text. Same id sequence drives all three projections.
-  - Test: python3 -m pytest tests/test_pixel_lm_generate.py
+  - Test: `python3 -m pytest tests/test_pixel_lm_generate.py`
+  - Status: Complete. All three rendering modes (pixel strip, word tiles, text) verified to use same ID sequence. Test suite includes basic output verification, ID sequence consistency, and special token handling. Verified 2026-07-17: all tests pass.
 
 - [ ] **TASK_M006**: Model output over the audio channel (round-trip)
   - Priority: MEDIUM
   - Dependencies: TASK_M005, TASK_E001 (ECC)
+  - BLOCKER: Test file `tests/test_pixel_lm_audio_roundtrip.py` does not exist. Must create test before task can be verified.
+  - Subtask: Create `tests/test_pixel_lm_audio_roundtrip.py` that verifies:
+    1. Generated id sequence → bytes (3 bytes/id) → PhyECC + Phy16Tone WAV → decode → identical id sequence
+    2. Audio roundtrip survives 5% injected corruption
+    3. Model "speaks" its pixels; receiver with same wordbase reconstructs text/tiles locally
   - Receipt: Generated id sequence → bytes (3 bytes/id) → PhyECC + Phy16Tone WAV → decode → identical id sequence → identical pixel strip. The model "speaks" its pixels; a receiver with the same wordbase reconstructs text/tiles locally. Round-trip verified with 5% injected corruption.
-  - Test: python3 -m pytest tests/test_pixel_lm_audio_roundtrip.py
+  - Test: `python3 -m pytest tests/test_pixel_lm_audio_roundtrip.py`
+  - Status: BLOCKED - Missing test file
 
 - [ ] **TASK_M007**: Pixel OS input channel
   - Priority: LOW
   - Dependencies: TASK_M006
+  - BLOCKER: Test file `tests/test_pixel_os_lm_input.py` does not exist. Must create test before task can be verified.
+  - Subtask: Create `tests/test_pixel_os_lm_input.py` that verifies:
+    1. `tools/pixel_os_listener.py` accepts pixel-LM stream as input
+    2. Model generates pixels → decoded to words → dispatched as pixel OS commands
+    3. LLM → visual audio → software loop end-to-end
   - Receipt: `tools/pixel_os_listener.py` accepts a pixel-LM stream as an input source: model generates pixels → decoded to words → dispatched as pixel OS commands. Demonstrates the LLM → visual audio → software loop end to end.
-  - Test: python3 -m pytest tests/test_pixel_os_lm_input.py
+  - Test: `python3 -m pytest tests/test_pixel_os_lm_input.py`
+  - Status: BLOCKED - Missing test file
+
+### Phase 8 Blocking Issues Summary
+
+**Test Infrastructure Gap (High Priority):**
+- TASK_M006: Missing `tests/test_pixel_lm_audio_roundtrip.py`
+- TASK_M007: Missing `tests/test_pixel_os_lm_input.py`
+- Impact: These tasks cannot be auto-verified by SkillOpt executor
+
+**Recent Wins (2026-07-17):**
+- ✅ TASK_M004: Pixel LM trained successfully (5.32M params, beats unigram baseline)
+- ✅ TASK_M005: Generation → pixel/tile/audio rendering verified (3/3 tests pass)
+- ✅ TASK_C038: Native in-hypervisor pixel boot implemented
 
 ### Success Criteria
 - Byte-exact round-trip: text → pixels → text for in-vocab input
