@@ -400,9 +400,9 @@ implemented and are split into TASK_C035 / TASK_C036 rather than claimed under C
 - [x] **TASK_I003**: Semantic color exploration ✅ COMPLETE
   - Priority: MEDIUM
   - Dependencies: TASK_W001 (color_hex encoding)
-  - Receipt: Click any color to filter/show all words with that semantic category; color legend explains categories; hover shows pronunciation/definition from wordbase
-  - Test: `python3 tools/color_explorer.py analyze tiles.png` lists all semantic color groups
-  - Status: Complete - Full Pygame explorer with color legends, filtering by clicking semantic colors, and tooltips displaying full word information from wordbase.
+  - Receipt: `analyze` sources words from the ACTUAL tiles (a directory of <word>_<id>.png tiles, or a PNG with a .json/.txt sidecar) — no dummy fallback — groups them by wordbase color_hex, and fails (exit 1) on missing/malformed input. Pygame explore mode adds click-to-filter legend + hover tooltips.
+  - Test: `python3 -m pytest tests/test_color_explorer.py` (4/4: exit-1 on missing file, exit-1 on PNG w/o sidecar, real color groups from voicebook/tiles, JSON sidecar). NOTE: the old `analyze tiles.png` receipt was hollow — it passed via a hardcoded 9-word fallback even when tiles.png didn't exist.
+  - Status: Complete - real data sourcing verified; dummy fallback removed 2026-07-17.
 - [ ] **TASK_I004**: Cross-modal translation tools
   - Priority: MEDIUM
   - Dependencies: TASK_M004 (pixel LM), TASK_M001 (tokenizer)
@@ -573,8 +573,9 @@ text → pixels → model → pixels → {image, audio, text}.
   - Test: python3 -m pytest tests/test_pixel_lm_train.py
   - Status: Complete. Training script works in fast mode with synthetic corpus, creates checkpoints with proper structure (model_state_dict, config, train_losses, val_losses), and loss decreases during training (verified with 3-epoch run: loss 7.05→6.84). Model with 5.32M parameters falls within target 10-25M range. Unigram baseline computed correctly. Full training documented in docs/PIXEL_LM.md.
 
-- [ ] **TASK_M005**: Generation → pixel/tile/audio rendering
+- [x] **TASK_M005**: Generation → pixel/tile/audio rendering
   - Priority: HIGH
+  - Receipt: Executed by manual roadmap executor at 1784316709.3105557
   - Dependencies: TASK_M004
   - Receipt: `tools/pixel_lm_generate.py --prompt "..."` samples a continuation and emits: pixel-strip PNG (one pixel per token), word-tile PNG (via wordbase tiles), and text. Same id sequence drives all three projections.
   - Test: python3 -m pytest tests/test_pixel_lm_generate.py
@@ -725,6 +726,27 @@ exit 0
 | wordbase v2 | 126k words | Fuzzy matching for voice queries |
 | SandboxedExecutor | Cartridge safety | Preference rule execution |
 
+### Integration with Spatial Execution Engine (Phase 11)
+
+VAMP provides three core capabilities that the Spatial Execution Engine consumes:
+
+1. **Temporal logging as time dimension**
+   - VAMP memory batches (PNG tiles) serve as Frames 4+ temporal snapshots for spatial engine
+   - Each VAMP tile represents a system state at a specific tick; spatial engine can seek backward N frames via VAMP tile lookup
+   - VAMP's dense codec (3 bytes/pixel) matches spatial engine's frame format for seamless integration
+
+2. **Diff-overlay for persistent state**
+   - V004 executable cartridges store modifications as sparse coordinate→change records (diff-overlay pattern)
+   - Phase 11 Frame 3 uses identical diff-overlay model: never mutate procedural base, write sparse diffs instead
+   - VAMP cartridges can be loaded into spatial engine's Frame 3 via MMIO region 0x8009_1200
+
+3. **Multi-modal knowledge access**
+   - V005 voice queries enable spatial engine to retrieve knowledge via phonemes (500-3000Hz) or dense pixels
+   - Phase 11's nested frame buffers can display VAMP query results in metadata zone
+   - VAMP's ECC-protected tiles (V003) provide corruption recovery for spatial engine's temporal frames
+
+**Data flow**: VAMP encodes knowledge → dense PNG tiles → spatial engine loads as Frames 4+ (temporal memory) or Frame 3 (diff overlay) → procedural engine queries VAMP for terrain/entity data.
+
 ### Performance Targets
 
 | Metric | Current Memory Palace | VAMP Target |
@@ -769,3 +791,112 @@ exit 0
   - Dependencies: TASK_C035, TASK_C036
   - Implement spatial boot process within Geometry OS: read pixel region from framebuffer (simulating spatial memory), decode directly in-guest, and execute the kernel.
   - Test: Manual QEMU boot test asserting successful jump into the spatially decoded OS region.
+
+---
+
+## Phase 11: Spatial Execution Engine 🟢 NOT STARTED
+
+**Goal**: Build a pixel-native execution engine where software runs from pixel grids using procedural generation, diff-overlay storage, and temporal logging. This is the interpretation layer that uses Visual Audio as the transport layer.
+
+### Architectural Model
+
+Inspired by `/home/jericho/zion/docs/research/485_visual_audio_to_software123.txt`, this phase implements a video-file-as-operating-system architecture:
+
+- **Frame 1: World Engine Core** — Seed pixels (64-bit noise from 8×8 RGBA), biome palette matrix (rows 2–10), sprite/tile atlas
+- **Frame 2: Camera & Navigation Registers** — Position (X, Y), world parameters (time-of-day, threat level)
+- **Frame 3: Active Chunk Cache** — Diff-overlay storage: sparse coordinate→change records (never mutate base)
+- **Frames 4+: Temporal Memory** — Each frame is a full state snapshot; history is "seek backward N frames"
+- **Nested Frame Buffers** — Metadata zone + display zone; separate System Time (master playhead) from Media Time (nested video)
+
+### Critical Path from Visual Audio
+
+Visual Audio provides the distribution/boot layer:
+- Boot manifest system (TASK_C033) → boot spatial execution engine from audio
+- Dense codec (3 bytes/pixel) → encode pixel regions as cartridges
+- Cartridge regions (TASK_G001) → spatial MMIO dispatch
+- Provenance (Ed25519 signatures) → secure boot envelope
+
+### Container Format Note
+
+Do NOT use H.264/MP4 CRF 0 for pixel-exact storage — chroma subsampling corrupts byte-in-pixel data. Use:
+- FFV1 (lossless video codec)
+- PNG sequence (existing dense-PNG format)
+- `.rts.png` spatial containers (from Geometry OS integration)
+
+### Tasks
+
+- [ ] **TASK_SE001**: Pixel region layout specification
+  - Priority: HIGH
+  - Dependencies: TASK_G001 (dense cartridge region executor)
+  - Define pixel coordinate allocation for Frame 1 (seeds, palette, atlas), Frame 2 (registers), Frame 3 (diff overlay), Frames 4+ (temporal log)
+  - Receipt: `docs/SPATIAL_ENGINE_LAYOUT.md` with coordinate mapping tables; region boundaries documented for cartridge integration
+  - Test: Visual inspection of layout diagram; coordinate tables validated for non-overlap
+  - Status: NOT STARTED
+
+- [ ] **TASK_SE002**: Seed-pixel procedural generation
+  - Priority: HIGH
+  - Dependencies: TASK_SE001
+  - Parse Frame 1 seed pixels (8×8 RGBA → 64-bit noise seed); implement Perlin/Simplex noise generator; map noise values to biome palette (rows 2–10) for terrain type determination
+  - Receipt: `src/spatial/procedural.py` generates deterministic infinite terrain from pixel seed; same seed produces identical map at any (x, y) coordinate
+  - Test: `python3 tests/test_procedural_gen.py` verifies deterministic output across coordinates; seed encoding/decoding round-trip; biome palette lookup correctness
+  - Status: NOT STARTED
+
+- [ ] **TASK_SE003**: Diff-overlay storage layer
+  - Priority: HIGH
+  - Dependencies: TASK_SE001, TASK_G001
+  - Implement Frame 3 sparse coordinate→change record system; modifications (destroyed tree, dug hole, built structure) stored as diff entries; base terrain regenerated on-demand from procedural engine, diff overlay applied
+  - Receipt: `src/spatial/diff_overlay.py` stores/retrieves modifications; `cartridge.json` includes diff metadata; diff export to pixel region (3 bytes/pixel)
+  - Test: `python3 tests/test_diff_overlay.py` verifies: sparse coordinate lookup, diff application to procedural base, overlay export/import
+  - Status: NOT STARTED
+
+- [ ] **TASK_SE004**: Temporal frame logging
+  - Priority: MEDIUM
+  - Dependencies: TASK_SE001, TASK_SE003
+  - Implement Frames 4+ as full state snapshots; seekable timeline: "load frame N" restores system state to that execution tick; temporal log stored as PNG sequence (one frame per tick)
+  - Receipt: `src/spatial/temporal_log.py` writes/reads state snapshots; timeline seek operation returns historical state; frame format matches dense codec (CRC, UA frame)
+  - Test: `python3 tests/test_temporal_log.py` verifies: state capture, timeline seek, byte-identical restoration at N ticks back
+  - Status: NOT STARTED
+
+- [ ] **TASK_SE005**: Nested frame buffer compositing
+  - Priority: MEDIUM
+  - Dependencies: TASK_SE001, TASK_I001 (live audio-visual sync)
+  - Implement metadata zone (playhead time, volume, FPS) + display zone (video playback sub-region); separate System Time (master execution tick) from Media Time (nested video 24 FPS); blit nested video frames into display zone
+  - Receipt: `src/spatial/nested_buffer.py` composites metadata + display zones; System Time advances master execution; Media Time advances nested video independently; compositing output renderable to screen
+  - Test: `python3 tests/test_nested_buffer.py` verifies: metadata zone parsing, display zone rendering, time vector independence, seekable Media Time
+  - Status: NOT STARTED
+
+- [ ] **TASK_SE006**: Pixel-token LM integration (Phase 8 → procedural generation)
+  - Priority: MEDIUM
+  - Dependencies: TASK_M001 (pixel tokenizer), TASK_SE002
+  - Phase 8 pixel-token LM generates seed/palette combinations instead of raw content; LM output → Frame 1 seed pixels + biome palette; procedural engine consumes LM-generated seeds
+  - Receipt: LM pipeline outputs seed+palette as 24-bit RGB pixels; procedural engine accepts LM-generated seeds; deterministic map generation from LM output
+  - Test: `python3 tests/test_lm_procedural.py` verifies: LM → seed/pixel conversion, procedural engine consumes LM output, same LM prompt produces identical terrain
+  - Status: NOT STARTED
+
+### Success Criteria
+
+- A few dozen seed pixels (8×8 RGBA) generate infinite, deterministic terrain
+- Modifications stored as sparse diff overlay, never mutating procedural base
+- Full state snapshots enable seekable timeline: "restore to tick N-50"
+- Nested frame buffers support video-in-video playback with independent time vectors
+- Phase 8 pixel-token LM generates seeds/palettes for procedural content
+
+### Integration with Existing Phases
+
+- Phase 7 (Compositional Layer): Nested frame buffer compositing provides concrete design for behavior-opcode composition
+- Phase 9 (Interactive Visual Interfaces): Metadata/display zone pattern enables tile manipulation and visual editing
+- VAMP (Phase 10): Temporal logging gives Memory Palace time dimension for free; diff-overlay matches cartridge region model
+
+### Performance Targets
+
+| Metric | Target |
+|--------|--------|
+| Seed encode/decode | <1ms (8×8 RGBA → 64-bit integer) |
+| Procedural terrain gen | <10ms per 16×16 chunk |
+| Diff overlay lookup | O(1) per coordinate (hash map) |
+| Temporal seek | <100ms to restore N-tick-old state |
+| Nested frame blit | <16ms (60 FPS for display zone) |
+
+---
+
+## Backlog (Unprioritized Tasks)

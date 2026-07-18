@@ -10,6 +10,7 @@ import sys
 import os
 import pygame
 import json
+import re
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Set
 
@@ -19,8 +20,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from tools.wordbase_compat import connect
 
 class WordInfo:
-    def __init__(self, word: str, pronunciation: str, pos: str, definition: str, color_hex: str):
+    def __init__(self, word: str, word_id: int, pronunciation: str, pos: str, definition: str, color_hex: str):
         self.word = word
+        self.word_id = word_id
         self.pronunciation = pronunciation
         self.pos = pos
         self.definition = definition or "No definition available"
@@ -55,39 +57,105 @@ class ColorExplorer:
         # Load words
         self._load_words()
         
-    def _load_words(self):
-        words = []
-        try:
-            json_path = self.png_path.with_suffix('.json')
-            if json_path.exists():
-                with open(json_path, 'r') as f:
-                    data = json.load(f)
-                    if 'words' in data:
-                        words = data['words']
-            else:
-                text_path = self.png_path.with_suffix('.txt')
-                if text_path.exists():
-                    with open(text_path, 'r') as f:
-                        words = f.read().split()
+    def _load_words_from_directory(self, directory: Path) -> List[int]:
+        """Parse word IDs from PNG filenames in a directory."""
+        word_ids = set()
+        pattern = re.compile(r'^(\d+)(?:_\w+)?\.png$')
+        
+        if not directory.exists() or not directory.is_dir():
+            raise ValueError(f"Not a directory: {directory}")
+            
+        for file in directory.glob('*.png'):
+            match = pattern.match(file.name)
+            if match:
+                word_ids.add(int(match.group(1)))
+        
+        if not word_ids:
+            raise ValueError(f"No valid tile files found in {directory}")
+            
+        return sorted(word_ids)
+    
+    def _load_words_from_file(self, file_path: Path) -> List[int]:
+        """Load word IDs from JSON or text sidecar files."""
+        if file_path.suffix == '.json':
+            with open(file_path, 'r') as f:
+                data = json.load(f)
+                if 'words' in data:
+                    words = data['words']
+                elif 'word_ids' in data:
+                    return data['word_ids']
                 else:
-                    words = ["The", "quick", "brown", "fox", "jumps", "over", "the", "lazy", "dog"]
+                    raise ValueError(f"JSON file must contain 'words' or 'word_ids' key")
+                # Query IDs from word names
+                db = connect()
+                placeholders = ','.join('?' * len(words))
+                query = f"SELECT id FROM words WHERE word IN ({placeholders}) COLLATE NOCASE"
+                cursor = db.execute(query, words)
+                ids = [row[0] for row in cursor.fetchall()]
+                db.close()
+                if not ids:
+                    raise ValueError(f"No matching words found in wordbase for {len(words)} words")
+                return ids
+        elif file_path.suffix == '.txt':
+            with open(file_path, 'r') as f:
+                words = f.read().split()
+            db = connect()
+            placeholders = ','.join('?' * len(words))
+            query = f"SELECT id FROM words WHERE word IN ({placeholders}) COLLATE NOCASE"
+            cursor = db.execute(query, words)
+            ids = [row[0] for row in cursor.fetchall()]
+            db.close()
+            if not ids:
+                raise ValueError(f"No matching words found in wordbase for {len(words)} words")
+            return ids
+        else:
+            raise ValueError(f"Unsupported file type: {file_path.suffix}")
+    
+    def _load_words(self):
+        word_ids = []
+        try:
+            if self.png_path.is_dir():
+                # Load from tiles directory
+                word_ids = self._load_words_from_directory(self.png_path)
+            elif self.png_path.is_file():
+                # Check for JSON or TXT sidecar
+                json_path = self.png_path.with_suffix('.json')
+                text_path = self.png_path.with_suffix('.txt')
+                
+                if json_path.exists():
+                    word_ids = self._load_words_from_file(json_path)
+                elif text_path.exists():
+                    word_ids = self._load_words_from_file(text_path)
+                else:
+                    raise ValueError(f"No sidecar found for {self.png_path}. Expected {json_path.name} or {text_path.name}")
+            else:
+                raise ValueError(f"Path does not exist: {self.png_path}")
+                
         except Exception as e:
-            print(f"Error loading words: {e}")
-            words = []
+            print(f"Error loading word IDs: {e}", file=sys.stderr)
+            sys.exit(1)
+        
+        # Load word info from wordbase
+        if not word_ids:
+            raise ValueError("No word IDs to load")
             
         db = connect()
-        for word in words:
-            cursor = db.execute("SELECT word, pronunciation, pos, definition, color_hex FROM words WHERE word = ? COLLATE NOCASE", (word,))
-            row = cursor.fetchone()
-            if row:
-                info = dict(zip(['word', 'pronunciation', 'pos', 'definition', 'color_hex'], row))
-                color_hex = info['color_hex'] or '#808080'
-                word_info = WordInfo(info['word'], info['pronunciation'], info['pos'], info['definition'], color_hex)
-                self.words_info.append(word_info)
-                if color_hex not in self.colors_map:
-                    self.colors_map[color_hex] = []
-                self.colors_map[color_hex].append(word_info)
+        placeholders = ','.join('?' * len(word_ids))
+        query = f"SELECT id, word, pronunciation, pos, definition, color_hex FROM words WHERE id IN ({placeholders})"
+        cursor = db.execute(query, word_ids)
+        
+        for row in cursor.fetchall():
+            info = dict(zip(['id', 'word', 'pronunciation', 'pos', 'definition', 'color_hex'], row))
+            color_hex = info['color_hex'] or '#808080'
+            word_info = WordInfo(info['word'], info['id'], info['pronunciation'], info['pos'], info['definition'], color_hex)
+            self.words_info.append(word_info)
+            if color_hex not in self.colors_map:
+                self.colors_map[color_hex] = []
+            self.colors_map[color_hex].append(word_info)
         db.close()
+        
+        if not self.words_info:
+            raise ValueError(f"No matching words found in wordbase for {len(word_ids)} word IDs")
         
     def analyze(self):
         print(f"Analysis of {self.png_path}:")
@@ -97,8 +165,9 @@ class ColorExplorer:
         sorted_colors = sorted(self.colors_map.items(), key=lambda x: len(x[1]), reverse=True)
         for color, words in sorted_colors:
             unique_words = sorted(list(set(w.word for w in words)))
-            poses = list(set(w.pos for w in words))
-            print(f"  {color} ({', '.join(poses)}): {len(words)} words")
+            poses = sorted(list(set(w.pos for w in words)))
+            pos_str = ', '.join(poses) if poses else 'unknown'
+            print(f"  {color} ({pos_str}): {len(words)} words")
             print(f"    Examples: {', '.join(unique_words[:5])}{'...' if len(unique_words) > 5 else ''}")
             
     def explore(self):
@@ -120,163 +189,169 @@ class ColorExplorer:
         color_buttons = []
         y = legend_rect.top + 40
         for color, words in sorted_colors:
-            poses = list(set(w.pos for w in words))
-            label = f"{', '.join(poses)} ({len(words)})"
+            poses = sorted(list(set(w.pos for w in words)))
+            pos_str = ', '.join(poses) if poses else 'unknown'
+            label = f"{pos_str} ({len(words)})"
             rect = pygame.Rect(legend_rect.left + 10, y, legend_rect.width - 20, 30)
             color_buttons.append({'color': color, 'rect': rect, 'label': label, 'rgb': words[0].color_rgb})
             y += 40
-            
-        # Word buttons
-        word_buttons = []
         
-        def update_word_buttons():
-            nonlocal word_buttons
-            word_buttons.clear()
-            x, y = content_rect.left, content_rect.top + 40
-            for w_info in self.words_info:
-                if self.active_color_filter and w_info.color_hex != self.active_color_filter:
-                    continue
-                    
-                text_surface = self.font.render(w_info.word, True, (255, 255, 255))
-                w, h = text_surface.get_size()
-                rect = pygame.Rect(x, y, w + 20, h + 10)
-                
-                if x + rect.width > content_rect.right:
-                    x = content_rect.left
-                    y += h + 20
-                    rect.topleft = (x, y)
-                    
-                word_buttons.append({'info': w_info, 'rect': rect, 'surface': text_surface})
-                x += rect.width + 10
-                
-        update_word_buttons()
+        # Word tiles
+        tile_size = 120
+        tiles_per_row = (content_rect.width - 20) // (tile_size + 10)
         
         while running:
+            dt = self.clock.tick(60)
+            
+            # Event handling
             mouse_pos = pygame.mouse.get_pos()
+            self.hovered_word = None
             
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if event.button == 1:
-                        # Check color legend clicks
-                        clicked_legend = False
+                    if event.button == 1:  # Left click
+                        # Check legend clicks
                         for btn in color_buttons:
-                            if btn['rect'].collidepoint(mouse_pos):
+                            if btn['rect'].collidepoint(event.pos):
                                 if self.active_color_filter == btn['color']:
-                                    self.active_color_filter = None # Toggle off
+                                    self.active_color_filter = None  # Toggle off
                                 else:
                                     self.active_color_filter = btn['color']
-                                update_word_buttons()
-                                clicked_legend = True
-                                break
-                        
-                        if not clicked_legend:
-                            # If click outside, clear filter
-                            if not legend_rect.collidepoint(mouse_pos):
-                                self.active_color_filter = None
-                                update_word_buttons()
-                                
-            self.screen.fill((30, 30, 30))
+            
+            # Check for hover over tiles
+            filtered_words = self.words_info
+            if self.active_color_filter:
+                filtered_words = [w for w in self.words_info if w.color_hex == self.active_color_filter]
+            
+            for i, word_info in enumerate(filtered_words):
+                col = i % tiles_per_row
+                row = i // tiles_per_row
+                tile_rect = pygame.Rect(
+                    content_rect.left + 10 + col * (tile_size + 10),
+                    content_rect.top + 10 + row * (tile_size + 10),
+                    tile_size,
+                    tile_size
+                )
+                if tile_rect.collidepoint(mouse_pos):
+                    self.hovered_word = word_info
+            
+            # Drawing
+            self.screen.fill((30, 30, 35))
             
             # Draw legend
-            pygame.draw.rect(self.screen, (40, 40, 40), legend_rect, border_radius=8)
-            title = self.font.render("Semantic Colors", True, (255, 255, 255))
-            self.screen.blit(title, (legend_rect.left + 10, legend_rect.top + 10))
+            pygame.draw.rect(self.screen, (40, 40, 45), legend_rect)
+            legend_title = self.font.render("Semantic Colors", True, (255, 255, 255))
+            self.screen.blit(legend_title, (legend_rect.left + 10, legend_rect.top + 10))
             
             for btn in color_buttons:
-                # Highlight active
+                pygame.draw.rect(self.screen, (30, 30, 35), btn['rect'])
+                pygame.draw.rect(self.screen, btn['rgb'], btn['rect'].inflate(-10, -10))
+                
+                # Highlight active filter
                 if self.active_color_filter == btn['color']:
-                    pygame.draw.rect(self.screen, (80, 80, 80), btn['rect'], border_radius=4)
+                    pygame.draw.rect(self.screen, (255, 255, 255), btn['rect'], 2)
                 
-                # Color box
-                color_box = pygame.Rect(btn['rect'].left + 5, btn['rect'].top + 5, 20, 20)
-                pygame.draw.rect(self.screen, btn['rgb'], color_box, border_radius=2)
-                pygame.draw.rect(self.screen, (200, 200, 200), color_box, 1, border_radius=2)
-                
-                # Label
-                label_surf = self.small_font.render(btn['label'], True, (200, 200, 200))
-                self.screen.blit(label_surf, (color_box.right + 10, btn['rect'].top + 7))
-                
-            # Draw words
-            pygame.draw.rect(self.screen, (40, 40, 40), content_rect, border_radius=8)
-            filter_text = "All Words" if not self.active_color_filter else f"Filtered by: {self.active_color_filter}"
-            header = self.font.render(filter_text, True, (255, 255, 255))
-            self.screen.blit(header, (content_rect.left + 10, content_rect.top + 10))
+                # Draw label
+                label_surf = self.small_font.render(btn['label'], True, (255, 255, 255))
+                label_rect = label_surf.get_rect(center=btn['rect'].center)
+                self.screen.blit(label_surf, label_rect)
             
-            self.hovered_word = None
-            for btn in word_buttons:
-                is_hovered = btn['rect'].collidepoint(mouse_pos)
-                if is_hovered:
-                    self.hovered_word = btn['info']
-                    bg_color = (min(255, btn['info'].color_rgb[0] + 40), min(255, btn['info'].color_rgb[1] + 40), min(255, btn['info'].color_rgb[2] + 40))
-                else:
-                    bg_color = btn['info'].color_rgb
-                    
-                pygame.draw.rect(self.screen, bg_color, btn['rect'], border_radius=4)
-                pygame.draw.rect(self.screen, (255, 255, 255), btn['rect'], 1, border_radius=4)
-                self.screen.blit(btn['surface'], (btn['rect'].left + 10, btn['rect'].top + 5))
+            # Draw content area
+            pygame.draw.rect(self.screen, (35, 35, 40), content_rect)
+            
+            # Draw tiles
+            for i, word_info in enumerate(filtered_words):
+                col = i % tiles_per_row
+                row = i // tiles_per_row
+                tile_rect = pygame.Rect(
+                    content_rect.left + 10 + col * (tile_size + 10),
+                    content_rect.top + 10 + row * (tile_size + 10),
+                    tile_size,
+                    tile_size
+                )
                 
-            # Draw tooltip for hovered word
+                # Tile background
+                bg_color = word_info.color_rgb
+                pygame.draw.rect(self.screen, bg_color, tile_rect)
+                pygame.draw.rect(self.screen, (60, 60, 65), tile_rect, 2)
+                
+                # Word text (truncated if too long)
+                display_word = word_info.word[:12]
+                word_surf = self.font.render(display_word, True, (255, 255, 255))
+                word_rect = word_surf.get_rect(center=(tile_rect.centerx, tile_rect.centery - 10))
+                self.screen.blit(word_surf, word_rect)
+                
+                # POS label
+                pos_surf = self.small_font.render(word_info.pos[:6], True, (200, 200, 200))
+                pos_rect = pos_surf.get_rect(center=(tile_rect.centerx, tile_rect.centery + 15))
+                self.screen.blit(pos_surf, pos_rect)
+            
+            # Tooltip for hovered word
             if self.hovered_word:
-                tt_lines = [
-                    self.hovered_word.word,
-                    f"Pronunciation: {self.hovered_word.pronunciation}",
-                    f"POS: {self.hovered_word.pos}",
-                    f"Def: {self.hovered_word.definition}"
-                ]
+                tooltip_width = 300
+                tooltip_height = 120
+                tooltip_rect = pygame.Rect(
+                    mouse_pos[0] + 15,
+                    mouse_pos[1] + 15,
+                    tooltip_width,
+                    tooltip_height
+                )
                 
-                tt_surfaces = []
-                tt_width = 0
-                for i, line in enumerate(tt_lines):
-                    font = self.font if i == 0 else self.small_font
-                    surf = font.render(line, True, (255, 255, 255))
-                    tt_surfaces.append(surf)
-                    tt_width = max(tt_width, surf.get_width())
-                    
-                tt_height = sum(s.get_height() + 5 for s in tt_surfaces) + 10
+                # Keep tooltip on screen
+                if tooltip_rect.right > self.screen_width:
+                    tooltip_rect.right = mouse_pos[0] - 10
+                    tooltip_rect.left = tooltip_rect.right - tooltip_width
+                if tooltip_rect.bottom > self.screen_height:
+                    tooltip_rect.bottom = mouse_pos[1] - 10
+                    tooltip_rect.top = tooltip_rect.bottom - tooltip_height
                 
-                # Position tooltip near mouse but keep on screen
-                tt_x = mouse_pos[0] + 15
-                tt_y = mouse_pos[1] + 15
-                if tt_x + tt_width + 20 > self.screen_width:
-                    tt_x = self.screen_width - tt_width - 20
-                if tt_y + tt_height + 20 > self.screen_height:
-                    tt_y = self.screen_height - tt_height - 20
-                    
-                tt_rect = pygame.Rect(tt_x, tt_y, tt_width + 20, tt_height + 10)
-                pygame.draw.rect(self.screen, (20, 20, 20), tt_rect, border_radius=5)
-                pygame.draw.rect(self.screen, (150, 150, 150), tt_rect, 1, border_radius=5)
+                pygame.draw.rect(self.screen, (20, 20, 20), tooltip_rect)
+                pygame.draw.rect(self.screen, self.hovered_word.color_rgb, tooltip_rect, 2)
                 
-                curr_y = tt_rect.top + 10
-                for surf in tt_surfaces:
-                    self.screen.blit(surf, (tt_rect.left + 10, curr_y))
-                    curr_y += surf.get_height() + 5
-                    
-            pygame.display.flip()
-            self.clock.tick(60)
+                # Word and pronunciation
+                word_surf = self.font.render(f"{self.hovered_word.word} (ID: {self.hovered_word.word_id})", True, (255, 255, 255))
+                self.screen.blit(word_surf, (tooltip_rect.left + 10, tooltip_rect.top + 10))
+                
+                pron_surf = self.small_font.render(self.hovered_word.pronunciation, True, (180, 180, 180))
+                self.screen.blit(pron_surf, (tooltip_rect.left + 10, tooltip_rect.top + 40))
+                
+                # POS
+                pos_surf = self.small_font.render(f"POS: {self.hovered_word.pos}", True, (180, 180, 180))
+                self.screen.blit(pos_surf, (tooltip_rect.left + 10, tooltip_rect.top + 65))
+                
+                # Definition (truncated)
+                def_text = self.hovered_word.definition[:50]
+                if len(self.hovered_word.definition) > 50:
+                    def_text += "..."
+                def_surf = self.small_font.render(def_text, True, (150, 150, 150))
+                self.screen.blit(def_surf, (tooltip_rect.left + 10, tooltip_rect.top + 90))
             
+            pygame.display.flip()
+        
         pygame.quit()
 
 def main():
-    if len(sys.argv) < 3:
-        print("Usage: python3 color_explorer.py <command> <png_path>")
+    if len(sys.argv) < 2:
+        print("Usage: python3 tools/color_explorer.py <command> <path>")
         print("Commands:")
-        print("  analyze - List all semantic color groups without UI")
-        print("  explore - Launch interactive semantic color explorer GUI")
+        print("  explore <path>  - Interactive GUI exploration (directory or PNG with sidecar)")
+        print("  analyze <path>  - Headless analysis (directory or PNG with sidecar)")
         sys.exit(1)
-        
+    
     command = sys.argv[1]
-    png_path = sys.argv[2]
+    path = sys.argv[2] if len(sys.argv) > 2 else "."
     
-    explorer = ColorExplorer(png_path)
+    explorer = ColorExplorer(path)
     
-    if command == "analyze":
-        explorer.analyze()
-    elif command == "explore":
+    if command == "explore":
         explorer.explore()
+    elif command == "analyze":
+        explorer.analyze()
     else:
         print(f"Unknown command: {command}")
+        print("Use 'explore' or 'analyze'")
         sys.exit(1)
 
 if __name__ == "__main__":
