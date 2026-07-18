@@ -36,9 +36,14 @@ from codec.phy import Phy16Tone, frame, unframe
 from codec.phy_ecc import encode_ecc, decode_ecc
 
 # For 'say' mode - phoneme word compiler
-from word_compiler import (
-    compile_text, concat_words_audio, ensure_cmudict, parse_cmudict
-)
+try:
+    from word_compiler import (
+        compile_text, concat_words_audio, ensure_cmudict, parse_cmudict
+    )
+except ImportError:
+    from tools.word_compiler import (
+        compile_text, concat_words_audio, ensure_cmudict, parse_cmudict
+    )
 
 SAMPLE_RATE = 44100
 SYMBOL_SEC = 0.020          # one nibble per 20 ms

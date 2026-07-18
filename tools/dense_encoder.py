@@ -304,41 +304,99 @@ def decode_dense(input_path: str, use_metadata: bool = True) -> bytes:
     return payload
 
 
-if __name__ == '__main__':
+def run_cartridge(png_path: str, sandbox: bool = False) -> dict:
+    """
+    Extract payload and execute as a Python script.
+    
+    Args:
+        png_path: Path to dense encoded PNG
+        sandbox: Whether to run in a sandboxed subprocess
+        
+    Returns:
+        dict: Execution metadata
+    """
+    import subprocess
     import tempfile
+    import json
     import os
-
-    # Quick self-test
-    print("Testing dense_encoder...")
-
-    test_data = b'Hello, Visual Audio Memory Palace!'
-
-    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
-        png_path = f.name
-
+    import sys
+    from datetime import datetime
+    
+    payload = decode_dense(png_path)
+    
+    with tempfile.NamedTemporaryFile(suffix=".py", delete=False) as tmp:
+        tmp.write(payload)
+        tmp_script = tmp.name
+        
     try:
-        # Encode
-        encode_dense(test_data, png_path, square=True)
-        print(f"✓ Encoded {len(test_data)} bytes to {png_path}")
-
-        # Decode
-        recovered = decode_dense(png_path)
-        print(f"✓ Decoded {len(recovered)} bytes")
-
-        # Verify
-        if recovered == test_data:
-            print("✓ Round-trip successful!")
+        if sandbox:
+            # Simple sandbox model: restrict environment
+            env = {}
         else:
-            print("✗ Round-trip FAILED")
-            raise ValueError("Data mismatch")
-
-        # Show image info
-        img = Image.open(png_path)
-        print(f"✓ Image size: {img.size[0]}x{img.size[1]} pixels")
-        print(f"✓ Metadata: {dict(img.text)}")
-
+            env = os.environ.copy()
+            
+        start_time = datetime.now()
+        process = subprocess.run(
+            [sys.executable, tmp_script],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=10
+        )
+        end_time = datetime.now()
+        
+        result = {
+            "execution_result": "SUCCESS" if process.returncode == 0 else "FAILED",
+            "returncode": process.returncode,
+            "stdout": process.stdout,
+            "stderr": process.stderr,
+            "last_run_timestamp": end_time.isoformat(),
+            "consistency_check_status": "PASS" if process.returncode == 0 else "FAIL"
+        }
+        
+        return result
     finally:
-        if os.path.exists(png_path):
-            os.unlink(png_path)
+        if os.path.exists(tmp_script):
+            os.unlink(tmp_script)
 
-    print("\nAll tests passed!")
+
+if __name__ == '__main__':
+    import argparse
+    import json
+    import sys
+
+    parser = argparse.ArgumentParser(description="Dense PNG encoder/decoder")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # encode
+    p_encode = subparsers.add_parser("encode")
+    p_encode.add_argument("input", help="Input file")
+    p_encode.add_argument("output", help="Output PNG file")
+
+    # decode
+    p_decode = subparsers.add_parser("decode")
+    p_decode.add_argument("input", help="Input PNG file")
+    p_decode.add_argument("output", help="Output file")
+
+    # run
+    p_run = subparsers.add_parser("run")
+    p_run.add_argument("input", help="Input PNG cartridge")
+    p_run.add_argument("--sandbox", action="store_true", help="Run in restricted environment")
+
+    args = parser.parse_args()
+
+    if args.command == "encode":
+        with open(args.input, "rb") as f:
+            data = f.read()
+        encode_dense(data, args.output, square=True)
+        print(f"Encoded {len(data)} bytes to {args.output}")
+
+    elif args.command == "decode":
+        data = decode_dense(args.input)
+        with open(args.output, "wb") as f:
+            f.write(data)
+        print(f"Decoded {len(data)} bytes to {args.output}")
+
+    elif args.command == "run":
+        result = run_cartridge(args.input, sandbox=args.sandbox)
+        print(json.dumps(result, indent=2))

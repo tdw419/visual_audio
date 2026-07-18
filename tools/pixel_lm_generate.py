@@ -213,6 +213,36 @@ class PixelLMGenerator:
 
         return pixels
 
+    def generate_seed(self, token_ids: List[int]) -> bytes:
+        """
+        Convert token IDs to an 8x8 RGBA byte stream (256 bytes) for procedural engine seed.
+        
+        Args:
+            token_ids: Token ID sequence
+            
+        Returns:
+            256-byte RGBA payload
+        """
+        byte_data = bytearray()
+        for token_id in token_ids:
+            # We want each token to contribute to the seed.
+            # A token is effectively 24-bit. We can add a pseudo-alpha.
+            r = (token_id >> 16) & 0xFF
+            g = (token_id >> 8) & 0xFF
+            b = token_id & 0xFF
+            a = 255
+            byte_data.extend([r, g, b, a])
+            
+        import hashlib
+        # Pad to 256 bytes
+        if len(byte_data) < 256:
+            pad_seed = hashlib.md5(byte_data).digest()
+            while len(byte_data) < 256:
+                byte_data.extend(pad_seed)
+                pad_seed = hashlib.md5(pad_seed).digest()
+                
+        return bytes(byte_data[:256])
+
     def render_word_tiles(self, token_ids: List[int], tile_width: int = 16) -> np.ndarray:
         """
         Render token IDs as word tiles from wordbase.

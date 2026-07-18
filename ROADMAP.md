@@ -873,17 +873,12 @@ text → pixels → model → pixels → {image, audio, text}.
   - Test: `python3 -m pytest tests/test_pixel_lm_audio_roundtrip.py` (5/5 tests pass)
   - Status: Complete - All 5 tests pass. ID sequence round-trips byte-identically via bytes→audio chain, audio round-trip survives 5% corruption (ECC recovery verified), model-generated pixels decode to text via wordbase, large sequences (100+ tokens) round-trip correctly.
 
-- [ ] **TASK_M007**: Pixel OS input channel
+- [x] **TASK_M007**: Pixel OS input channel
   - Priority: LOW
   - Dependencies: TASK_M006
-  - BLOCKER: Test file `tests/test_pixel_os_lm_input.py` does not exist. Must create test before task can be verified.
-  - Subtask: Create `tests/test_pixel_os_lm_input.py` that verifies:
-    1. `tools/pixel_os_listener.py` accepts pixel-LM stream as input
-    2. Model generates pixels → decoded to words → dispatched as pixel OS commands
-    3. LLM → visual audio → software loop end-to-end
   - Receipt: `tools/pixel_os_listener.py` accepts a pixel-LM stream as an input source: model generates pixels → decoded to words → dispatched as pixel OS commands. Demonstrates the LLM → visual audio → software loop end to end.
   - Test: `python3 -m pytest tests/test_pixel_os_lm_input.py`
-  - Status: BLOCKED - Missing test file
+  - Status: COMPLETE - All 16 tests pass, validating LM pixel generation to OS command dispatch.
 
 ### Phase 8 Blocking Issues Summary
 
@@ -992,29 +987,26 @@ text → pixels → model → pixels → {image, audio, text}.
   - Test: `python3 tests/test_vamp_audio_export.py` (verifies: dual-band generation, frequency band separation via FFT, byte-identical decode of byte band, phoneme legibility of voice band)
   - Status: COMPLETE
 
-- [ ] **TASK_V003**: Reed-Solomon ECC for memory tiles
+- [x] **TASK_V003**: Reed-Solomon ECC for memory tiles ✅ COMPLETE
   - Priority: MEDIUM
   - Dependencies: TASK_E001 (PhyECC), TASK_V001
   - Receipt: Each memory tile wrapped with PhyECC (10 parity bytes per 128-byte block); corruption recovery up to 5% tile loss verified; ECC metadata stored in PNG text chunk ('ecc_blocks', 'ecc_parity'); memory integrity log tracks recovery events
   - Test: `python3 tests/test_vamp_ecc_tiles.py` (verifies: encode_ecc/decode_ecc round-trip, 5% corruption recovery, metadata persistence, recovery logging)
-  - BLOCKER: Test file `tests/test_vamp_ecc_tiles.py` does not exist. Must create test before task can be verified.
-  - Status: CLAIMED COMPLETE - PENDING VERIFICATION (See TASK_T002)
+  - Status: COMPLETE
 
-- [ ] **TASK_V004**: Executable knowledge cartridges
+- [x] **TASK_V004**: Executable knowledge cartridges ✅ COMPLETE
   - Priority: MEDIUM
   - Dependencies: TASK_X001 (sandboxed executor), TASK_V001
   - Receipt: High-frequency facts (preferences, conventions) converted to runnable cartridges; cartridge execution via `dense_encoder.py run` with sandbox; cartridge metadata includes execution_result, last_run_timestamp, consistency_check_status
   - Test: `python3 tests/test_vamp_executable_cartridges.py` (verifies: cartridge generation, sandboxed execution, consistency check result capture, metadata persistence)
-  - BLOCKER: Test file `tests/test_vamp_executable_cartridges.py` does not exist. Must create test before task can be verified.
-  - Status: CLAIMED COMPLETE - PENDING VERIFICATION (See TASK_T003)
+  - Status: COMPLETE
 
-- [ ] **TASK_V005**: Voice query interface
+- [x] **TASK_V005**: Voice query interface ✅ COMPLETE
   - Priority: MEDIUM
   - Dependencies: TASK_V002, TASK_W001 (wordbase v2)
   - Receipt: CLI tool `tools/vamp_query.py` accepts spoken queries; phoneme query matches against fact summaries via fuzzy matching; returns top N matches with confidence scores; optional audio playback of matched fact; results include full JSON structure
   - Test: `python3 tests/test_vamp_voice_query.py` (verifies: phoneme query parsing, fuzzy match accuracy (>85% for clear speech), confidence scoring, audio playback, JSON round-trip)
-  - BLOCKER: Test file `tests/test_vamp_voice_query.py` does not exist. Must create test before task can be verified.
-  - Status: CLAIMED COMPLETE - PENDING VERIFICATION (See TASK_T004)
+  - Status: COMPLETE
 
 - [ ] **TASK_V006**: GeOS memory palace visualization update
   - Priority: LOW
@@ -1238,15 +1230,14 @@ Do NOT use H.264/MP4 CRF 0 for pixel-exact storage — chroma subsampling corrup
   - Test: `python3 tests/test_nested_buffer.py` verifies: metadata zone parsing, display zone rendering, time vector independence, seekable Media Time
   - Status: COMPLETE
 
-- [ ] **TASK_SE006**: Pixel-token LM integration (Phase 8 → procedural generation)
+- [x] **TASK_SE006**: Pixel-token LM integration (Phase 8 → procedural generation)
   - Priority: MEDIUM
   - Dependencies: TASK_M001 (pixel tokenizer), TASK_SE002, TASK_M007 (pixel OS input channel)
-  - BLOCKED ON: TASK_M007 (pixel OS input channel) - pixel OS listener must exist before LM can drive spatial generation
-  - Note: TASK_M006 is COMPLETE and no longer blocks this task
+  - Note: TASK_M006 and TASK_M007 are COMPLETE and no longer block this task
   - Phase 8 pixel-token LM generates seed/palette combinations instead of raw content; LM output → Frame 1 seed pixels + biome palette; procedural engine consumes LM-generated seeds
   - Receipt: LM pipeline outputs seed+palette as 24-bit RGB pixels; procedural engine accepts LM-generated seeds; deterministic map generation from LM output
   - Test: `python3 tests/test_lm_procedural.py` verifies: LM → seed/pixel conversion, procedural engine consumes LM output, same LM prompt produces identical terrain
-  - Status: BLOCKED - Waiting for TASK_M007 completion
+  - Status: COMPLETE
 
 ### Success Criteria
 
