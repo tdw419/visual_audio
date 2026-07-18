@@ -30,7 +30,7 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
 1. ✅ **Test Infrastructure Gap**: TASK_W002 RESOLVED - pytest suite chosen
    - **Decision**: Option B (pytest suite) — effective 2026-07-18
    - **Rationale**: Consistency with existing tests, CI integration, unified workflow
-   - **Test Command**: `python3 -m pytest tests/test_token_chord_codec.py`
+   - **Test Command**: `python3 -m pytest tests/ -q` (corrected 2026-07-18: previously cited `tests/test_token_chord_codec.py`, which never existed — no token-chord codec is in the repo)
    - **Impact**: UNBLOCKS TASK_T001-T004 immediately
    - **Receipt**: Updated ROADMAP.md with pytest decision verification
 
@@ -66,8 +66,8 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
 5. **Project Standards**: README.md and docs/ already document pytest as primary test runner
 
 **Implementation**: Updated TASK_W002 receipt verification from CLI to pytest
-- Test: `python3 -m pytest tests/test_token_chord_codec.py`
-- Acceptance: All token-chord encoding/decoding tests pass with pytest
+- Test: `python3 -m pytest tests/ -q` (corrected 2026-07-18: the previously cited `tests/test_token_chord_codec.py` never existed; if a token-chord codec is planned it needs its own task with a real test)
+- Acceptance: existing pytest suite runs green under the chosen framework
 
 **Impact**: UNBLOCKS TASK_T001-T004 immediately
 
