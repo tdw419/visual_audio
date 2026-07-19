@@ -39,24 +39,38 @@ fn load_pixel(x: u32, y: u32) -> vec3<u32> {
     return vec3<u32>(pixel.r, pixel.g, pixel.b);
 }
 
+// Advance PC in 2D grid: wrap X, increment Y when X overflows
+// Returns new PC coordinates
+fn advance_pc(pc: vec2<u32>) -> vec2<u32> {
+    var new_pc = pc;
+    new_pc.x = new_pc.x + 1u;
+    if (new_pc.x >= uniforms.image_width) {
+        new_pc.x = 0u;
+        new_pc.y = new_pc.y + 1u;
+    }
+    return new_pc;
+}
+
 @compute @workgroup_size(1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     var cpu = cpus[global_id.x];
     if (cpu.running == 0u) { return; }
 
     let pixel = load_pixel(cpu.pc.x, cpu.pc.y);
-    cpu.pc.x = cpu.pc.x + 1u;
+
+    // Advance PC after reading opcode
+    cpu.pc = advance_pc(cpu.pc);
 
     // Opcodes
     if (pixel.r == 236u && pixel.g == 80u && pixel.b == 80u) {
         // LDI: load immediate
         // Next pixel is register, next is value
         let reg_pixel = load_pixel(cpu.pc.x, cpu.pc.y);
-        cpu.pc.x = cpu.pc.x + 1u;
+        cpu.pc = advance_pc(cpu.pc);
         let reg_num = (reg_pixel.r - 50u) / 25u;
 
         let val_pixel = load_pixel(cpu.pc.x, cpu.pc.y);
-        cpu.pc.x = cpu.pc.x + 1u;
+        cpu.pc = advance_pc(cpu.pc);
         let val = val_pixel.b - 1u;
 
         cpu.registers[reg_num] = val;
@@ -64,11 +78,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     } else if (pixel.r == 80u && pixel.g == 236u && pixel.b == 120u) {
         // ADD
         let reg1_pixel = load_pixel(cpu.pc.x, cpu.pc.y);
-        cpu.pc.x = cpu.pc.x + 1u;
+        cpu.pc = advance_pc(cpu.pc);
         let reg1 = (reg1_pixel.r - 50u) / 25u;
 
         let reg2_pixel = load_pixel(cpu.pc.x, cpu.pc.y);
-        cpu.pc.x = cpu.pc.x + 1u;
+        cpu.pc = advance_pc(cpu.pc);
         let reg2 = (reg2_pixel.r - 50u) / 25u;
 
         cpu.registers[reg1] = cpu.registers[reg1] + cpu.registers[reg2];
@@ -76,11 +90,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     } else if (pixel.r == 151u && pixel.g == 244u && pixel.b == 80u) {
         // SUB
         let reg1_pixel = load_pixel(cpu.pc.x, cpu.pc.y);
-        cpu.pc.x = cpu.pc.x + 1u;
+        cpu.pc = advance_pc(cpu.pc);
         let reg1 = (reg1_pixel.r - 50u) / 25u;
 
         let reg2_pixel = load_pixel(cpu.pc.x, cpu.pc.y);
-        cpu.pc.x = cpu.pc.x + 1u;
+        cpu.pc = advance_pc(cpu.pc);
         let reg2 = (reg2_pixel.r - 50u) / 25u;
 
         cpu.registers[reg1] = cpu.registers[reg1] - cpu.registers[reg2];
@@ -88,7 +102,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     } else if (pixel.r == 247u && pixel.g == 83u && pixel.b == 80u) {
         // PRT: print register
         let reg_pixel = load_pixel(cpu.pc.x, cpu.pc.y);
-        cpu.pc.x = cpu.pc.x + 1u;
+        cpu.pc = advance_pc(cpu.pc);
         let reg_num = (reg_pixel.r - 50u) / 25u;
 
         output[global_id.x * uniforms.output_buffer_size + cpu.output_ptr] = cpu.registers[reg_num];
@@ -202,9 +216,12 @@ class WGSLSpatialEngine:
 
         height, width = rgba.shape[:2]
 
-        # Flatten to RGBA32 array (4 x uint8 per pixel)
-        # WGSL will read these as u32 values 0-255
-        flat_data = rgba.reshape(-1, 4)
+        # Convert to u32 array (shader expects u32 per channel, not uint8)
+        # Each pixel becomes [r_u32, g_u32, b_u32, a_u32] = 4 u32s = 16 bytes
+        rgba_u32 = rgba.astype(np.uint32)
+
+        # Flatten to u32 array
+        flat_data = rgba_u32.reshape(-1)
 
         # Create storage buffer
         buffer = self.device.create_buffer(
@@ -357,8 +374,8 @@ async def demo():
 
     # Load program image
     print("\nLoading program image...")
-    rom_buffer, width, height = engine.load_program_image("demo_glyph_simple.png")
-    print(f"✓ Program loaded: {width}x{height}")
+    rom_buffer, width, height = engine.load_program_image("glass_stratum_demo_dense.png")
+    print(f"✓ Program loaded as GPU buffer: {width}x{height}")
 
     # Create CPU instances
     num_cpus = 10
@@ -371,7 +388,7 @@ async def demo():
 
     # Run
     print("\nExecuting on GPU...")
-    engine.run(rom_buffer, width, height, cpus_buffer, output_buffer, num_cpus, dispatches=20)
+    engine.run(rom_buffer, width, height, cpus_buffer, output_buffer, num_cpus, dispatches=50)
 
     # Read output
     print("\nReading output...")
