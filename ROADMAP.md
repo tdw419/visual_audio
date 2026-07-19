@@ -5,11 +5,11 @@
 Visual Audio enables software to exist as text, audio, or pixels. The foundation (Phase 0) is complete and working. This roadmap guides evolution toward production-grade systems: error correction, coarticulation, prosody, full Geometry OS integration, and advanced video-based state management.
 
 ### Current Status (2026-07-19)
-- **Progress**: 66/112 tasks complete (58.9%) — Phase 12 (Single-File Container) COMPLETE, Phase 13 (Container Self-Awareness) 🔴 IN PROGRESS, Self-Hosting Active
-- **Critical Path**: TASK_VAC001-003 → TASK_VAC004-006 → TASK_T001-T004 → TASK_M007 → TASK_SE006 → TASK_A003 (container audit loop)
-- **Recent Wins**: TASK_VAC001-007 (complete container system), TASK_R017 (container security 7/7 pass), TASK_W002 (pytest decision resolved), TASK_M004-M005 (pixel LM), TASK_C038 (native pixel boot), Phase 13 task redesign (8 generic → 6 concrete Ollama-integrated tasks)
-- **Key Metrics**: Phoneme throughput ~7.6 words/sec (target ≥8.0), Byte throughput ~24 bytes/sec (target ≥25), Pixel density ~2.5 bytes/pixel (VAMP target ~3), Container 35 frames 1.1 MB 6 new analysis entries added
-- **New Milestone**: visual_audio.mkv (35 frames, 1.1 MB) — fully self-hosting with embedded tools (ollama_prompt.py, dense_encoder.py, frame tools), run+update commands, security tests passing; Phase 13 tasks (TASK_A001-A006) designed for 1-3 day implementation
+- **Progress**: 67/117 tasks complete (57.3%) — Phase 12 (Single-File Container) COMPLETE, Phase 11 (Spatial Execution Engine) 🟢 ACTIVE (Spatial Glyph Emulator breakthrough), Phase 13 (Container Self-Awareness) 🔴 IN PROGRESS, Self-Hosting Active
+- **Critical Path**: TASK_VAC001-003 → TASK_VAC004-006 → TASK_T001-T004 → TASK_M007 → TASK_SE006 → TASK_SE007 → TASK_SE008-SE011 (spatial glyph execution → Turing-complete ISA → GPU native)
+- **Recent Wins**: TASK_VAC001-007 (complete container system), TASK_R017 (container security 7/7 pass), TASK_W002 (pytest decision resolved), TASK_M004-M005 (pixel LM), TASK_C038 (native pixel boot), Phase 13 task redesign (8 generic → 6 concrete Ollama-integrated tasks), **TASK_SE007 (Spatial Glyph Emulator — 2D spatial ISA, programs as pixel images, branches as geometric translations)**
+- **Key Metrics**: Phoneme throughput ~7.6 words/sec (target ≥8.0), Byte throughput ~24 bytes/sec (target ≥25), Pixel density ~2.5 bytes/pixel (VAMP target ~3), Container 35 frames 1.1 MB 6 new analysis entries added, **Spatial CPU: 10 opcodes, 8 registers, 1KB memory, 2D PC, Python emulator working, WGSL prototype ready**
+- **New Milestone**: visual_audio.mkv (35 frames, 1.1 MB) — fully self-hosting with embedded tools (ollama_prompt.py, dense_encoder.py, frame tools), run+update commands, security tests passing; Phase 13 tasks (TASK_A001-A006) designed for 1-3 day implementation; **NEW: Spatial Glyph Emulator executes programs directly from pixels — visual_audio.mkv is now executable ROM**
 
 ### Research Integration (New Directions)
 |- **Video Architecture (CONTAINER IMPLEMENTED)**: Procedural generation from seed pixels, multi-frame state management, infinite maps via noise algorithms
@@ -1232,7 +1232,7 @@ VAMP provides three core capabilities that the Spatial Execution Engine consumes
 
 ---
 
-## Phase 11: Spatial Execution Engine 🟢 NOT STARTED
+## Phase 11: Spatial Execution Engine 🟢 ACTIVE
 
 **Goal**: Build a pixel-native execution engine where software runs from pixel grids using procedural generation, diff-overlay storage, and temporal logging. This is the interpretation layer that uses Visual Audio as the transport layer.
 
@@ -1246,6 +1246,21 @@ Inspired by `/home/jericho/zion/docs/research/485_visual_audio_to_software123.tx
 - **Frames 4+: Temporal Memory** — Each frame is a full state snapshot; history is "seek backward N frames"
 - **Nested Frame Buffers** — Metadata zone + display zone; separate System Time (master playhead) from Media Time (nested video)
 
+### NEW: Spatial Glyph Emulator (2D Spatial ISA)
+
+**Breakthrough (2026-07-19)**: We have implemented a 2D spatial instruction set architecture where programs exist as colored pixels in an image. The CPU fetches instructions from 2D coordinates (x, y) instead of 1D memory addresses, making branches geometric translations in pixel space.
+
+**Key Insight**: MKV frames are massive ROM modules. A spatial glyph CPU can load a frame into VRAM and execute code directly from it. Thousands of spatial CPUs could run concurrently across different texture planes with zero CPU involvement.
+
+**Architecture**:
+- **OpcodeMap**: Maps visual audio wordbase colors to opcodes (LDI, ADD, SUB, MUL, JMP, JZ, CMP, MOV, PRT, HALT)
+- **GlyphAssembler**: Converts assembly text to 2D pixel images where each pixel encodes an instruction or operand
+- **GlyphCPU**: A spatial CPU emulator with 2D program counter, 8 registers, 1KB memory
+
+**Proof of Concept**: `tools/mkv_glyph_emulator.py` successfully executes programs stored as pixels, demonstrating that visual_audio.mkv is no longer just storage—it's executable ROM.
+
+**Documentation**: `docs/SPATIAL_GLYPH_EMULATOR.md` (complete architecture guide)
+
 ### Critical Path from Visual Audio
 
 Visual Audio provides the distribution/boot layer:
@@ -1253,6 +1268,7 @@ Visual Audio provides the distribution/boot layer:
 - Dense codec (3 bytes/pixel) → encode pixel regions as cartridges
 - Cartridge regions (TASK_G001) → spatial MMIO dispatch
 - Provenance (Ed25519 signatures) → secure boot envelope
+- **NEW**: Spatial Glyph Emulator → direct pixel-native execution
 
 ### Container Format Note
 
@@ -1260,6 +1276,7 @@ Do NOT use H.264/MP4 CRF 0 for pixel-exact storage — chroma subsampling corrup
 - FFV1 (lossless video codec)
 - PNG sequence (existing dense-PNG format)
 - `.rts.png` spatial containers (from Geometry OS integration)
+- **NEW**: Direct PNG execution (pixel-encoded programs)
 
 ### Tasks
 
@@ -1276,7 +1293,7 @@ Do NOT use H.264/MP4 CRF 0 for pixel-exact storage — chroma subsampling corrup
   - Dependencies: TASK_SE001
   - Parse Frame 1 seed pixels (8×8 RGBA → 64-bit noise seed); implement Perlin/Simplex noise generator; map noise values to biome palette (rows 8–16) for terrain type determination
   - Receipt: `src/spatial/procedural.py` generates deterministic infinite terrain from pixel seed; same seed produces identical map at any (x, y) coordinate
-  - Test: `python3 tests/test_procedural_gen.py` verifies deterministic output across coordinates; seed encoding/decoding round-trip; biome palette lookup correctness
+  - Test: `python3 tests/test_procedural_gen.py` verifies: deterministic output across coordinates; seed encoding/decoding round-trip; biome palette lookup correctness
   - Status: Complete - 7/7 tests pass. Seed encoding/decoding round-trip works (with fallback for zero), deterministic noise generation (Simplex, octaves), biome palette lookup maps noise → terrain type, same seed + coordinates always produce identical terrain.
 
 - [x] **TASK_SE003**: Diff-overlay storage layer ✅ COMPLETE
@@ -1295,7 +1312,7 @@ Do NOT use H.264/MP4 CRF 0 for pixel-exact storage — chroma subsampling corrup
   - Test: `python3 tests/test_temporal_log.py` verifies: state capture, timeline seek, byte-identical restoration at N ticks back
   - Status: Complete - All 6 tests pass. Read-validate-execute-tick loop functional, seekable timeline works, CRC validation detects corruption, frame format matches dense codec.
 
-- [x] **TASK_SE005**: Nested frame buffer compositing
+- [x] **TASK_SE005**: Nested frame buffer compositing ✅ COMPLETE
   - Priority: MEDIUM
   - Dependencies: TASK_SE001, TASK_I001 (live audio-visual sync)
   - Implement metadata zone (playhead time, volume, FPS) + display zone (video playback sub-region); separate System Time (master execution tick) from Media Time (nested video 24 FPS); blit nested video frames into display zone
@@ -1303,7 +1320,7 @@ Do NOT use H.264/MP4 CRF 0 for pixel-exact storage — chroma subsampling corrup
   - Test: `python3 tests/test_nested_buffer.py` verifies: metadata zone parsing, display zone rendering, time vector independence, seekable Media Time
   - Status: COMPLETE
 
-- [x] **TASK_SE006**: Pixel-token LM integration (Phase 8 → procedural generation)
+- [x] **TASK_SE006**: Pixel-token LM integration (Phase 8 → procedural generation) ✅ COMPLETE
   - Priority: MEDIUM
   - Dependencies: TASK_M001 (pixel tokenizer), TASK_SE002, TASK_M007 (pixel OS input channel)
   - Note: TASK_M006 and TASK_M007 are COMPLETE and no longer block this task
@@ -1312,19 +1329,67 @@ Do NOT use H.264/MP4 CRF 0 for pixel-exact storage — chroma subsampling corrup
   - Test: `python3 tests/test_lm_procedural.py` verifies: LM → seed/pixel conversion, procedural engine consumes LM output, same LM prompt produces identical terrain
   - Status: COMPLETE
 
+- [x] **TASK_SE007**: Spatial Glyph Emulator implementation ✅ COMPLETE
+  - Priority: HIGH
+  - Dependencies: None (standalone proof of concept)
+  - Breakthrough (2026-07-19): 2D spatial instruction set architecture where programs exist as colored pixels in images. CPU fetches instructions from 2D coordinates (x, y) instead of 1D memory addresses, making branches geometric translations in pixel space.
+  - Receipt: `tools/mkv_glyph_emulator.py` (OpcodeMap, GlyphAssembler, GlyphCPU), `tools/test_glyph_simple.py` (working demo), `tools/test_glyph_trace.py` (detailed trace), `tools/wgsl_spatial_glyph_engine.py` (WGSL prototype)
+  - Test: `python3 tools/mkv_glyph_emulator.py` executes loop counter program, prints output [0, 1], saves demo_glyph_program.png
+  - Documentation: `docs/SPATIAL_GLYPH_EMULATOR.md` (complete architecture guide, 400+ lines)
+  - Status: Complete - Python emulator working with 10 opcodes (LDI, ADD, SUB, MUL, JMP, JZ, CMP, MOV, PRT, HALT). 2D spatial PC, 8 registers, 1KB memory. Visual audio wordbase integration for opcode colors. WGSL GPU prototype ready for massive parallelism.
+
+- [ ] **TASK_SE008**: Expand ISA to Turing-complete 🟡 PLANNED
+  - Priority: HIGH
+  - Dependencies: TASK_SE007
+  - Add missing opcodes for full computation: LD/ST (memory load/store), AND/OR/XOR/NOT/SHL/SHR (bitwise), PUSH/POP/CALL/RET (stack), JNZ/JG/JL/JGE/JLE (conditional jumps)
+  - Receipt: Extended OpcodeMap with ~20 opcodes; assembly syntax documentation; example programs demonstrating stack operations, memory access, bitwise logic
+  - Test: Complex programs (Fibonacci, sorting, recursive functions) execute correctly on expanded ISA
+  - Estimated Time: 1-2 days
+
+- [ ] **TASK_SE009**: WGSL GPU-native execution engine 🟡 PLANNED
+  - Priority: HIGH
+  - Dependencies: TASK_SE008
+  - Port Python fetch-decode-execute loop to WGSL compute shader for massive parallelism. Thousands of spatial CPUs execute concurrently across texture planes with zero CPU involvement.
+  - Receipt: `tools/wgsl_spatial_glyph_engine.py` fully functional (load program image, create CPU instances, run compute shader, read output). Performance benchmarks (instructions/sec, CPU count scaling).
+  - Test: Run 1000+ spatial CPUs concurrently on GPU; verify identical output to Python emulator; measure throughput improvement
+  - Estimated Time: 2-3 days (wgpu integration, shader debugging, performance tuning)
+
+- [ ] **TASK_SE010**: Geometry OS hypervisor syscall integration 🟡 PLANNED
+  - Priority: MEDIUM
+  - Dependencies: TASK_SE009
+  - Add SYSCALL opcode to invoke Geometry OS hypervisor syscalls from spatial programs. Enable pixel-native file I/O, Memory Palace persistence, spatial OS services.
+  - Receipt: SYSCALL opcode implementation; syscall number mapping; integration with Geometry OS hypervisor bridge
+  - Test: Spatial program writes to Memory Palace via syscall; file I/O operations execute correctly
+  - Estimated Time: 1-2 days
+
+- [ ] **TASK_SE011**: Error correction layer (Reed-Solomon) 🟡 PLANNED
+  - Priority: MEDIUM
+  - Dependencies: TASK_SE007
+  - Add Reed-Solomon error correction for noisy channels. Encode programs with ECC parity symbols; decode with correction capability.
+  - Receipt: ECC encoding/decoding integrated into GlyphAssembler/GlyphCPU; corruption recovery tests (5% bit errors)
+  - Test: Corrupted program image (5% errors) decodes and executes correctly; ECC overhead measured
+  - Estimated Time: 1 day
+
 ### Success Criteria
 
-- A few dozen seed pixels (8×8 RGBA) generate infinite, deterministic terrain
-- Modifications stored as sparse diff overlay, never mutating procedural base
-- Full state snapshots enable seekable timeline: "restore to tick N-50"
-- Nested frame buffers support video-in-video playback with independent time vectors
-- Phase 8 pixel-token LM generates seeds/palettes for procedural content
+- ✅ A few dozen seed pixels (8×8 RGBA) generate infinite, deterministic terrain
+- ✅ Modifications stored as sparse diff overlay, never mutating procedural base
+- ✅ Full state snapshots enable seekable timeline: "restore to tick N-50"
+- ✅ Nested frame buffers support video-in-video playback with independent time vectors
+- ✅ Phase 8 pixel-token LM generates seeds/palettes for procedural content
+- ✅ **NEW**: 2D spatial glyph CPU executes programs directly from pixel images (10 opcodes working)
+- 🟡 Turing-complete ISA (memory, stack, bitwise operations)
+- 🟡 WGSL GPU-native execution (thousands of concurrent CPUs)
+- 🟡 Geometry OS hypervisor syscall integration
+- 🟡 Reed-Solomon error correction for robust pixel transmission
 
 ### Integration with Existing Phases
 
 - Phase 7 (Compositional Layer): Nested frame buffer compositing provides concrete design for behavior-opcode composition
 - Phase 9 (Interactive Visual Interfaces): Metadata/display zone pattern enables tile manipulation and visual editing
 - VAMP (Phase 10): Temporal logging gives Memory Palace time dimension for free; diff-overlay matches cartridge region model
+- **NEW**: Spatial Glyph Emulator provides direct execution engine for pixel-encoded software stored in VAMP
+- **NEW**: MKV frames are executable ROM — visual_audio.mkv becomes a self-executing container
 
 ### Performance Targets
 

@@ -1,0 +1,1072 @@
+{
+  "passed": [
+    "test_large_text/roadmap_section.md",
+    "test_binary/all_bytes.bin",
+    "test_batch_tools/dense_encoder_video.py",
+    "test_batch_tools/tile_editor.py",
+    "test_batch_tools/pixel_lm_generate.py",
+    "test_batch_tools/container_audit_loop.py",
+    "test_batch_tools/train_pixel_lm.py",
+    "test_batch_tools/pixel_lm_generate_placeholder.py",
+    "test_batch_tools/create_timeline_frame.py",
+    "test_batch_tools/spoken_screen.py",
+    "test_batch_tools/benchmark_ffv1.py",
+    "test_batch_tools/verify_frame_structure.py",
+    "test_batch_tools/canvas_demo.py",
+    "test_batch_tools/compose.py",
+    "test_batch_tools/boot_over_air.py",
+    "test_batch_tools/accessible_ui.py",
+    "test_batch_tools/color_explorer.py",
+    "test_batch_tools/phoneme_redundancy_demo.py",
+    "test_batch_tools/text_to_visual_audio.py",
+    "test_batch_tools/test_multilingual.py",
+    "test_batch_tools/canvas_bridge.py",
+    "test_batch_tools/word_compiler.py",
+    "test_batch_tools/phonemes.py",
+    "test_batch_tools/ollama_prompt.py",
+    "test_batch_tools/xsampa_to_arpabet.py",
+    "test_batch_tools/generate_tile.py",
+    "test_batch_tools/simple_dual_band.py",
+    "test_batch_tools/dense_encoder_multitile.py",
+    "test_batch_tools/dense_encoder_sandbox.py",
+    "test_batch_tools/dual_band.py",
+    "test_batch_tools/debug_spectral.py",
+    "test_batch_tools/create_test_frame.py",
+    "test_batch_tools/test_filters.py",
+    "test_batch_tools/speak.py",
+    "test_batch_tools/emphasis_demo.py",
+    "test_batch_tools/vamp_audio_export.py",
+    "test_batch_tools/pixel_os_listener.py",
+    "test_batch_tools/codec_diff.py",
+    "test_batch_tools/ollama_update_protocol.py",
+    "test_batch_tools/dual_band_sonic_code.py",
+    "test_batch_tools/create_diff_overlay.py",
+    "test_batch_tools/visual_player.py",
+    "test_batch_tools/boot_manifest.py",
+    "test_batch_tools/memory_to_png.py",
+    "test_batch_tools/sonic_code_translator.py",
+    "test_batch_tools/wordbase.py",
+    "test_batch_tools/test_pixel_os_daemon.py",
+    "test_batch_tools/verify_i001.py",
+    "test_batch_tools/vamp_query.py",
+    "test_batch_tools/create_state_frame.py",
+    "test_batch_tools/batch_to_container.py",
+    "test_batch_tools/speak_ecc.py",
+    "test_batch_tools/debug_frames.py",
+    "test_batch_tools/wordbase_compat.py",
+    "test_batch_tools/mkv_to_palace.py",
+    "test_batch_tools/va_container.py",
+    "test_batch_tools/test_payload_suite.py",
+    "test_batch_tools/build_pixel_corpus.py",
+    "test_batch_tools/upic_play.py",
+    "test_batch_tools/dense_encoder.py",
+    "test_batch_tools/sonic_codec.py",
+    "test_batch_tools/pixel_screen.py",
+    "test_mixed/markdown/README.md",
+    "test_mixed/text/requirements.txt",
+    "test_mixed/text/.gitignore"
+  ],
+  "failed": [],
+  "metrics": {
+    "container": {
+      "entry_count": 110,
+      "container_size_bytes": 1824526,
+      "container_size_mb": 1.74,
+      "role_distribution": {
+        "bootstrap": 9,
+        "     spec": 5,
+        " timeline": 1,
+        "    codec": 1,
+        "    state": 1,
+        "    cache": 1,
+        "  content": 70,
+        "   engine": 1,
+        "     test": 5,
+        " analysis": 16
+      }
+    },
+    "total_test_time": 51.98937249183655
+  },
+  "payloads_tested": [
+    {
+      "category": "large_text",
+      "name": "test_large_text/roadmap_section.md",
+      "metrics": {
+        "name": "test_large_text/roadmap_section.md",
+        "original_size": 65718,
+        "extracted_size": 65718,
+        "extract_time_ms": 206.27,
+        "original_hash": "75e45990decde59244b314635984564d3ff7a79b5c3425621ae4c9553247f82b",
+        "extracted_hash": "75e45990decde59244b314635984564d3ff7a79b5c3425621ae4c9553247f82b",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "binary_data",
+      "name": "test_binary/all_bytes.bin",
+      "metrics": {
+        "name": "test_binary/all_bytes.bin",
+        "original_size": 25600,
+        "extracted_size": 25600,
+        "extract_time_ms": 239.68,
+        "original_hash": "22c27b021752596140145a93194d9cdf33b0b1b454f50fd1b430491eb3eb3cb9",
+        "extracted_hash": "22c27b021752596140145a93194d9cdf33b0b1b454f50fd1b430491eb3eb3cb9",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true,
+        "binary_completeness": true,
+        "unique_bytes": 256
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/dense_encoder_video.py",
+      "metrics": {
+        "name": "test_batch_tools/dense_encoder_video.py",
+        "original_size": 20352,
+        "extracted_size": 20352,
+        "extract_time_ms": 229.4,
+        "original_hash": "41b3ba73ae2ead2429b73354c606761f1e2dc4e08916c35711d1cb164ea02031",
+        "extracted_hash": "41b3ba73ae2ead2429b73354c606761f1e2dc4e08916c35711d1cb164ea02031",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/tile_editor.py",
+      "metrics": {
+        "name": "test_batch_tools/tile_editor.py",
+        "original_size": 22681,
+        "extracted_size": 22681,
+        "extract_time_ms": 214.54,
+        "original_hash": "8fdfa83fc0163f98eaae2c676e165495e3ca56f7f197ce43d3149b1c6e013968",
+        "extracted_hash": "8fdfa83fc0163f98eaae2c676e165495e3ca56f7f197ce43d3149b1c6e013968",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/pixel_lm_generate.py",
+      "metrics": {
+        "name": "test_batch_tools/pixel_lm_generate.py",
+        "original_size": 14668,
+        "extracted_size": 14668,
+        "extract_time_ms": 223.77,
+        "original_hash": "b7f931b360ee02bb8b7ad9b05d8ae7198fa8b5ea882319b5b41d549d18d7bca9",
+        "extracted_hash": "b7f931b360ee02bb8b7ad9b05d8ae7198fa8b5ea882319b5b41d549d18d7bca9",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/container_audit_loop.py",
+      "metrics": {
+        "name": "test_batch_tools/container_audit_loop.py",
+        "original_size": 18937,
+        "extracted_size": 18937,
+        "extract_time_ms": 235.98,
+        "original_hash": "9cad2b3eb1adc8d0ca1ea88cef5d865105c7d9ed0d9b3333c565fc08fd152844",
+        "extracted_hash": "9cad2b3eb1adc8d0ca1ea88cef5d865105c7d9ed0d9b3333c565fc08fd152844",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/train_pixel_lm.py",
+      "metrics": {
+        "name": "test_batch_tools/train_pixel_lm.py",
+        "original_size": 23800,
+        "extracted_size": 23800,
+        "extract_time_ms": 220.71,
+        "original_hash": "4bc3e3755564baa3ec66323c8f9354b398cdcebaad7ef0e22a6be9e6d590d493",
+        "extracted_hash": "4bc3e3755564baa3ec66323c8f9354b398cdcebaad7ef0e22a6be9e6d590d493",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/pixel_lm_generate_placeholder.py",
+      "metrics": {
+        "name": "test_batch_tools/pixel_lm_generate_placeholder.py",
+        "original_size": 2064,
+        "extracted_size": 2064,
+        "extract_time_ms": 215.02,
+        "original_hash": "3f30c2e27f6b0647f49c0dcac024af5cacdc087f67660ca7f47d042d7c2841c9",
+        "extracted_hash": "3f30c2e27f6b0647f49c0dcac024af5cacdc087f67660ca7f47d042d7c2841c9",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/create_timeline_frame.py",
+      "metrics": {
+        "name": "test_batch_tools/create_timeline_frame.py",
+        "original_size": 2553,
+        "extracted_size": 2553,
+        "extract_time_ms": 212.42,
+        "original_hash": "5de41b600e4508240df5bb667052b873d2080fe50de7b7192ef319efee6cddc7",
+        "extracted_hash": "5de41b600e4508240df5bb667052b873d2080fe50de7b7192ef319efee6cddc7",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/spoken_screen.py",
+      "metrics": {
+        "name": "test_batch_tools/spoken_screen.py",
+        "original_size": 10025,
+        "extracted_size": 10025,
+        "extract_time_ms": 247.25,
+        "original_hash": "48020e6cdd4f6ad91a4f8e1b8b6ded6998a008d39d4162b67addafa4c783cedb",
+        "extracted_hash": "48020e6cdd4f6ad91a4f8e1b8b6ded6998a008d39d4162b67addafa4c783cedb",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/benchmark_ffv1.py",
+      "metrics": {
+        "name": "test_batch_tools/benchmark_ffv1.py",
+        "original_size": 15469,
+        "extracted_size": 15469,
+        "extract_time_ms": 234.5,
+        "original_hash": "f406fb23f2792e87c99abdc3443c37000e80765df0e2ab6a81b05954f2c7b818",
+        "extracted_hash": "f406fb23f2792e87c99abdc3443c37000e80765df0e2ab6a81b05954f2c7b818",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/verify_frame_structure.py",
+      "metrics": {
+        "name": "test_batch_tools/verify_frame_structure.py",
+        "original_size": 2152,
+        "extracted_size": 2152,
+        "extract_time_ms": 250.53,
+        "original_hash": "7e27a37b30877d20ff06182a416949e17700deafae89e74d0465f35397a37f70",
+        "extracted_hash": "7e27a37b30877d20ff06182a416949e17700deafae89e74d0465f35397a37f70",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/canvas_demo.py",
+      "metrics": {
+        "name": "test_batch_tools/canvas_demo.py",
+        "original_size": 3407,
+        "extracted_size": 3407,
+        "extract_time_ms": 223.79,
+        "original_hash": "7571455db95dc1b89360b5f1b6b87e7981d8fefd4552451cec7fe8b147697f55",
+        "extracted_hash": "7571455db95dc1b89360b5f1b6b87e7981d8fefd4552451cec7fe8b147697f55",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/compose.py",
+      "metrics": {
+        "name": "test_batch_tools/compose.py",
+        "original_size": 8384,
+        "extracted_size": 8384,
+        "extract_time_ms": 231.54,
+        "original_hash": "e1612834eb418aaa382a0a2107d7f0be2f54332f3f1557938aabb8a5a4441bb6",
+        "extracted_hash": "e1612834eb418aaa382a0a2107d7f0be2f54332f3f1557938aabb8a5a4441bb6",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/boot_over_air.py",
+      "metrics": {
+        "name": "test_batch_tools/boot_over_air.py",
+        "original_size": 6862,
+        "extracted_size": 6862,
+        "extract_time_ms": 258.92,
+        "original_hash": "6c84f773c6da1e3de43488e3c10a182c752ac23d1017bd7ada86c8805b2ff93f",
+        "extracted_hash": "6c84f773c6da1e3de43488e3c10a182c752ac23d1017bd7ada86c8805b2ff93f",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/accessible_ui.py",
+      "metrics": {
+        "name": "test_batch_tools/accessible_ui.py",
+        "original_size": 6689,
+        "extracted_size": 6689,
+        "extract_time_ms": 248.97,
+        "original_hash": "ec5b59e150c46fd7581c425ae8d43e9f1f200a7f6399ba46a5cdd60bd9ebff67",
+        "extracted_hash": "ec5b59e150c46fd7581c425ae8d43e9f1f200a7f6399ba46a5cdd60bd9ebff67",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/color_explorer.py",
+      "metrics": {
+        "name": "test_batch_tools/color_explorer.py",
+        "original_size": 15410,
+        "extracted_size": 15410,
+        "extract_time_ms": 231.57,
+        "original_hash": "a7c941ac5ef25c9c3efd313fec0bcb1f1a8d1d583ef2a472e8135f55768a70b4",
+        "extracted_hash": "a7c941ac5ef25c9c3efd313fec0bcb1f1a8d1d583ef2a472e8135f55768a70b4",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/phoneme_redundancy_demo.py",
+      "metrics": {
+        "name": "test_batch_tools/phoneme_redundancy_demo.py",
+        "original_size": 9509,
+        "extracted_size": 9509,
+        "extract_time_ms": 233.52,
+        "original_hash": "2e35a57a83894a773f8cf02a00ce69cbcde66dc3690a293b49b5ebe4df534cbe",
+        "extracted_hash": "2e35a57a83894a773f8cf02a00ce69cbcde66dc3690a293b49b5ebe4df534cbe",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/text_to_visual_audio.py",
+      "metrics": {
+        "name": "test_batch_tools/text_to_visual_audio.py",
+        "original_size": 4053,
+        "extracted_size": 4053,
+        "extract_time_ms": 247.85,
+        "original_hash": "cc88a2c0f52209c7e0e0aae48aa2221a30c8ce5364ea8c5df1b035389d732eef",
+        "extracted_hash": "cc88a2c0f52209c7e0e0aae48aa2221a30c8ce5364ea8c5df1b035389d732eef",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/test_multilingual.py",
+      "metrics": {
+        "name": "test_batch_tools/test_multilingual.py",
+        "original_size": 2727,
+        "extracted_size": 2727,
+        "extract_time_ms": 232.84,
+        "original_hash": "0a1d4df62250dabd48efd6ffecc663f1616bb496bf076d6b6a6283c5319d2a55",
+        "extracted_hash": "0a1d4df62250dabd48efd6ffecc663f1616bb496bf076d6b6a6283c5319d2a55",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/canvas_bridge.py",
+      "metrics": {
+        "name": "test_batch_tools/canvas_bridge.py",
+        "original_size": 4848,
+        "extracted_size": 4848,
+        "extract_time_ms": 240.23,
+        "original_hash": "1aafc72c18caa8701f1400f22a278bebc8d3b4087d10ef74a05af64ac1c95c46",
+        "extracted_hash": "1aafc72c18caa8701f1400f22a278bebc8d3b4087d10ef74a05af64ac1c95c46",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/word_compiler.py",
+      "metrics": {
+        "name": "test_batch_tools/word_compiler.py",
+        "original_size": 17796,
+        "extracted_size": 17796,
+        "extract_time_ms": 248.56,
+        "original_hash": "ee3629b2e90f8cc5ac78ad9d449a683f0e7ec5c7a23a0a84fbf1fddc74fc0c25",
+        "extracted_hash": "ee3629b2e90f8cc5ac78ad9d449a683f0e7ec5c7a23a0a84fbf1fddc74fc0c25",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/phonemes.py",
+      "metrics": {
+        "name": "test_batch_tools/phonemes.py",
+        "original_size": 10269,
+        "extracted_size": 10269,
+        "extract_time_ms": 232.72,
+        "original_hash": "85679f3e48e68ccd782b9f0cf48bba717f6310a8a048f2226da17e5d47cb48cf",
+        "extracted_hash": "85679f3e48e68ccd782b9f0cf48bba717f6310a8a048f2226da17e5d47cb48cf",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/ollama_prompt.py",
+      "metrics": {
+        "name": "test_batch_tools/ollama_prompt.py",
+        "original_size": 8584,
+        "extracted_size": 8584,
+        "extract_time_ms": 232.81,
+        "original_hash": "668b1dc6fe044036d85f3cd53d1a2c179df2ca6c2ee2fb98dcb07e648c78c3a2",
+        "extracted_hash": "668b1dc6fe044036d85f3cd53d1a2c179df2ca6c2ee2fb98dcb07e648c78c3a2",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/xsampa_to_arpabet.py",
+      "metrics": {
+        "name": "test_batch_tools/xsampa_to_arpabet.py",
+        "original_size": 6585,
+        "extracted_size": 6585,
+        "extract_time_ms": 234.64,
+        "original_hash": "cc84f99fca96c53f182763850c34a2e65547188592ad63fba87ea99b1555e499",
+        "extracted_hash": "cc84f99fca96c53f182763850c34a2e65547188592ad63fba87ea99b1555e499",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/generate_tile.py",
+      "metrics": {
+        "name": "test_batch_tools/generate_tile.py",
+        "original_size": 1440,
+        "extracted_size": 1440,
+        "extract_time_ms": 265.11,
+        "original_hash": "5c0fa14e627c3ac7f129d5035640725b51967dc8bb1c7d3d836d6b59b0d86829",
+        "extracted_hash": "5c0fa14e627c3ac7f129d5035640725b51967dc8bb1c7d3d836d6b59b0d86829",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/simple_dual_band.py",
+      "metrics": {
+        "name": "test_batch_tools/simple_dual_band.py",
+        "original_size": 2537,
+        "extracted_size": 2537,
+        "extract_time_ms": 243.77,
+        "original_hash": "4e9f6250f041ced8e2513ac98227d11c12932cfe84b751285437c5c00c6c648e",
+        "extracted_hash": "4e9f6250f041ced8e2513ac98227d11c12932cfe84b751285437c5c00c6c648e",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/dense_encoder_multitile.py",
+      "metrics": {
+        "name": "test_batch_tools/dense_encoder_multitile.py",
+        "original_size": 11226,
+        "extracted_size": 11226,
+        "extract_time_ms": 260.3,
+        "original_hash": "504f41e7bee7b8aa80d65479cd8cb237a378159ef174e1c75b16fa5294e93ada",
+        "extracted_hash": "504f41e7bee7b8aa80d65479cd8cb237a378159ef174e1c75b16fa5294e93ada",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/dense_encoder_sandbox.py",
+      "metrics": {
+        "name": "test_batch_tools/dense_encoder_sandbox.py",
+        "original_size": 10562,
+        "extracted_size": 10562,
+        "extract_time_ms": 244.01,
+        "original_hash": "cae6941012794a56d2a0a9a568f97c3a90bf682230f2c2027eaa88af45cd4751",
+        "extracted_hash": "cae6941012794a56d2a0a9a568f97c3a90bf682230f2c2027eaa88af45cd4751",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/dual_band.py",
+      "metrics": {
+        "name": "test_batch_tools/dual_band.py",
+        "original_size": 5348,
+        "extracted_size": 5348,
+        "extract_time_ms": 263.71,
+        "original_hash": "979ff13a0e73345b003ea148f507e1319e283ac36e2a1d9aa55435893a8af9a1",
+        "extracted_hash": "979ff13a0e73345b003ea148f507e1319e283ac36e2a1d9aa55435893a8af9a1",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/debug_spectral.py",
+      "metrics": {
+        "name": "test_batch_tools/debug_spectral.py",
+        "original_size": 4876,
+        "extracted_size": 4876,
+        "extract_time_ms": 263.43,
+        "original_hash": "421f77b4705c0a12c6731e4c83ab238fab43297aece6b87a523e5848ca2ed460",
+        "extracted_hash": "421f77b4705c0a12c6731e4c83ab238fab43297aece6b87a523e5848ca2ed460",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/create_test_frame.py",
+      "metrics": {
+        "name": "test_batch_tools/create_test_frame.py",
+        "original_size": 2690,
+        "extracted_size": 2690,
+        "extract_time_ms": 252.98,
+        "original_hash": "f393b5d90714da6d98ce599fe86302d163703137c0cc77b0a483155c577ddc17",
+        "extracted_hash": "f393b5d90714da6d98ce599fe86302d163703137c0cc77b0a483155c577ddc17",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/test_filters.py",
+      "metrics": {
+        "name": "test_batch_tools/test_filters.py",
+        "original_size": 8428,
+        "extracted_size": 8428,
+        "extract_time_ms": 255.02,
+        "original_hash": "12c4c103998ff929da13f77b8652514700bb656c766afadcd65075b239ebfac9",
+        "extracted_hash": "12c4c103998ff929da13f77b8652514700bb656c766afadcd65075b239ebfac9",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/speak.py",
+      "metrics": {
+        "name": "test_batch_tools/speak.py",
+        "original_size": 20898,
+        "extracted_size": 20898,
+        "extract_time_ms": 268.68,
+        "original_hash": "6023c3284a1f7c3e023d3145c4fcf1b48c577a562fb83b5f95155c6ce3602ae4",
+        "extracted_hash": "6023c3284a1f7c3e023d3145c4fcf1b48c577a562fb83b5f95155c6ce3602ae4",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/emphasis_demo.py",
+      "metrics": {
+        "name": "test_batch_tools/emphasis_demo.py",
+        "original_size": 5431,
+        "extracted_size": 5431,
+        "extract_time_ms": 276.18,
+        "original_hash": "2cf64f2e90729f73a4338739ef1cee0267d5cbed670f74f00c941ba51f7291e8",
+        "extracted_hash": "2cf64f2e90729f73a4338739ef1cee0267d5cbed670f74f00c941ba51f7291e8",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/vamp_audio_export.py",
+      "metrics": {
+        "name": "test_batch_tools/vamp_audio_export.py",
+        "original_size": 11734,
+        "extracted_size": 11734,
+        "extract_time_ms": 266.84,
+        "original_hash": "7f9ad3b6b8087ca16509ba5f469f451b81499bc7adee4b54a4c6d86e396fc612",
+        "extracted_hash": "7f9ad3b6b8087ca16509ba5f469f451b81499bc7adee4b54a4c6d86e396fc612",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/pixel_os_listener.py",
+      "metrics": {
+        "name": "test_batch_tools/pixel_os_listener.py",
+        "original_size": 15582,
+        "extracted_size": 15582,
+        "extract_time_ms": 275.18,
+        "original_hash": "910c76a63dfcbb72bfaad58c62c14d7b8c3d24bf65a197cc71b4cbefe31545fb",
+        "extracted_hash": "910c76a63dfcbb72bfaad58c62c14d7b8c3d24bf65a197cc71b4cbefe31545fb",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/codec_diff.py",
+      "metrics": {
+        "name": "test_batch_tools/codec_diff.py",
+        "original_size": 46,
+        "extracted_size": 46,
+        "extract_time_ms": 268.98,
+        "original_hash": "1b76d41e80e039193a6c4feca46718e0c00737877217c1a093584815f4e12238",
+        "extracted_hash": "1b76d41e80e039193a6c4feca46718e0c00737877217c1a093584815f4e12238",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/ollama_update_protocol.py",
+      "metrics": {
+        "name": "test_batch_tools/ollama_update_protocol.py",
+        "original_size": 12826,
+        "extracted_size": 12826,
+        "extract_time_ms": 264.05,
+        "original_hash": "089097ee5b5bc4129ccd345d35db1edd9203b3f9f3addeeb7c4d7701bee30b19",
+        "extracted_hash": "089097ee5b5bc4129ccd345d35db1edd9203b3f9f3addeeb7c4d7701bee30b19",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/dual_band_sonic_code.py",
+      "metrics": {
+        "name": "test_batch_tools/dual_band_sonic_code.py",
+        "original_size": 9251,
+        "extracted_size": 9251,
+        "extract_time_ms": 258.4,
+        "original_hash": "ca76aa8e98d2847773ec37826df72d982b69b0c159b65aeed6b97ac8fb7c038b",
+        "extracted_hash": "ca76aa8e98d2847773ec37826df72d982b69b0c159b65aeed6b97ac8fb7c038b",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/create_diff_overlay.py",
+      "metrics": {
+        "name": "test_batch_tools/create_diff_overlay.py",
+        "original_size": 2352,
+        "extracted_size": 2352,
+        "extract_time_ms": 250.04,
+        "original_hash": "a74824298a06a994c4ed9fcd99a19e291497597075eed47372453c538fc1db16",
+        "extracted_hash": "a74824298a06a994c4ed9fcd99a19e291497597075eed47372453c538fc1db16",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/visual_player.py",
+      "metrics": {
+        "name": "test_batch_tools/visual_player.py",
+        "original_size": 20383,
+        "extracted_size": 20383,
+        "extract_time_ms": 261.07,
+        "original_hash": "46559d9ec5123a385a7af4a5fe65ac9994b97fd22f56b277eba6a10f57cf37ae",
+        "extracted_hash": "46559d9ec5123a385a7af4a5fe65ac9994b97fd22f56b277eba6a10f57cf37ae",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/boot_manifest.py",
+      "metrics": {
+        "name": "test_batch_tools/boot_manifest.py",
+        "original_size": 7137,
+        "extracted_size": 7137,
+        "extract_time_ms": 264.55,
+        "original_hash": "3fc16b27f41c19b302deec856266fed8bf7f98bcefc17e1e05c651285778b41d",
+        "extracted_hash": "3fc16b27f41c19b302deec856266fed8bf7f98bcefc17e1e05c651285778b41d",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/memory_to_png.py",
+      "metrics": {
+        "name": "test_batch_tools/memory_to_png.py",
+        "original_size": 4609,
+        "extracted_size": 4609,
+        "extract_time_ms": 259.89,
+        "original_hash": "00ea6282d0574011876702937a9ffa2483214ee4bff2265c58d7738572e5e5a8",
+        "extracted_hash": "00ea6282d0574011876702937a9ffa2483214ee4bff2265c58d7738572e5e5a8",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/sonic_code_translator.py",
+      "metrics": {
+        "name": "test_batch_tools/sonic_code_translator.py",
+        "original_size": 21521,
+        "extracted_size": 21521,
+        "extract_time_ms": 264.01,
+        "original_hash": "f553143e9f7d2e5402c97011d46acf6c129205d8147b1c5736ab27a4fc3632ad",
+        "extracted_hash": "f553143e9f7d2e5402c97011d46acf6c129205d8147b1c5736ab27a4fc3632ad",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/wordbase.py",
+      "metrics": {
+        "name": "test_batch_tools/wordbase.py",
+        "original_size": 11861,
+        "extracted_size": 11861,
+        "extract_time_ms": 270.91,
+        "original_hash": "418aaaab7f26f125b395b7406adfab652a964f8b477f96ff0ce3869391c85fd1",
+        "extracted_hash": "418aaaab7f26f125b395b7406adfab652a964f8b477f96ff0ce3869391c85fd1",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/test_pixel_os_daemon.py",
+      "metrics": {
+        "name": "test_batch_tools/test_pixel_os_daemon.py",
+        "original_size": 5019,
+        "extracted_size": 5019,
+        "extract_time_ms": 283.74,
+        "original_hash": "30c9c2ac619d74efab8825b70c3129c3d78397c2ca3ae3583ca5975f78d60cc8",
+        "extracted_hash": "30c9c2ac619d74efab8825b70c3129c3d78397c2ca3ae3583ca5975f78d60cc8",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/verify_i001.py",
+      "metrics": {
+        "name": "test_batch_tools/verify_i001.py",
+        "original_size": 4845,
+        "extracted_size": 4845,
+        "extract_time_ms": 272.94,
+        "original_hash": "fb6ee01a1e7e9865ab8bfd5524b95dc7cf7637b27ba232f7bcd46570c654ba8a",
+        "extracted_hash": "fb6ee01a1e7e9865ab8bfd5524b95dc7cf7637b27ba232f7bcd46570c654ba8a",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/vamp_query.py",
+      "metrics": {
+        "name": "test_batch_tools/vamp_query.py",
+        "original_size": 4167,
+        "extracted_size": 4167,
+        "extract_time_ms": 258.3,
+        "original_hash": "391b192aa2961886a383eedfb876bfdb4a8be6589a68d4929c80fa0d5fec27b0",
+        "extracted_hash": "391b192aa2961886a383eedfb876bfdb4a8be6589a68d4929c80fa0d5fec27b0",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/create_state_frame.py",
+      "metrics": {
+        "name": "test_batch_tools/create_state_frame.py",
+        "original_size": 2823,
+        "extracted_size": 2823,
+        "extract_time_ms": 285.84,
+        "original_hash": "56af04a3561f34a42f5d8d35e10c76592c36915f537fa4613d64e0a18d884e14",
+        "extracted_hash": "56af04a3561f34a42f5d8d35e10c76592c36915f537fa4613d64e0a18d884e14",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/batch_to_container.py",
+      "metrics": {
+        "name": "test_batch_tools/batch_to_container.py",
+        "original_size": 6377,
+        "extracted_size": 6377,
+        "extract_time_ms": 279.78,
+        "original_hash": "cc18c3fce0bea9656794e25212caa2498dbbc5eb198c4503391447d965f66160",
+        "extracted_hash": "cc18c3fce0bea9656794e25212caa2498dbbc5eb198c4503391447d965f66160",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/speak_ecc.py",
+      "metrics": {
+        "name": "test_batch_tools/speak_ecc.py",
+        "original_size": 7125,
+        "extracted_size": 7125,
+        "extract_time_ms": 280.53,
+        "original_hash": "273c8d40f7389ded8c33de34ed83d446d004273cbd36193d7ea0f4f38686cb27",
+        "extracted_hash": "273c8d40f7389ded8c33de34ed83d446d004273cbd36193d7ea0f4f38686cb27",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/debug_frames.py",
+      "metrics": {
+        "name": "test_batch_tools/debug_frames.py",
+        "original_size": 3585,
+        "extracted_size": 3585,
+        "extract_time_ms": 279.14,
+        "original_hash": "259b484152ea37370ae40cbca72588bd457cf9bbfe5ba4cf05523acdc7b8624f",
+        "extracted_hash": "259b484152ea37370ae40cbca72588bd457cf9bbfe5ba4cf05523acdc7b8624f",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/wordbase_compat.py",
+      "metrics": {
+        "name": "test_batch_tools/wordbase_compat.py",
+        "original_size": 18174,
+        "extracted_size": 18174,
+        "extract_time_ms": 281.62,
+        "original_hash": "74162d3af0dd4b610e088fc2993dca03771ddcd0aef23a0ddbf4603441d32435",
+        "extracted_hash": "74162d3af0dd4b610e088fc2993dca03771ddcd0aef23a0ddbf4603441d32435",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/mkv_to_palace.py",
+      "metrics": {
+        "name": "test_batch_tools/mkv_to_palace.py",
+        "original_size": 5860,
+        "extracted_size": 5860,
+        "extract_time_ms": 288.74,
+        "original_hash": "734e34c2cfd3de396f77992cbddcc477db02df37e82b38400efa43f2f1fd8b62",
+        "extracted_hash": "734e34c2cfd3de396f77992cbddcc477db02df37e82b38400efa43f2f1fd8b62",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/va_container.py",
+      "metrics": {
+        "name": "test_batch_tools/va_container.py",
+        "original_size": 18752,
+        "extracted_size": 18752,
+        "extract_time_ms": 288.2,
+        "original_hash": "2d5432f3427be6f2c273a1ba4f7364dd712e1dea6b9c0d3443d8b0edd533fc41",
+        "extracted_hash": "2d5432f3427be6f2c273a1ba4f7364dd712e1dea6b9c0d3443d8b0edd533fc41",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/test_payload_suite.py",
+      "metrics": {
+        "name": "test_batch_tools/test_payload_suite.py",
+        "original_size": 19950,
+        "extracted_size": 19950,
+        "extract_time_ms": 267.56,
+        "original_hash": "4fdc0f42fb9ddf8634d646d9a1d3ba8c17290a9b6075f9ae0b25bf08696b9619",
+        "extracted_hash": "4fdc0f42fb9ddf8634d646d9a1d3ba8c17290a9b6075f9ae0b25bf08696b9619",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/build_pixel_corpus.py",
+      "metrics": {
+        "name": "test_batch_tools/build_pixel_corpus.py",
+        "original_size": 718,
+        "extracted_size": 718,
+        "extract_time_ms": 273.53,
+        "original_hash": "4c4a830af6c78675d97106e95ea72c16a916f85fffb2aae2c99ea89fbd5961c4",
+        "extracted_hash": "4c4a830af6c78675d97106e95ea72c16a916f85fffb2aae2c99ea89fbd5961c4",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/upic_play.py",
+      "metrics": {
+        "name": "test_batch_tools/upic_play.py",
+        "original_size": 11261,
+        "extracted_size": 11261,
+        "extract_time_ms": 272.74,
+        "original_hash": "ea784b91fa7398773c93a1e5295004cb0d5e1b0998d17f28def0289f3ed41089",
+        "extracted_hash": "ea784b91fa7398773c93a1e5295004cb0d5e1b0998d17f28def0289f3ed41089",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/dense_encoder.py",
+      "metrics": {
+        "name": "test_batch_tools/dense_encoder.py",
+        "original_size": 10775,
+        "extracted_size": 10775,
+        "extract_time_ms": 278.35,
+        "original_hash": "7e17a6cddd61508cd3bdb8051ff2bb83ad1ff13f3b9663017bf4b3c8a11b3580",
+        "extracted_hash": "7e17a6cddd61508cd3bdb8051ff2bb83ad1ff13f3b9663017bf4b3c8a11b3580",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/sonic_codec.py",
+      "metrics": {
+        "name": "test_batch_tools/sonic_codec.py",
+        "original_size": 28137,
+        "extracted_size": 28137,
+        "extract_time_ms": 273.19,
+        "original_hash": "759602aa10f0e8adcc801ec051a7e46849f4d601277255c13b072c9b3a4dd6e6",
+        "extracted_hash": "759602aa10f0e8adcc801ec051a7e46849f4d601277255c13b072c9b3a4dd6e6",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "batch_directory",
+      "name": "test_batch_tools/pixel_screen.py",
+      "metrics": {
+        "name": "test_batch_tools/pixel_screen.py",
+        "original_size": 11015,
+        "extracted_size": 11015,
+        "extract_time_ms": 295.74,
+        "original_hash": "dc57dbe4eff1ef392ba404d7e5a499502c561e994c13dab7dbb6b1acd2267022",
+        "extracted_hash": "dc57dbe4eff1ef392ba404d7e5a499502c561e994c13dab7dbb6b1acd2267022",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true
+      }
+    },
+    {
+      "category": "mixed_content",
+      "name": "test_mixed/markdown/README.md",
+      "metrics": {
+        "name": "test_mixed/markdown/README.md",
+        "original_size": 9653,
+        "extracted_size": 9653,
+        "extract_time_ms": 270.04,
+        "original_hash": "8d8edd78b40c74f360060baa4112ec3469494cdf8fe3148b6723365d994111de",
+        "extracted_hash": "8d8edd78b40c74f360060baa4112ec3469494cdf8fe3148b6723365d994111de",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true,
+        "content_type": "markdown"
+      }
+    },
+    {
+      "category": "mixed_content",
+      "name": "test_mixed/text/requirements.txt",
+      "metrics": {
+        "name": "test_mixed/text/requirements.txt",
+        "original_size": 202,
+        "extracted_size": 202,
+        "extract_time_ms": 283.42,
+        "original_hash": "210e5108308fea7f227ff0fc8cc5f7ada42090db1c409267c10fd267371cbb5e",
+        "extracted_hash": "210e5108308fea7f227ff0fc8cc5f7ada42090db1c409267c10fd267371cbb5e",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true,
+        "content_type": "text"
+      }
+    },
+    {
+      "category": "mixed_content",
+      "name": "test_mixed/text/.gitignore",
+      "metrics": {
+        "name": "test_mixed/text/.gitignore",
+        "original_size": 724,
+        "extracted_size": 724,
+        "extract_time_ms": 276.57,
+        "original_hash": "6180be1ffcb37c19da5fca1f9dc931e4c7263d565c5ed26126d1b11bc383002a",
+        "extracted_hash": "6180be1ffcb37c19da5fca1f9dc931e4c7263d565c5ed26126d1b11bc383002a",
+        "byte_perfect": true,
+        "hash_match": true,
+        "size_match": true,
+        "content_type": "text"
+      }
+    }
+  ]
+}
