@@ -5,11 +5,11 @@
 Visual Audio enables software to exist as text, audio, or pixels. The foundation (Phase 0) is complete and working. This roadmap guides evolution toward production-grade systems: error correction, coarticulation, prosody, full Geometry OS integration, and advanced video-based state management.
 
 ### Current Status (2026-07-19)
-- **Progress**: 44/72 tasks complete (61.1%) — Phase 12 (Single-File Container) COMPLETE, Self-Hosting Active
-- **Critical Path**: TASK_VAC001-003 → TASK_VAC004-006 → TASK_T001-T004 → TASK_M007 → TASK_SE006
-- **Recent Wins**: TASK_VAC001-007 (complete container system), TASK_R017 (container security 7/7 pass), TASK_W002 (pytest decision resolved), TASK_M004-M005 (pixel LM), TASK_C038 (native pixel boot)
-- **Key Metrics**: Phoneme throughput ~7.6 words/sec (target ≥8.0), Byte throughput ~24 bytes/sec (target ≥25), Pixel density ~2.5 bytes/pixel (VAMP target ~3), Container 33 frames 1.1 MB 21 entries verified
-- **New Milestone**: visual_audio.mkv (33 frames, 1.1 MB) — fully self-hosting with embedded dense_encoder.py, run+update commands, security tests passing; research tasks R018-R019 (fountain codes, DCT steganography) added
+- **Progress**: 66/112 tasks complete (58.9%) — Phase 12 (Single-File Container) COMPLETE, Phase 13 (Container Self-Awareness) 🔴 IN PROGRESS, Self-Hosting Active
+- **Critical Path**: TASK_VAC001-003 → TASK_VAC004-006 → TASK_T001-T004 → TASK_M007 → TASK_SE006 → TASK_A003 (container audit loop)
+- **Recent Wins**: TASK_VAC001-007 (complete container system), TASK_R017 (container security 7/7 pass), TASK_W002 (pytest decision resolved), TASK_M004-M005 (pixel LM), TASK_C038 (native pixel boot), Phase 13 task redesign (8 generic → 6 concrete Ollama-integrated tasks)
+- **Key Metrics**: Phoneme throughput ~7.6 words/sec (target ≥8.0), Byte throughput ~24 bytes/sec (target ≥25), Pixel density ~2.5 bytes/pixel (VAMP target ~3), Container 35 frames 1.1 MB 6 new analysis entries added
+- **New Milestone**: visual_audio.mkv (35 frames, 1.1 MB) — fully self-hosting with embedded tools (ollama_prompt.py, dense_encoder.py, frame tools), run+update commands, security tests passing; Phase 13 tasks (TASK_A001-A006) designed for 1-3 day implementation
 
 ### Research Integration (New Directions)
 |- **Video Architecture (CONTAINER IMPLEMENTED)**: Procedural generation from seed pixels, multi-frame state management, infinite maps via noise algorithms
@@ -19,36 +19,36 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
 |- **Container-Based Development**: All development work now happens inside visual_audio.mkv with `run` + `update` commands for self-hosting workflow
 
 ### Immediate Focus (Priority Order)
-1. ✅ TASK_W002: Test design decision RESOLVED (pytest chosen) → unblocked all test tasks
-2. TASK_T001: Create pixel OS LM input test → unblocks TASK_M007
-3. TASK_T002-T004: VAMP verification tests → validate claimed completeness (V003-V005)
-4. TASK_R018-R019: New research tasks (fountain codes, DCT steganography) → container resilience
+1. ✅ TASK_T001-T004: Test creation COMPLETE → VAMP verification DONE (all tests passing)
+2. TASK_T005: Create pixel OS LM output test → unblocks TASK_SE006
+3. TASK_R018-R019: Fountain codes & DCT steganography research → container resilience
+4. Phase 13 planning: Advanced container autonomy with Ollama integration
 
 ### Blocking Issues (Critical Priority)
 
-**Phase 8 Completion Blocks — RESOLVED:**
-1. ✅ **Test Infrastructure Gap**: TASK_W002 RESOLVED - pytest suite chosen
+**✅ RESOLVED - Test Infrastructure Complete:**
+1. ✅ **TASK_W002**: Test design decision RESOLVED - pytest suite chosen
    - **Decision**: Option B (pytest suite) — effective 2026-07-18
    - **Rationale**: Consistency with existing tests, CI integration, unified workflow
-   - **Test Command**: `python3 -m pytest tests/ -q` (corrected 2026-07-18: previously cited `tests/test_token_chord_codec.py`, which never existed — no token-chord codec is in the repo)
-   - **Impact**: UNBLOCKS TASK_T001-T004 immediately
-   - **Receipt**: Updated ROADMAP.md with pytest decision verification
+   - **Test Command**: `python3 -m pytest tests/ -q`
+   - **Impact**: UNBLOCKED all test tasks
 
-**Phase 11 Research Integration — UNBLOCKED:**
-2. ✅ **TASK_M007** (Pixel OS input channel) — NOW UNBLOCKED
-   - **Blocker Removed**: TASK_W002 pytest decision resolved
-   - **Required Test**: `tests/test_pixel_os_lm_input.py` (TASK_T001)
-   - **Impact**: Unblocks TASK_SE006 (LM → procedural generation)
-   - **Time Estimate**: 3 hours focused development
+2. ✅ **TASK_T001-T004**: VAMP and Pixel OS verification COMPLETE
+   - **TASK_T001**: `tests/test_pixel_os_lm_input.py` — 7/8 pass, 1 skipped
+   - **TASK_T002**: `tests/test_vamp_ecc_tiles.py` — 1/1 pass
+   - **TASK_T003**: `tests/test_vamp_executable_cartridges.py` — 1/1 pass
+   - **TASK_T004**: `tests/test_vamp_voice_query.py` — 1/1 pass
+   - **Impact**: TASK_V003-V005 verified COMPLETE, TASK_M007 unblocked
 
-**VAMP Phase 10 Status — PENDING VERIFICATION:**
-3. **VAMP Tasks Claimed Complete — Need Verification** (HIGH PRIORITY)
-   - TASK_V003 (ECC tiles): Claims 5% corruption recovery — needs `tests/test_vamp_ecc_tiles.py`
-   - TASK_V004 (Executable cartridges): Claims sandboxed execution — needs `tests/test_vamp_executable_cartridges.py`
-   - TASK_V005 (Voice query): Claims >85% accuracy — needs `tests/test_vamp_voice_query.py`
-   - **Status**: TASK_T002-T004 READY TO START (unblocked by TASK_W002 resolution)
-   - **Risk**: If tests fail, revert status to PENDING and fix implementation
-   - **Time Estimate**: 6 hours total (2 hours per task)
+**Current Focus (2026-07-19):**
+3. **TASK_T005**: Create pixel OS LM output test → unblocks TASK_SE006
+   - **Priority**: HIGH
+   - **Time Estimate**: 3 hours
+   - **Test**: `tests/test_pixel_os_lm_output.py`
+
+4. **TASK_R018-R019**: Research implementation → container resilience
+   - **Priority**: HIGH/MEDIUM
+   - **Tests**: `tests/test_fountain_codes.py`, `tests/test_dct_steganography.py` (exist, need implementation)
 
 ### Immediate Action Plan (2026-07-19)
 
@@ -702,6 +702,79 @@ implemented and are split into TASK_C035 / TASK_C036 rather than claimed under C
 - Audio playback stays synchronized with visual tile highlighting
 - Text/audio/image can all be edited through visual manipulation
 - Collaborative sessions support 2+ concurrent editors without conflicts
+
+---
+
+## Phase 13: Container Self-Awareness & Enhanced Security 🔴 IN PROGRESS
+
+**Goal**: Enhance container capabilities for self-awareness, robust task management, and advanced security using Ollama integration.
+
+### Success Criteria
+- **Self-Awareness**: Container can analyze its own state and behavior using Ollama
+- **Task Management**: Efficient task scheduling based on frame metadata
+- **Automated Audits**: Periodic self-auditing to identify and address potential vulnerabilities
+- **Security Analysis**: Enhanced security analysis leveraging Ollama's capabilities
+- **Progress Tracking**: Real-time progress tracking with LLM interpretation
+- **Documentation**: Comprehensive documentation for integrating Ollama with the container system
+
+### Tasks
+
+- [ ] **TASK_A001**: Ollama contextual memory for container self-awareness
+  - Priority: HIGH
+  - Dependencies: tools/ollama_prompt.py, self-hosting capability
+  - Receipt: Enhanced tools/ollama_prompt.py with conversation history tracking across container sessions
+  - Test: `python3 tests/test_ollama_contextual_memory.py` verifies context persists between queries
+  - Status: NOT STARTED
+
+- [ ] **TASK_A002**: Container task scheduler using frame metadata
+  - Priority: HIGH
+  - Dependencies: Frame-based tools, self-hosting capability, tools/ollama_prompt.py
+  - Receipt: New tools/task_scheduler.py that reads frame metadata to prioritize and schedule tasks
+  - Test: `python3 tests/test_container_task_scheduler.py` verifies correct task prioritization
+  - Status: NOT STARTED
+
+- [ ] **TASK_A003**: Automated container audit loop (Ollama analyzes itself)
+  - Priority: CRITICAL
+  - Dependencies: tools/ollama_prompt.py, test_container_security.py (7/7 pass), self-hosting capability
+  - Receipt: Container runs periodic self-audit using tools/ollama_prompt.py to analyze ROADMAP, identify suspect tasks, verify code exists
+  - Test: `python3 tests/test_container_audit_loop.py` verifies audit detects missing implementations
+  - Status: NOT STARTED
+
+- [ ] **TASK_A004**: Security analysis enhancement using Ollama
+  - Priority: HIGH
+  - Dependencies: test_container_security.py (7/7 pass), tools/ollama_prompt.py
+  - Receipt: Enhanced security tests that use Ollama to propose new attack vectors and verify mitigation
+  - Test: `python3 tests/test_ollama_security_analysis.py` verifies LLM-driven security improvements
+  - Status: NOT STARTED
+
+- [ ] **TASK_A005**: Frame-based progress tracking with LLM interpretation
+  - Priority: MEDIUM
+  - Dependencies: Frame-based tools, tools/ollama_prompt.py
+  - Receipt: New tools/progress_tracker.py that reads frame metadata and uses Ollama to interpret progress
+  - Test: `python3 tests/test_frame_based_progress_tracking.py` verifies LLM interprets progress correctly
+  - Status: NOT STARTED
+
+- [ ] **TASK_A006**: Documentation for Ollama-container integration
+  - Priority: MEDIUM
+  - Dependencies: TASK_A001-TASK_A005
+  - Receipt: docs/PHASE13_INTEGRATION.md with setup guide, security considerations, examples
+  - Test: Manual review — documentation enables successful integration by external developers
+  - Status: NOT STARTED
+
+### Immediate Next Steps (Day 1-3)
+1. **Day 1**:
+   - Begin TASK_A001: Extend tools/ollama_prompt.py with conversation history storage in analysis/ entries
+   - Start planning TASK_A002: Design task scheduler schema using frame metadata
+2. **Day 2**:
+   - Complete TASK_A001 testing with conversation persistence
+   - Implement TASK_A003: Self-audit loop that queries Ollama about ROADMAP completeness
+   - Start TASK_A004: LLM-driven security test generation
+3. **Day 3**:
+   - Complete TASK_A003 and verify it detects false-claimed tasks
+   - Start TASK_A005: Frame metadata extraction + LLM progress interpretation
+
+### Note
+These tasks build on existing container capabilities: tools/ollama_prompt.py (LLM queries, already working), test_container_security.py (7/7 tests pass), frame-based development tools (run + update commands), self-hosting capability (container can extract and run its own tools).
 
 ---
 
