@@ -79,12 +79,10 @@ def parse_roadmap_tasks(roadmap_path: str) -> List[Dict]:
     """
     Parse ROADMAP.md to extract task information.
 
-    Extracts:
-    - Task IDs (e.g., TASK_001)
-    - Task descriptions
-    - Status (COMPLETE, PENDING, etc.)
-    - Completion dates
-    - Receipts (file paths, implementation claims)
+    Handles the markdown format:
+    - Task lines: `- [x] **TASK_XXX**: Description`
+    - Status from checkbox: `[ ]` = PENDING, `[x]` = COMPLETE
+    - Metadata: `- Priority:`, `- Receipt:`, `- Test:`, etc.
 
     Args:
         roadmap_path: Path to ROADMAP.md file
@@ -93,53 +91,88 @@ def parse_roadmap_tasks(roadmap_path: str) -> List[Dict]:
         List of task dictionaries with keys:
         - id: Task ID
         - description: Task description
-        - status: Task status
-        - completed: Completion date (if COMPLETE)
+        - status: Task status (COMPLETE, PENDING, IN_PROGRESS, UNKNOWN)
+        - priority: Task priority (CRITICAL, HIGH, MEDIUM, LOW, UNKNOWN)
         - receipts: List of receipt strings
+        - test_command: Test command string
+        - completed: Completion date (if COMPLETE)
     """
-    tasks = []
-    
     try:
         with open(roadmap_path, 'r') as f:
             content = f.read()
     except FileNotFoundError:
         return []
-    
-    # Split into task blocks using the *** separator
-    task_blocks = re.split(r'\n\*\*\* ', content)
-    
-    for block in task_blocks:
-        if not block.strip():
+
+    tasks = []
+    current_task = None
+
+    for line in content.split('\n'):
+        # Task marker line: `- [x] **TASK_XXX**: Description`
+        task_match = re.match(r'-\s+\[(x| )\]\s+\*\*([^*]+)\*\*:\s*(.+)', line)
+        if task_match:
+            # Save previous task
+            if current_task:
+                tasks.append(current_task)
+
+            # Extract task info
+            checkbox, task_id, description = task_match.groups()
+            status = 'COMPLETE' if checkbox == 'x' else 'PENDING'
+
+            current_task = {
+                'id': task_id.strip(),
+                'description': description.strip(),
+                'status': status,
+                'priority': 'UNKNOWN',
+                'receipts': [],
+                'test_command': '',
+                'completed': None
+            }
             continue
-        
-        # Extract task ID and description (format: "TASK_001: Description")
-        id_match = re.match(r'(TASK_\w+):\s*(.+)', block)
-        if not id_match:
-            continue
-        
-        task_id = id_match.group(1)
-        description = id_match.group(2).strip()
-        
-        # Extract status
-        status_match = re.search(r'Status:\s*(\w+)', block)
-        status = status_match.group(1) if status_match else 'UNKNOWN'
-        
-        # Extract completion date
-        completed_match = re.search(r'Completed:\s*(\d{4}-\d{2}-\d{2})', block)
-        completed = completed_match.group(1) if completed_match else None
-        
-        # Extract all Receipt lines
-        receipt_matches = re.findall(r'Receipt:\s*(.+)', block)
-        receipts = receipt_matches
-        
-        tasks.append({
-            'id': task_id,
-            'description': description,
-            'status': status,
-            'completed': completed,
-            'receipts': receipts
-        })
-    
+
+        # Metadata lines for current task (indented with spaces)
+        if current_task and line.startswith('  - '):
+            metadata = line[4:].strip()
+
+            # Priority
+            priority_match = re.match(r'Priority:\s*(\w+)', metadata)
+            if priority_match:
+                current_task['priority'] = priority_match.group(1)
+                continue
+
+            # Receipt
+            receipt_match = re.match(r'Receipt:\s*(.+)', metadata)
+            if receipt_match:
+                current_task['receipts'].append(receipt_match.group(1).strip())
+                continue
+
+            # Test
+            test_match = re.match(r'Test:\s*(.+)', metadata)
+            if test_match:
+                current_task['test_command'] = test_match.group(1).strip()
+                continue
+
+            # Status
+            status_match = re.match(r'Status:\s*(.+)', metadata)
+            if status_match:
+                status_str = status_match.group(1).strip().upper()
+                # Map various status strings to standard ones
+                if 'COMPLETE' in status_str or '✅' in status_str:
+                    current_task['status'] = 'COMPLETE'
+                elif 'PENDING' in status_str or 'NOT STARTED' in status_str:
+                    current_task['status'] = 'PENDING'
+                elif 'IN PROGRESS' in status_str or '🟡' in status_str:
+                    current_task['status'] = 'IN_PROGRESS'
+                continue
+
+            # Completion date
+            completed_match = re.search(r'(\d{4}-\d{2}-\d{2})', metadata)
+            if completed_match and current_task['status'] == 'COMPLETE':
+                current_task['completed'] = completed_match.group(1)
+
+    # Save last task
+    if current_task:
+        tasks.append(current_task)
+
     return tasks
 
 
@@ -484,6 +517,255 @@ def run_audit(project_root: str, output_path: str, model: str = "qwen2.5-coder:1
         json.dump(report, f, indent=2)
     
     return report
+
+
+class ConversationMemory:
+    """
+    Manages conversation history and context for Ollama queries.
+    
+    Enables container self-awareness by persisting conversation history
+    across sessions, allowing the container to remember context between
+    queries and maintain awareness of its own state and previous interactions.
+    
+    Key features:
+    - Add and retrieve messages with role tracking (user/assistant/system)
+    - Persist conversation history to disk for container restart resilience
+    - Manage context window by pruning old messages when token limit is reached
+    - Track metadata (session_id, container_id, timestamps)
+    - Merge conversations from multiple sessions
+    """
+    
+    def __init__(
+        self,
+        max_tokens: int = 4096,
+        metadata: Optional[Dict] = None
+    ):
+        """
+        Initialize conversation memory.
+        
+        Args:
+            max_tokens: Maximum tokens to keep in context (default: 4096)
+            metadata: Optional metadata dict (session_id, container_id, etc.)
+        """
+        self.max_tokens = max_tokens
+        self.messages: List[Dict] = []
+        self.metadata: Dict = metadata or {}
+        self._token_count: int = 0
+        
+        # Add metadata if provided
+        if metadata:
+            self.metadata.update(metadata)
+    
+    def add_message(self, role: str, content: str):
+        """
+        Add a message to conversation history.
+        
+        Args:
+            role: Message role (user, assistant, or system)
+            content: Message content
+        """
+        message = {
+            'role': role,
+            'content': content,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        self.messages.append(message)
+        self._token_count += self._estimate_tokens(content)
+        
+        # Prune if over limit
+        self._prune_to_limit()
+    
+    def get_conversation_history(self) -> List[Dict]:
+        """
+        Get full conversation history.
+        
+        Returns:
+            List of message dicts with role, content, timestamp
+        """
+        return self.messages.copy()
+    
+    def get_last_n_messages(self, n: int) -> List[Dict]:
+        """
+        Get last N messages from history.
+        
+        Args:
+            n: Number of messages to retrieve
+            
+        Returns:
+            List of last N message dicts
+        """
+        return self.messages[-n:] if n > 0 else []
+    
+    def get_messages_by_role(self, role: str) -> List[Dict]:
+        """
+        Get all messages with a specific role.
+        
+        Args:
+            role: Role to filter by (user, assistant, system)
+            
+        Returns:
+            List of message dicts with matching role
+        """
+        return [msg for msg in self.messages if msg['role'] == role]
+    
+    def get_token_count(self) -> int:
+        """
+        Get current token count estimate.
+        
+        Returns:
+            Estimated number of tokens in conversation
+        """
+        return self._token_count
+    
+    def clear(self):
+        """Clear all conversation history."""
+        self.messages = []
+        self._token_count = 0
+    
+    def save(self, path: str):
+        """
+        Save conversation history to disk.
+        
+        Args:
+            path: Path to save conversation JSON
+        """
+        data = {
+            'metadata': self.metadata,
+            'messages': self.messages,
+            'token_count': self._token_count,
+            'max_tokens': self.max_tokens,
+            'saved_at': datetime.now().isoformat()
+        }
+        
+        with open(path, 'w') as f:
+            json.dump(data, f, indent=2)
+    
+    def load(self, path: str):
+        """
+        Load conversation history from disk.
+        
+        Args:
+            path: Path to load conversation JSON from
+        """
+        try:
+            with open(path, 'r') as f:
+                data = json.load(f)
+            
+            self.metadata = data.get('metadata', {})
+            self.messages = data.get('messages', [])
+            self._token_count = data.get('token_count', 0)
+            self.max_tokens = data.get('max_tokens', 4096)
+            
+            # Prune if loaded history exceeds current limit
+            self._prune_to_limit()
+            
+        except (FileNotFoundError, json.JSONDecodeError):
+            # If file doesn't exist or is invalid, start fresh
+            self.messages = []
+            self._token_count = 0
+    
+    def merge(self, other: 'ConversationMemory'):
+        """
+        Merge another conversation memory into this one.
+        
+        Args:
+            other: Another ConversationMemory instance to merge
+        """
+        for msg in other.messages:
+            self.add_message(msg['role'], msg['content'])
+        
+        # Merge metadata
+        if other.metadata:
+            for key, value in other.metadata.items():
+                if key not in self.metadata:
+                    self.metadata[key] = value
+    
+    def get_metadata(self) -> Dict:
+        """
+        Get conversation metadata.
+        
+        Returns:
+            Metadata dictionary
+        """
+        return self.metadata.copy()
+    
+    def _estimate_tokens(self, text: str) -> int:
+        """
+        Estimate token count for text.
+        
+        Rough estimate: ~4 characters per token for English text.
+        This is approximate but good enough for context management.
+        
+        Args:
+            text: Text to estimate tokens for
+            
+        Returns:
+            Estimated token count
+        """
+        return max(1, len(text) // 4)
+    
+    def _prune_to_limit(self):
+        """Remove oldest messages until token count is within limit."""
+        while self._token_count > self.max_tokens and len(self.messages) > 0:
+            # Remove oldest message (first in list)
+            removed = self.messages.pop(0)
+            self._token_count -= self._estimate_tokens(removed['content'])
+
+
+def prompt_ollama_with_context(
+    prompt: str,
+    memory: Optional[ConversationMemory] = None,
+    model: str = "qwen2.5-coder:14b",
+    system_prompt: Optional[str] = None
+) -> str:
+    """
+    Send prompt to Ollama with conversation context.
+    
+    This is the context-aware version of prompt_ollama. It includes
+    conversation history from the memory object, allowing Ollama to
+    maintain context across queries.
+    
+    Args:
+        prompt: The current prompt to send
+        memory: Optional ConversationMemory with history
+        model: Ollama model to use
+        system_prompt: Optional system prompt
+        
+    Returns:
+        Ollama's response as a string
+        
+    Raises:
+        subprocess.CalledProcessError: If Ollama command fails
+    """
+    full_prompt = prompt
+    
+    # Add conversation history if memory provided
+    if memory and memory.get_conversation_history():
+        history = memory.get_last_n_messages(10)  # Last 10 messages
+        
+        context_lines = []
+        for msg in history:
+            role = msg['role'].upper()
+            content = msg['content']
+            context_lines.append(f"{role}: {content}")
+        
+        context_str = "\n".join(context_lines)
+        full_prompt = f"Previous conversation:\n{context_str}\n\nCurrent question:\n{prompt}"
+    
+    # Add system prompt if provided
+    if system_prompt:
+        full_prompt = f"System: {system_prompt}\n\n{full_prompt}"
+    
+    # Get response
+    response = prompt_ollama(full_prompt, model)
+    
+    # Add to memory if provided
+    if memory:
+        memory.add_message("user", prompt)
+        memory.add_message("assistant", response)
+    
+    return response
 
 
 def print_audit_report(report: Dict):

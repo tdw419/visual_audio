@@ -189,11 +189,11 @@ def build_sv39_page_tables(segments: List[dict], page_table_root_ppn: int, page_
 # MEMORY IMAGE BUILDER
 # ============================================================================
 
-def build_memory_image(elf_path: str) -> Tuple[np.ndarray, int, int]:
+def build_memory_image(elf_path: str) -> Tuple[np.ndarray, int, int, int]:
     """
-    Build complete memory image for GPU execution (1GB fixed size).
+    Build complete memory image for GPU execution (128MB fixed size).
 
-    Returns: (memory_pixels, root_page_table_ppn, entry_point)
+    Returns: (memory_pixels, root_page_table_ppn, entry_point, dtb_addr)
     """
     # Load ELF
     print("[1] Loading ELF64 kernel...")
@@ -202,9 +202,9 @@ def build_memory_image(elf_path: str) -> Tuple[np.ndarray, int, int]:
 
     # Memory layout (physical addresses):
     # 0x00000000 - 0xFFFFFFFF: Full 4GB space mapped
-    # Use 1GB memory (practical for GPU)
+    # Use 128MB memory (sufficient for 67MB kernel + page tables + DTB + heap)
 
-    memory_size = 1024 * 1024 * 1024  # 1GB
+    memory_size = 128 * 1024 * 1024  # 128MB
     memory = bytearray(memory_size)
 
     # Load ELF segments
@@ -227,8 +227,11 @@ def build_memory_image(elf_path: str) -> Tuple[np.ndarray, int, int]:
 
     # Build page tables
     print("\n[3] Building SV39 page tables...")
-    root_page_table_addr = 0x10000000
+    # Place root page table near end of memory
+    dtb_size = 0x2000  # Reserve 8KB for DTB
+    root_page_table_addr = (memory_size - 0x100000) & ~0xFFF  # 1MB-aligned, near end
     root_page_table_ppn = root_page_table_addr >> 12
+    dtb_addr = memory_size - dtb_size  # DTB at very end
 
     pt_data = build_sv39_page_tables(elf.program_headers, root_page_table_ppn)
 
@@ -256,14 +259,14 @@ def build_memory_image(elf_path: str) -> Tuple[np.ndarray, int, int]:
             (word >> 24) & 0xFF,   # A
         ]
 
-    print(f"  Memory: {memory_size_mb}MB ({num_pixels} pixels)")
+    print(f"  Memory: {memory_size // (1024*1024)}MB ({num_pixels} pixels)")
     print(f"  Entry point: 0x{elf.entry_point:016x}")
     print(f"  SATP: 0x{8 << 22 | root_page_table_ppn:08x} (SV39, root PPN={root_page_table_ppn})")
 
-    return pixels, root_page_table_ppn, elf.entry_point
+    return pixels, root_page_table_ppn, elf.entry_point, dtb_addr
 
 
-def create_gpu_boot_harness(pixels: np.ndarray, root_ppn: int, entry_point: int) -> dict:
+def create_gpu_boot_harness(pixels: np.ndarray, root_ppn: int, entry_point: int, dtb_addr: int) -> dict:
     """Create GPU buffers and CPU state for boot."""
     import wgpu
     import wgpu.utils
@@ -288,9 +291,12 @@ def create_gpu_boot_harness(pixels: np.ndarray, root_ppn: int, entry_point: int)
     queue.write_buffer(memory_buffer, 0, pixel_data.tobytes())
     print(f"    Memory buffer: {pixel_data.shape[0]} words ({pixel_data.nbytes // (1024*1024)}MB)")
 
-    # Create CPU state with MMU enabled (shared layout, real RV64 satp format)
-    from riscv_gpu_cpu import make_cpu_state, make_satp
-    cpu_state = make_cpu_state(entry_point, satp=make_satp(root_ppn))
+    # Create CPU state with MMU enabled in S-mode
+    from riscv_gpu_cpu import make_linux_boot_state, CPU_DTYPE
+    cpu_state = make_linux_boot_state(entry_point, dtb_addr)
+    # Set SATP for SV39 mode
+    satp_value = (8 << 60) | (root_ppn & 0xFFFFFFFFFFFF)
+    cpu_state[0]['satp'] = [satp_value & 0xFFFFFFFF, (satp_value >> 32) & 0xFFFFFFFF]
 
     cpu_buffer = device.create_buffer(
         size=cpu_state.nbytes,
@@ -298,7 +304,7 @@ def create_gpu_boot_harness(pixels: np.ndarray, root_ppn: int, entry_point: int)
     )
     queue.write_buffer(cpu_buffer, 0, cpu_state.tobytes())
     satp64 = (int(cpu_state[0]['satp'][1]) << 32) | int(cpu_state[0]['satp'][0])
-    print(f"    CPU state: PC=0x{entry_point:016x}, SATP=0x{satp64:016x}")
+    print(f"    CPU state: PC=0x{entry_point:016x}, SATP=0x{satp64:016x}, DTB=0x{dtb_addr:016x}")
 
     # Output buffer
     output_buffer = device.create_buffer(
@@ -349,7 +355,7 @@ def create_gpu_boot_harness(pixels: np.ndarray, root_ppn: int, entry_point: int)
         'bind_group': bind_group,
         'cpu_buffer': cpu_buffer,
         'output_buffer': output_buffer,
-        'cpu_layout': cpu_layout,
+        'cpu_layout': CPU_DTYPE,
     }
 
 
@@ -360,10 +366,38 @@ def boot_alpine_on_gpu(elf_path: str):
     print("=" * 70)
 
     # Build memory image
-    pixels, root_ppn, entry_point = build_memory_image(elf_path)
+    pixels, root_ppn, entry_point, dtb_addr = build_memory_image(elf_path)
+
+    # Load DTB into memory
+    print(f"\n[2.5] Loading DTB at 0x{dtb_addr:x}...")
+    dtb_path = Path(__file__).parent.parent / 'gpu_machine.dtb'
+    if not dtb_path.exists():
+        print(f"    Warning: DTB not found at {dtb_path}")
+    else:
+        dtb_data = dtb_path.read_bytes()
+        # Convert dtb bytes to pixel format and inject into pixel array
+        # Need to preserve existing bytes in each word
+        for i in range(0, len(dtb_data), 4):
+            word_idx = (dtb_addr // 4) + (i // 4)
+            # Read existing word
+            existing = (pixels[word_idx][0] | (pixels[word_idx][1] << 8) |
+                       (pixels[word_idx][2] << 16) | (pixels[word_idx][3] << 24))
+            # Modify only the bytes we're writing
+            word = existing
+            for byte_idx in range(4):
+                if i + byte_idx < len(dtb_data):
+                    # Mask out the byte we're writing, then OR it in
+                    shift = byte_idx * 8
+                    word = (word & ~(0xFF << shift)) | (dtb_data[i + byte_idx] << shift)
+            # Write back
+            pixels[word_idx][0] = word & 0xFF
+            pixels[word_idx][1] = (word >> 8) & 0xFF
+            pixels[word_idx][2] = (word >> 16) & 0xFF
+            pixels[word_idx][3] = (word >> 24) & 0xFF
+        print(f"    Loaded {len(dtb_data)} bytes of DTB data")
 
     # Create GPU harness
-    harness = create_gpu_boot_harness(pixels, root_ppn, entry_point)
+    harness = create_gpu_boot_harness(pixels, root_ppn, entry_point, dtb_addr)
 
     # Execute
     print("\n[7] Booting Alpine Linux on GPU...")

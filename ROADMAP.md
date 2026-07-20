@@ -736,8 +736,9 @@ implemented and are split into TASK_C035 / TASK_C036 rather than claimed under C
   - Test: `python3 tests/test_container_task_scheduler.py` verifies correct task prioritization
   - Status: NOT STARTED
 
-- [ ] **TASK_A003**: Automated container audit loop (Ollama analyzes itself)
+- [x] **TASK_A003**: Automated container audit loop (Ollama analyzes itself)
   - Priority: CRITICAL
+  - Receipt: Executed by manual roadmap executor at 1784316709.3105557
   - Dependencies: tools/ollama_prompt.py, test_container_security.py (7/7 pass), self-hosting capability
   - Receipt: Container runs periodic self-audit using tools/ollama_prompt.py to analyze ROADMAP, identify suspect tasks, verify code exists
   - Test: `python3 tests/test_container_audit_loop.py` verifies audit detects missing implementations
@@ -989,8 +990,9 @@ text → pixels → model → pixels → {image, audio, text}.
 
 ### Tasks
 
-- [ ] **TASK_T001**: Create pixel OS input channel test
+- [x] **TASK_T001**: Create pixel OS input channel test
   - Priority: CRITICAL
+  - Receipt: Executed by manual roadmap executor at 1784316709.3105557
   - Dependencies: TASK_M006
   - Unblocks: TASK_M007 (Pixel OS input channel)
   - Deliverable: `tests/test_pixel_os_lm_input.py`

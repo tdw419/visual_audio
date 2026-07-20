@@ -93,18 +93,25 @@ class GpuCpu:
             compute={'module': self.module, 'entry_point': 'main'},
         )
 
-    def run(self, program, steps, regs=None, csrs=None):
-        """Load program at address 0, execute `steps` instructions, return CPU state."""
+    def run(self, program, steps, regs=None, csrs=None, priv=3, data=None):
+        """Load program at address 0, execute `steps` instructions, return CPU state.
+
+        `data`: optional {byte_addr: bytes} to place in memory.
+        After the run, self.last_output holds the raw UART output buffer bytes.
+        """
         dev, queue = self.device, self.device.queue
 
         mem_words = np.zeros((4096, 4), dtype=np.uint32)
         for i, word in enumerate(program):
             mem_words[i] = [word & 0xFF, (word >> 8) & 0xFF,
                             (word >> 16) & 0xFF, (word >> 24) & 0xFF]
+        for addr, blob in (data or {}).items():
+            for j, b in enumerate(blob):
+                mem_words[(addr + j) // 4][(addr + j) % 4] = b
 
         cpu = np.zeros(1, dtype=CPU_DTYPE)
         cpu[0]['running'] = 1
-        cpu[0]['priv_mode'] = 3
+        cpu[0]['priv_mode'] = priv
         for reg, val in (regs or {}).items():
             cpu[0]['regs'][reg] = [val & 0xFFFFFFFF, (val >> 32) & 0xFFFFFFFF]
         for name, val in (csrs or {}).items():
@@ -140,6 +147,7 @@ class GpuCpu:
             p.end()
         queue.submit([encoder.finish()])
 
+        self.last_output = np.frombuffer(queue.read_buffer(out_buf), dtype=np.uint8)
         return np.frombuffer(queue.read_buffer(cpu_buf), dtype=CPU_DTYPE)[0]
 
 
@@ -236,13 +244,13 @@ def main():
     # --- CSRs ---------------------------------------------------------------
     print('CSRs:')
     prog = [
-        CSRRW(5, MHARTID, 0),    # x5 = mhartid (0)
+        CSRRS(5, MHARTID, 0),    # x5 = mhartid (0)
         CSRRW(0, MSCRATCH, 1),   # mscratch = x1
         CSRRS(6, MSCRATCH, 2),   # x6 = old mscratch; mscratch |= x2
         CSRRC(7, MSCRATCH, 2),   # x7 = old; mscratch &= ~x2
         CSRRWI(8, MSCRATCH, 21), # x8 = old; mscratch = 21
         CSRRSI(9, MSCRATCH, 10), # x9 = 21; mscratch |= 10
-        CSRRW(10, MISA, 0),      # x10 = misa
+        CSRRS(10, MISA, 0),      # x10 = misa
     ]
     st = gpu.run(prog, len(prog), regs={1: 0xAAAA0000AAAA0000, 2: 0x5555000055550000})
     check('CSRR mhartid', reg64(st, 5), 0)
@@ -251,8 +259,8 @@ def main():
     check('CSRRC cleared bits', reg64(st, 8), 0xAAAA0000AAAA0000)
     check('CSRRWI wrote imm', reg64(st, 9), 21)
     check('CSRRSI final mscratch', field64(st, 'mscratch'), 21 | 10)
-    check('misa = RV64 I+M+S+U', reg64(st, 10),
-          (2 << 62) | (1 << 8) | (1 << 12) | (1 << 18) | (1 << 20))
+    check('misa = RV64 A+I+M+S+U', reg64(st, 10),
+          (2 << 62) | (1 << 0) | (1 << 8) | (1 << 12) | (1 << 18) | (1 << 20))
 
     # --- Trap + MRET ---------------------------------------------------------
     print('Trap and MRET:')
@@ -263,8 +271,8 @@ def main():
     prog[1] = CSRRW(0, MTVEC, 5)            # mtvec = 0x40
     prog[2] = 0xFFFFFFFF                    # illegal -> trap
     prog[3] = ADDI(11, 0, 99)               # executed after MRET
-    prog[16] = CSRRW(6, MCAUSE, 0)          # handler: x6 = mcause
-    prog[17] = CSRRW(7, MEPC, 0)            # x7 = mepc
+    prog[16] = CSRRS(6, MCAUSE, 0)          # handler: x6 = mcause
+    prog[17] = CSRRS(7, MEPC, 0)            # x7 = mepc
     prog[18] = ADDI(8, 7, 4)                # x8 = mepc + 4
     prog[19] = CSRRW(0, MEPC, 8)            # mepc += 4 (skip bad instr)
     prog[20] = MRET
@@ -292,6 +300,17 @@ def main():
     st = gpu.run(prog, 6, regs={1: 5, 2: 0, 3: 1, 4: 0x8000000000000000})
     check('SRAI negative shamt<32', reg64(st, 7), 0xF800000000000000)
     check('SLLI shamt=0 identity', reg64(st, 8), 1)
+
+    # Regression: sign_extend_12/21 masks were each off by one bit width,
+    # forcing extra bits set (corrupting bits just below the sign bit) for
+    # small-magnitude negative immediates - e.g. -212 as a 21-bit JAL offset
+    # landed 2MB short of its real target. Only shows up when those bits are 0.
+    JAL = lambda rd, imm: (((imm >> 20) & 1) << 31) | (((imm >> 1) & 0x3FF) << 21) | \
+                           (((imm >> 11) & 1) << 20) | (((imm >> 12) & 0xFF) << 12) | (rd << 7) | 0x6F
+    st = gpu.run([ADDI(5, 0, -212 & 0xFFF)], 1)
+    check('ADDI small negative imm (-212)', reg64(st, 5), (-212) & MASK64)
+    st = gpu.run([JAL(6, -212)], 1)
+    check('JAL small negative offset (-212)', int(st['pc'][0]), (-212) & 0xFFFFFFFF)
 
     # --- WFI / FENCE are NOPs -----------------------------------------------
     print('Misc:')

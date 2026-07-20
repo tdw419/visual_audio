@@ -37,6 +37,13 @@ struct RiscvCPU {
     mscratch: vec2<u32>,        // Scratch for trap handlers
     mie: vec2<u32>,             // Interrupt enable
     mip: vec2<u32>,             // Interrupt pending
+    stvec: vec2<u32>,           // S-mode trap vector base
+    sepc: vec2<u32>,            // S-mode trap return address
+    scause: vec2<u32>,          // S-mode trap cause
+    stval: vec2<u32>,           // S-mode trap value
+    sscratch: vec2<u32>,        // S-mode scratch
+    medeleg: vec2<u32>,         // Exception delegation to S-mode
+    mideleg: vec2<u32>,         // Interrupt delegation to S-mode
 }
 
 // R-type instruction decoding
@@ -99,10 +106,11 @@ const F3_SRAI: u32 = 5u;
 const F3_ORI: u32 = 6u;
 const F3_ANDI: u32 = 7u;
 
-// Funct7 values for OP_IMM shift
-const F7_SLLI: u32 = 0u;
-const F7_SRLI: u32 = 0u;
-const F7_SRAI: u32 = 32u;
+// Funct7 values for OP_IMM shift (RV64: shamt[5] is in funct7[5])
+// Use mask to check low 5 bits only for 6-bit shamt support
+const F7_SLLI: u32 = 0u;         // Low 5 bits; shamt[5] handled separately
+const F7_SRLI: u32 = 0u;         // Low 5 bits; shamt[5] handled separately
+const F7_SRAI: u32 = 32u;        // shamt[5] set for arithmetic
 
 // Funct3 for 32-bit ops
 const F3_ADDIW: u32 = 0u;
@@ -131,7 +139,17 @@ const PRIV_S: u32 = 1u;
 const PRIV_M: u32 = 3u;
 
 // CSR addresses
+const CSR_SSTATUS: u32 = 0x100u;
+const CSR_SIE: u32 = 0x104u;
+const CSR_STVEC: u32 = 0x105u;
+const CSR_SSCRATCH: u32 = 0x140u;
+const CSR_SEPC: u32 = 0x141u;
+const CSR_SCAUSE: u32 = 0x142u;
+const CSR_STVAL: u32 = 0x143u;
+const CSR_SIP: u32 = 0x144u;
 const CSR_SATP: u32 = 0x180u;
+const CSR_MEDELEG: u32 = 0x302u;
+const CSR_MIDELEG: u32 = 0x303u;
 const CSR_MSTATUS: u32 = 0x300u;
 const CSR_MISA: u32 = 0x301u;
 const CSR_MIE: u32 = 0x304u;
@@ -151,14 +169,208 @@ const CSR_MARCHID: u32 = 0xF12u;
 const CSR_MIMPID: u32 = 0xF13u;
 const CSR_MHARTID: u32 = 0xF14u;
 
+// Zicsr CSR access functions
+fn read_csr(cpu: ptr<function, RiscvCPU>, csr_addr: u32) -> vec2<u32> {
+    if (csr_addr == CSR_MHARTID) {
+        // Return hart ID = 0 for single-core system
+        return vec2<u32>(0u, 0u);
+    } else if (csr_addr == CSR_MSTATUS) {
+        return (*cpu).mstatus;
+    } else if (csr_addr == CSR_MEPC) {
+        return (*cpu).mepc;
+    } else if (csr_addr == CSR_MCAUSE) {
+        return (*cpu).mcause;
+    } else if (csr_addr == CSR_MTVAL) {
+        return (*cpu).mtval;
+    } else if (csr_addr == CSR_MTVEC) {
+        return (*cpu).mtvec;
+    } else if (csr_addr == CSR_MIE) {
+        return (*cpu).mie;
+    } else if (csr_addr == CSR_MIP) {
+        return (*cpu).mip;
+    } else if (csr_addr == CSR_MSCRATCH) {
+        return (*cpu).mscratch;
+    } else if (csr_addr == CSR_MEDELEG) {
+        return (*cpu).medeleg;
+    } else if (csr_addr == CSR_MIDELEG) {
+        return (*cpu).mideleg;
+    } else if (csr_addr == CSR_CYCLE || csr_addr == CSR_MCYCLE) {
+        // Return instruction count as cycle count
+        return vec2<u32>((*cpu).instr_count, 0u);
+    } else if (csr_addr == CSR_INSTRET || csr_addr == CSR_MINSTRET) {
+        // Return instruction count
+        return vec2<u32>((*cpu).instr_count, 0u);
+    } else if (csr_addr == CSR_MISA) {
+        // Return MISA: MXL=64 (bits 63:62=11), extensions in lower bits
+        // We support IMAFD (integer, multiply/div, float/double, atomic)
+        // I=1, M=12, A=1, F=4, D=8, Zicsr=2
+        return vec2<u32>(0x80000008u, 0x00000000u);  // MXL=2 (RV64)
+    } else if (csr_addr == CSR_TIME) {
+        // Return fake time (instruction count * 10)
+        return vec2<u32>((*cpu).instr_count * 10u, 0u);
+    } else if (csr_addr == CSR_MVENDORID) {
+        // Vendor ID: 0 (no vendor)
+        return vec2<u32>(0u, 0u);
+    } else if (csr_addr == CSR_MARCHID) {
+        // Architecture ID: non-zero for RISC-V
+        return vec2<u32>(1u, 0u);
+    } else if (csr_addr == CSR_MIMPID) {
+        // Implementation ID: 0
+        return vec2<u32>(0u, 0u);
+    } else if (csr_addr == CSR_SSTATUS) {
+        // SSTATUS = restricted view of MSTATUS
+        let sstatus_x = (*cpu).mstatus.x & SSTATUS_MASK_LO;
+        let sstatus_y = (*cpu).mstatus.y & SSTATUS_MASK_HI;
+        return vec2<u32>(sstatus_x, sstatus_y);
+    } else if (csr_addr == CSR_STVEC) {
+        return (*cpu).stvec;
+    } else if (csr_addr == CSR_SEPC) {
+        return (*cpu).sepc;
+    } else if (csr_addr == CSR_SCAUSE) {
+        return (*cpu).scause;
+    } else if (csr_addr == CSR_STVAL) {
+        return (*cpu).stval;
+    } else if (csr_addr == CSR_SATP) {
+        return (*cpu).satp;
+    } else if (csr_addr == CSR_SSCRATCH) {
+        return (*cpu).sscratch;
+    } else if (csr_addr == CSR_SIE) {
+        // SIE = MIE with delegation mask
+        let sie_x = (*cpu).mie.x & (*cpu).mideleg.x;
+        let sie_y = (*cpu).mie.y & (*cpu).mideleg.y;
+        return vec2<u32>(sie_x, sie_y);
+    } else if (csr_addr == CSR_SIP) {
+        // SIP = MIP with delegation mask
+        let sip_x = (*cpu).mip.x & (*cpu).mideleg.x;
+        let sip_y = (*cpu).mip.y & (*cpu).mideleg.y;
+        return vec2<u32>(sip_x, sip_y);
+    }
+    // Unknown CSR - return zero
+    return vec2<u32>(0u, 0u);
+}
+
+fn write_csr(cpu: ptr<function, RiscvCPU>, csr_addr: u32, val: vec2<u32>) {
+    if (csr_addr == CSR_MSTATUS) {
+        (*cpu).mstatus = val;
+    } else if (csr_addr == CSR_MEPC) {
+        (*cpu).mepc = val;
+    } else if (csr_addr == CSR_MCAUSE) {
+        (*cpu).mcause = val;
+    } else if (csr_addr == CSR_MTVAL) {
+        (*cpu).mtval = val;
+    } else if (csr_addr == CSR_MTVEC) {
+        (*cpu).mtvec = val;
+    } else if (csr_addr == CSR_MIE) {
+        (*cpu).mie = val;
+    } else if (csr_addr == CSR_MSCRATCH) {
+        (*cpu).mscratch = val;
+    } else if (csr_addr == CSR_MEDELEG) {
+        (*cpu).medeleg = val;
+    } else if (csr_addr == CSR_MIDELEG) {
+        (*cpu).mideleg = val;
+    } else if (csr_addr == CSR_STVEC) {
+        (*cpu).stvec = val;
+    } else if (csr_addr == CSR_SEPC) {
+        (*cpu).sepc = val;
+    } else if (csr_addr == CSR_SCAUSE) {
+        (*cpu).scause = val;
+    } else if (csr_addr == CSR_STVAL) {
+        (*cpu).stval = val;
+    } else if (csr_addr == CSR_SATP) {
+        (*cpu).satp = val;
+    } else if (csr_addr == CSR_SSCRATCH) {
+        (*cpu).sscratch = val;
+    } else if (csr_addr == CSR_SIE) {
+        // Write to SIE affects MIE
+        (*cpu).mie.x = ((*cpu).mie.x & ~(*cpu).mideleg.x) | (val.x & (*cpu).mideleg.x);
+    } else if (csr_addr == CSR_SSTATUS) {
+        // Write to SSTATUS affects MSTATUS
+        (*cpu).mstatus.x = ((*cpu).mstatus.x & ~SSTATUS_MASK_LO) | (val.x & SSTATUS_MASK_LO);
+        (*cpu).mstatus.y = ((*cpu).mstatus.y & ~SSTATUS_MASK_HI) | (val.y & SSTATUS_MASK_HI);
+    }
+    // Ignore writes to read-only CSRs (CYCLE, TIME, INSTRET, MISA, etc.)
+}
+
+// CSRRW (Read-Write CSR)
+fn execute_csrrw(cpu: ptr<function, RiscvCPU>, instr: u32) {
+    let rd = (instr >> 7u) & 31u;
+    let rs1 = (instr >> 15u) & 31u;
+    let csr_addr = instr >> 20u;
+
+    let old_val = read_csr(cpu, csr_addr);
+    write_csr(cpu, csr_addr, (*cpu).regs[rs1]);
+
+    if (rd != 0u) {
+        (*cpu).regs[rd] = old_val;
+    }
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+}
+
+// CSRRS (Read-Set CSR)
+fn execute_csrrs(cpu: ptr<function, RiscvCPU>, instr: u32) {
+    let rd = (instr >> 7u) & 31u;
+    let rs1 = (instr >> 15u) & 31u;
+    let csr_addr = instr >> 20u;
+
+    let old_val = read_csr(cpu, csr_addr);
+    let new_val = old_val | (*cpu).regs[rs1];
+    write_csr(cpu, csr_addr, new_val);
+
+    if (rd != 0u) {
+        (*cpu).regs[rd] = old_val;
+    }
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+}
+
+// CSRRC (Read-Clear CSR)
+fn execute_csrrc(cpu: ptr<function, RiscvCPU>, instr: u32) {
+    let rd = (instr >> 7u) & 31u;
+    let rs1 = (instr >> 15u) & 31u;
+    let csr_addr = instr >> 20u;
+
+    let old_val = read_csr(cpu, csr_addr);
+    let new_val = old_val & ~(*cpu).regs[rs1];
+    write_csr(cpu, csr_addr, new_val);
+
+    if (rd != 0u) {
+        (*cpu).regs[rd] = old_val;
+    }
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+}
+
 // mstatus bit positions (low word)
+const MSTATUS_SIE_BIT: u32 = 1u;
 const MSTATUS_MIE_BIT: u32 = 3u;
+const MSTATUS_SPIE_BIT: u32 = 5u;
 const MSTATUS_MPIE_BIT: u32 = 7u;
+const MSTATUS_SPP_BIT: u32 = 8u;
 const MSTATUS_MPP_SHIFT: u32 = 11u;  // bits [12:11]
+
+// sstatus = restricted view of mstatus: SIE, SPIE, UBE, SPP, VS, FS, XS, SUM, MXR
+const SSTATUS_MASK_LO: u32 = 0x000DE762u;
+const SSTATUS_MASK_HI: u32 = 0x00000003u;  // UXL bits [33:32]
 
 // mcause exception codes
 const CAUSE_ILLEGAL_INSTR: u32 = 2u;
 const CAUSE_BREAKPOINT: u32 = 3u;
+const CAUSE_ECALL_U: u32 = 8u;
+const CAUSE_ECALL_S: u32 = 9u;
+const CAUSE_ECALL_M: u32 = 11u;
+
+// SBI extension IDs (a7) - the WGSL emulator IS the M-mode firmware.
+// S-mode ECALLs are handled inline instead of vectoring to mtvec.
+const SBI_EXT_LEGACY_SET_TIMER: u32 = 0x00u;
+const SBI_EXT_LEGACY_PUTCHAR: u32 = 0x01u;
+const SBI_EXT_LEGACY_GETCHAR: u32 = 0x02u;
+const SBI_EXT_BASE: u32 = 0x10u;
+const SBI_EXT_TIME: u32 = 0x54494D45u;   // "TIME"
+const SBI_EXT_IPI: u32 = 0x735049u;      // "sPI"
+const SBI_EXT_RFENCE: u32 = 0x52464E43u; // "RFNC"
+const SBI_EXT_HSM: u32 = 0x48534Du;      // "HSM"
+const SBI_EXT_SRST: u32 = 0x53525354u;   // "SRST"
+const SBI_EXT_DBCN: u32 = 0x4442434Eu;   // "DBCN" (debug console)
+const SBI_SUCCESS: u32 = 0u;
+const SBI_ERR_NOT_SUPPORTED: u32 = 0xFFFFFFFEu;  // -2 (low word; high = all ones)
 
 // SYSTEM funct12 encodings (funct3 == 0)
 const F12_ECALL: u32 = 0x000u;
@@ -190,6 +402,11 @@ const UART_THR: u32 = 0x10000000u;  // Transmit Holding Register
 const UART_LSR: u32 = 0x10000005u;  // Line Status Register
 const UART_LSR_THRE: u32 = 32u;      // Transmit Holding Register Empty
 
+// Physical memory base offset
+// For M-mode systems like xv6, DRAM starts at 0x80000000
+// When MMU is off, we subtract this base to get pixel index
+const PHYS_BASE: u32 = 0x80000000u;
+
 // ============================================================================
 // STORAGE BUFFERS
 // ============================================================================
@@ -211,7 +428,7 @@ fn pixel_to_instruction(px: InstructionPixel) -> u32 {
 // Sign-extend 12-bit immediate to 32-bit
 fn sign_extend_12(imm: u32) -> u32 {
     if ((imm & 2048u) != 0u) {
-        return imm | 4294966272u;
+        return imm | 4294963200u;  // 0xFFFFF000
     }
     return imm;
 }
@@ -219,7 +436,7 @@ fn sign_extend_12(imm: u32) -> u32 {
 // Sign-extend 20-bit immediate to 32-bit
 fn sign_extend_20(imm: u32) -> u32 {
     if ((imm & 524288u) != 0u) {
-        return imm | 4278190080u;
+        return imm | 4293918720u;  // 0xFFF00000
     }
     return imm;
 }
@@ -227,7 +444,7 @@ fn sign_extend_20(imm: u32) -> u32 {
 // Sign-extend 21-bit immediate (for JAL) to 32-bit
 fn sign_extend_21(imm: u32) -> u32 {
     if ((imm & 1048576u) != 0u) {
-        return imm | 4290772992u;
+        return imm | 4292870144u;  // 0xFFE00000
     }
     return imm;
 }
@@ -450,7 +667,10 @@ fn divrems64(a: vec2<u32>, b: vec2<u32>) -> DivRem {
 
 // Read a 32-bit word from physical memory
 fn read_phys_word(pa: vec2<u32>) -> u32 {
-    let word_addr = (pa.x / 4u);
+    // Handle physical memory at 0x80000000+ (xv6 M-mode boot)
+    let pa_base = select(0u, PHYS_BASE, pa.x >= PHYS_BASE);
+    let pa_offset = pa.x - pa_base;
+    let word_addr = (pa_offset / 4u);
     if (word_addr >= arrayLength(&memory)) {
         return 0u;
     }
@@ -460,7 +680,10 @@ fn read_phys_word(pa: vec2<u32>) -> u32 {
 
 // Write a 32-bit word to physical memory
 fn write_phys_word(pa: vec2<u32>, val: u32) {
-    let word_addr = (pa.x / 4u);
+    // Handle physical memory at 0x80000000+ (xv6 M-mode boot)
+    let pa_base = select(0u, PHYS_BASE, pa.x >= PHYS_BASE);
+    let pa_offset = pa.x - pa_base;
+    let word_addr = (pa_offset / 4u);
     if (word_addr >= arrayLength(&memory)) {
         return;
     }
@@ -603,13 +826,17 @@ fn translate_va(satp: vec2<u32>, va: vec2<u32>) -> vec2<u32> {
 fn fetch_instruction(satp: vec2<u32>, pc: vec2<u32>) -> u32 {
     // Translate virtual PC to physical address
     let pa = translate_va(satp, pc);
-    
+
     // Check for translation fault
     if (pa.x == 0xFFFFFFFFu) {
         return 0u;
     }
-    
-    let pixel_idx = pa.x / 4u;
+
+    // Handle physical memory at 0x80000000+ (xv6 M-mode boot)
+    let pa_base = select(0u, PHYS_BASE, pa.x >= PHYS_BASE);
+    let pa_offset = pa.x - pa_base;
+    let pixel_idx = pa_offset / 4u;
+
     if (pixel_idx >= arrayLength(&memory)) {
         return 0u;
     }
@@ -702,6 +929,18 @@ fn execute_addi(cpu: ptr<function, RiscvCPU>, instr: u32) {
     let decoded = decode_i_type(instr);
     if (decoded.rd != 0u) {
         (*cpu).regs[decoded.rd] = add64((*cpu).regs[decoded.rs1], sext32_to_64(decoded.imm));
+    }
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+}
+
+// AUIPC (Add Upper Immediate to PC)
+fn execute_auipc(cpu: ptr<function, RiscvCPU>, instr: u32) {
+    let rd = (instr >> 7u) & 31u;
+    let imm = ((instr >> 12u) & 0xFFFFFu) << 12u;  // imm[31:12] << 12
+    let imm64 = sext32_to_64(imm);
+    let pc_plus_imm = add64((*cpu).pc, imm64);
+    if (rd != 0u) {
+        (*cpu).regs[rd] = pc_plus_imm;
     }
     (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
 }
@@ -1239,13 +1478,14 @@ fn execute_muldiv_w(cpu: ptr<function, RiscvCPU>, instr: u32) {
 
 // Read a CSR. Unknown CSRs read as 0 (no trap) so kernel/firmware probing
 // of PMP, delegation, and counter CSRs doesn't kill the boot.
+// sstatus/sie/sip are architectural views of mstatus/mie/mip, not storage.
 fn csr_read(cpu: ptr<function, RiscvCPU>, addr: u32) -> vec2<u32> {
     switch (addr) {
         case CSR_MHARTID: { return vec2<u32>(0u, 0u); }  // Always hart 0
         case CSR_MSTATUS: { return (*cpu).mstatus; }
         case CSR_MISA: {
-            // MXL=2 (RV64) in bits [63:62]; extensions I, M, S, U
-            let ext = (1u << 8u) | (1u << 12u) | (1u << 18u) | (1u << 20u);
+            // MXL=2 (RV64) in bits [63:62]; extensions A, I, M, S, U
+            let ext = (1u << 0u) | (1u << 8u) | (1u << 12u) | (1u << 18u) | (1u << 20u);
             return vec2<u32>(ext, 0x80000000u);
         }
         case CSR_MIE: { return (*cpu).mie; }
@@ -1255,6 +1495,26 @@ fn csr_read(cpu: ptr<function, RiscvCPU>, addr: u32) -> vec2<u32> {
         case CSR_MCAUSE: { return (*cpu).mcause; }
         case CSR_MTVAL: { return (*cpu).mtval; }
         case CSR_MIP: { return (*cpu).mip; }
+        case CSR_MEDELEG: { return (*cpu).medeleg; }
+        case CSR_MIDELEG: { return (*cpu).mideleg; }
+        case CSR_SSTATUS: {
+            // Restricted view of mstatus; UXL reads as 2 (RV64)
+            return vec2<u32>((*cpu).mstatus.x & SSTATUS_MASK_LO,
+                             ((*cpu).mstatus.y & SSTATUS_MASK_HI) | 0x2u);
+        }
+        case CSR_SIE: {
+            return vec2<u32>((*cpu).mie.x & (*cpu).mideleg.x,
+                             (*cpu).mie.y & (*cpu).mideleg.y);
+        }
+        case CSR_SIP: {
+            return vec2<u32>((*cpu).mip.x & (*cpu).mideleg.x,
+                             (*cpu).mip.y & (*cpu).mideleg.y);
+        }
+        case CSR_STVEC: { return (*cpu).stvec; }
+        case CSR_SSCRATCH: { return (*cpu).sscratch; }
+        case CSR_SEPC: { return (*cpu).sepc; }
+        case CSR_SCAUSE: { return (*cpu).scause; }
+        case CSR_STVAL: { return (*cpu).stval; }
         case CSR_SATP: { return (*cpu).satp; }
         case CSR_MCYCLE, CSR_MINSTRET, CSR_CYCLE, CSR_TIME, CSR_INSTRET: {
             return vec2<u32>((*cpu).instr_count, 0u);
@@ -1275,17 +1535,114 @@ fn csr_write(cpu: ptr<function, RiscvCPU>, addr: u32, val: vec2<u32>) {
         case CSR_MCAUSE: { (*cpu).mcause = val; }
         case CSR_MTVAL: { (*cpu).mtval = val; }
         case CSR_MIP: { (*cpu).mip = val; }
+        case CSR_MEDELEG: { (*cpu).medeleg = val; }
+        case CSR_MIDELEG: { (*cpu).mideleg = val; }
+        case CSR_SSTATUS: {
+            // Only the S-view bits of mstatus are writable through sstatus.
+            // CRITICAL: Preserve MIE bit (bit 3) - S-mode writes to sstatus must not
+            // affect M-mode interrupt enable, otherwise push_off/pop_off will fail.
+            // SSTATUS_MASK_LO = 0x000DE762 excludes bit 3 (MIE), so we need to
+            // preserve it explicitly when in M-mode.
+            let preserve_mie = (*cpu).mstatus.x & (1u << 3u);
+            (*cpu).mstatus.x = ((*cpu).mstatus.x & ~SSTATUS_MASK_LO) | (val.x & SSTATUS_MASK_LO) | preserve_mie;
+            (*cpu).mstatus.y = ((*cpu).mstatus.y & ~SSTATUS_MASK_HI) | (val.y & SSTATUS_MASK_HI);
+        }
+        case CSR_SIE: {
+            // S-mode may only touch interrupt bits delegated via mideleg
+            (*cpu).mie.x = ((*cpu).mie.x & ~(*cpu).mideleg.x) | (val.x & (*cpu).mideleg.x);
+            (*cpu).mie.y = ((*cpu).mie.y & ~(*cpu).mideleg.y) | (val.y & (*cpu).mideleg.y);
+        }
+        case CSR_SIP: {
+            (*cpu).mip.x = ((*cpu).mip.x & ~(*cpu).mideleg.x) | (val.x & (*cpu).mideleg.x);
+            (*cpu).mip.y = ((*cpu).mip.y & ~(*cpu).mideleg.y) | (val.y & (*cpu).mideleg.y);
+        }
+        case CSR_STVEC: { (*cpu).stvec = val; }
+        case CSR_SSCRATCH: { (*cpu).sscratch = val; }
+        case CSR_SEPC: { (*cpu).sepc = vec2<u32>(val.x & 0xFFFFFFFEu, val.y); }
+        case CSR_SCAUSE: { (*cpu).scause = val; }
+        case CSR_STVAL: { (*cpu).stval = val; }
         case CSR_SATP: { (*cpu).satp = val; }
         default: { }
     }
 }
 
-// CSRRW/CSRRS/CSRRC and their immediate forms (funct3 bit 2 = immediate)
-fn execute_csr(cpu: ptr<function, RiscvCPU>, instr: u32) {
+// Enter a trap handler. Exceptions raised in S/U mode whose cause bit is set
+// in medeleg vector to S-mode (stvec); everything else goes to M-mode (mtvec).
+fn take_trap(cpu: ptr<function, RiscvCPU>, cause: vec2<u32>, tval: vec2<u32>) {
+    let code = cause.x & 31u;
+    let delegated = (*cpu).priv_mode != PRIV_M &&
+                    (((*cpu).medeleg.x >> code) & 1u) != 0u;
+
+    if (delegated) {
+        (*cpu).sepc = (*cpu).pc;
+        (*cpu).scause = cause;
+        (*cpu).stval = tval;
+
+        // mstatus: SPIE <- SIE, SIE <- 0, SPP <- (was S-mode ? 1 : 0)
+        var ms = (*cpu).mstatus.x;
+        let sie = (ms >> MSTATUS_SIE_BIT) & 1u;
+        let spp = select(0u, 1u, (*cpu).priv_mode == PRIV_S);
+        ms = ms & ~((1u << MSTATUS_SPIE_BIT) | (1u << MSTATUS_SIE_BIT) | (1u << MSTATUS_SPP_BIT));
+        ms = ms | (sie << MSTATUS_SPIE_BIT) | (spp << MSTATUS_SPP_BIT);
+        (*cpu).mstatus.x = ms;
+
+        (*cpu).priv_mode = PRIV_S;
+        (*cpu).pc = vec2<u32>((*cpu).stvec.x & 0xFFFFFFFCu, (*cpu).stvec.y);
+    } else {
+        (*cpu).mepc = (*cpu).pc;
+        (*cpu).mcause = cause;
+        (*cpu).mtval = tval;
+
+        // mstatus: MPIE <- MIE, MIE <- 0, MPP <- current privilege
+        var ms = (*cpu).mstatus.x;
+        let mie = (ms >> MSTATUS_MIE_BIT) & 1u;
+        ms = ms & ~((1u << MSTATUS_MPIE_BIT) | (1u << MSTATUS_MIE_BIT) | (3u << MSTATUS_MPP_SHIFT));
+        ms = ms | (mie << MSTATUS_MPIE_BIT) | ((*cpu).priv_mode << MSTATUS_MPP_SHIFT);
+        (*cpu).mstatus.x = ms;
+
+        (*cpu).priv_mode = PRIV_M;
+        (*cpu).pc = vec2<u32>((*cpu).mtvec.x & 0xFFFFFFFCu, (*cpu).mtvec.y);
+    }
+}
+
+// Illegal instruction: trap if a reachable handler is installed, otherwise
+// halt with the instruction word as a debug marker (old behavior)
+fn handle_illegal(cpu: ptr<function, RiscvCPU>, instr: u32, cpu_id: u32) {
+    let delegated = (*cpu).priv_mode != PRIV_M &&
+                    (((*cpu).medeleg.x >> CAUSE_ILLEGAL_INSTR) & 1u) != 0u;
+    let handler_x = select((*cpu).mtvec.x, (*cpu).stvec.x, delegated);
+    let handler_y = select((*cpu).mtvec.y, (*cpu).stvec.y, delegated);
+    if (handler_x != 0u || handler_y != 0u) {
+        take_trap(cpu, vec2<u32>(CAUSE_ILLEGAL_INSTR, 0u), vec2<u32>(instr, 0u));
+    } else {
+        output[cpu_id * 256u] = instr;
+        (*cpu).running = 0u;
+    }
+}
+
+// CSRRW/CSRRS/CSRRC and their immediate forms (funct3 bit 2 = immediate).
+// Enforces the privilege encoded in the CSR address: bits [9:8] are the
+// minimum privilege, bits [11:10] == 3 marks the CSR read-only.
+fn execute_csr(cpu: ptr<function, RiscvCPU>, instr: u32, cpu_id: u32) {
     let funct3 = (instr >> 12u) & 7u;
     let rd = (instr >> 7u) & 31u;
     let rs1_field = (instr >> 15u) & 31u;  // rs1 register OR 5-bit zimm
     let csr_addr = instr >> 20u;
+
+    // Privilege check: S-mode touching an M-mode CSR is an illegal instruction
+    let min_priv = (csr_addr >> 8u) & 3u;
+    if ((*cpu).priv_mode < min_priv) {
+        handle_illegal(cpu, instr, cpu_id);
+        return;
+    }
+
+    let op = funct3 & 3u;
+    let writes = (op == 1u) || (rs1_field != 0u);
+    if (writes && ((csr_addr >> 10u) & 3u) == 3u) {
+        // Write to a read-only CSR (0xCxx/0xFxx ranges)
+        handle_illegal(cpu, instr, cpu_id);
+        return;
+    }
 
     let old = csr_read(cpu, csr_addr);
 
@@ -1296,7 +1653,6 @@ fn execute_csr(cpu: ptr<function, RiscvCPU>, instr: u32) {
         src = (*cpu).regs[rs1_field];
     }
 
-    let op = funct3 & 3u;
     if (op == 1u) {                        // CSRRW: unconditional write
         csr_write(cpu, csr_addr, src);
     } else if (op == 2u && rs1_field != 0u) {  // CSRRS: set bits
@@ -1309,24 +1665,6 @@ fn execute_csr(cpu: ptr<function, RiscvCPU>, instr: u32) {
         (*cpu).regs[rd] = old;
     }
     (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
-}
-
-// Enter the M-mode trap handler: save state, jump to mtvec
-fn take_trap(cpu: ptr<function, RiscvCPU>, cause: vec2<u32>, tval: vec2<u32>) {
-    (*cpu).mepc = (*cpu).pc;
-    (*cpu).mcause = cause;
-    (*cpu).mtval = tval;
-
-    // mstatus: MPIE <- MIE, MIE <- 0, MPP <- current privilege
-    var ms = (*cpu).mstatus.x;
-    let mie = (ms >> MSTATUS_MIE_BIT) & 1u;
-    ms = ms & ~((1u << MSTATUS_MPIE_BIT) | (1u << MSTATUS_MIE_BIT) | (3u << MSTATUS_MPP_SHIFT));
-    ms = ms | (mie << MSTATUS_MPIE_BIT) | ((*cpu).priv_mode << MSTATUS_MPP_SHIFT);
-    (*cpu).mstatus.x = ms;
-
-    (*cpu).priv_mode = PRIV_M;
-    // Direct mode: jump to mtvec base (low 2 bits are the vectoring mode)
-    (*cpu).pc = vec2<u32>((*cpu).mtvec.x & 0xFFFFFFFCu, (*cpu).mtvec.y);
 }
 
 // MRET: return from M-mode trap handler
@@ -1344,15 +1682,19 @@ fn execute_mret(cpu: ptr<function, RiscvCPU>) {
     (*cpu).pc = (*cpu).mepc;
 }
 
-// Illegal instruction: trap to mtvec if a handler is installed,
-// otherwise halt with the instruction word as a debug marker (old behavior)
-fn handle_illegal(cpu: ptr<function, RiscvCPU>, instr: u32, cpu_id: u32) {
-    if ((*cpu).mtvec.x != 0u || (*cpu).mtvec.y != 0u) {
-        take_trap(cpu, vec2<u32>(CAUSE_ILLEGAL_INSTR, 0u), vec2<u32>(instr, 0u));
-    } else {
-        output[cpu_id * 256u] = instr;
-        (*cpu).running = 0u;
-    }
+// SRET: return from S-mode trap handler
+fn execute_sret(cpu: ptr<function, RiscvCPU>) {
+    var ms = (*cpu).mstatus.x;
+    let spie = (ms >> MSTATUS_SPIE_BIT) & 1u;
+    let spp = (ms >> MSTATUS_SPP_BIT) & 1u;
+
+    ms = (ms & ~(1u << MSTATUS_SIE_BIT)) | (spie << MSTATUS_SIE_BIT);  // SIE <- SPIE
+    ms = ms | (1u << MSTATUS_SPIE_BIT);                                // SPIE <- 1
+    ms = ms & ~(1u << MSTATUS_SPP_BIT);                                // SPP <- U
+    (*cpu).mstatus.x = ms;
+
+    (*cpu).priv_mode = spp;  // 1 = S, 0 = U
+    (*cpu).pc = (*cpu).sepc;
 }
 
 // OP_LOAD (LB, LH, LW, LBU, LHU, LD, LWU)
@@ -1506,193 +1848,158 @@ fn execute_store(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32, cpu_
 // A EXTENSION: ATOMIC MEMORY OPERATIONS
 // ============================================================================
 
-// Load Reserved (LR.D) - on single hart, trivially succeeds
-fn execute_lr(cpu: ptr<function, RiscvCPU>, instr: u32) {
+// Load Reserved (LR.W/LR.D) - on single hart, trivially succeeds.
+// funct3: 2 = .W (32-bit, sign-extended into rd), 3 = .D (64-bit)
+fn execute_lr(cpu: ptr<function, RiscvCPU>, instr: u32, funct3: u32) {
     let rd = (instr >> 7u) & 31u;
     let rs1 = (instr >> 15u) & 31u;
     let va = (*cpu).regs[rs1];
 
-    // Translate virtual address
     let pa = translate_va((*cpu).satp, va);
-
-    // Check for page fault
     if (pa.x == 0xFFFFFFFFu) {
-        // Page fault: trap
         (*cpu).running = 0u;
         (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
         return;
     }
-
-    // Check if this is a device address (no atomics on MMIO)
     if (is_uart_addr(pa)) {
-        // Device access not allowed for LR - trap
         (*cpu).running = 0u;
         (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
         return;
     }
 
-    // Read the 64-bit value
-    let word_addr = pa.x / 4u;
-    let px = memory[word_addr];
-    let low_val = pixel_to_instruction(px);
-    let word_addr_next = (pa.x + 4u) / 4u;
-    let px_next = memory[word_addr_next];
-    let high_val = pixel_to_instruction(px_next);
-
-    if (rd != 0u) {
-        (*cpu).regs[rd] = vec2<u32>(low_val, high_val);
+    if (funct3 == 3u) {
+        let low_val = read_phys_word(pa);
+        let high_val = read_phys_word(add64(pa, vec2<u32>(4u, 0u)));
+        if (rd != 0u) {
+            (*cpu).regs[rd] = vec2<u32>(low_val, high_val);
+        }
+    } else {
+        let val32 = read_phys_word(pa);
+        if (rd != 0u) {
+            (*cpu).regs[rd] = sext32_to_64(val32);
+        }
     }
 
-    // Set reservation flag (single hart: always true)
-    // In a multi-hart system, we'd need a reservation set per address
-
+    // Reservation set (single hart: always valid on the matching SC)
     (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
 }
 
-// Store Conditional (SC.D) - on single hart, trivially succeeds
-fn execute_sc(cpu: ptr<function, RiscvCPU>, instr: u32) {
+// Store Conditional (SC.W/SC.D) - on single hart, trivially succeeds.
+fn execute_sc(cpu: ptr<function, RiscvCPU>, instr: u32, funct3: u32) {
     let rd = (instr >> 7u) & 31u;
     let rs1 = (instr >> 15u) & 31u;
     let rs2 = (instr >> 20u) & 31u;
     let va = (*cpu).regs[rs1];
     let store_val = (*cpu).regs[rs2];
 
-    // Translate virtual address
     let pa = translate_va((*cpu).satp, va);
-
-    // Check for page fault
     if (pa.x == 0xFFFFFFFFu) {
-        // Page fault: trap
         (*cpu).running = 0u;
         (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
         return;
     }
-
-    // Check if this is a device address (no atomics on MMIO)
     if (is_uart_addr(pa)) {
-        // Device access not allowed for SC - trap
         (*cpu).running = 0u;
         (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
         return;
     }
 
-    // On single hart, reservation always valid
-    // Write the 64-bit value atomically
-    write_phys_word(pa, store_val.x);
-    write_phys_word(add64(pa, vec2<u32>(4u, 0u)), store_val.y);
+    if (funct3 == 3u) {
+        write_phys_word(pa, store_val.x);
+        write_phys_word(add64(pa, vec2<u32>(4u, 0u)), store_val.y);
+    } else {
+        write_phys_word(pa, store_val.x);
+    }
 
-    // SC returns 0 on success, non-zero on failure
+    // SC returns 0 on success, non-zero on failure (single hart: always succeeds)
     if (rd != 0u) {
-        (*cpu).regs[rd] = vec2<u32>(0u, 0u);  // Success
+        (*cpu).regs[rd] = vec2<u32>(0u, 0u);
     }
 
     (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
 }
 
-// AMO.D: atomic read-modify-write on 64-bit values
-fn execute_amo(cpu: ptr<function, RiscvCPU>, instr: u32) {
+// AMO.W/AMO.D: atomic read-modify-write.
+// funct5 (real RISC-V encoding, instr[31:27]):
+//   0=ADD 1=SWAP 2=LR 4=XOR 8=OR 12=AND 16=MIN 20=MAX 24=MINU 28=MAXU
+// funct3: 2 = .W (32-bit, sign-extended into rd), 3 = .D (64-bit)
+fn execute_amo(cpu: ptr<function, RiscvCPU>, instr: u32, funct3: u32, funct5: u32) {
     let rd = (instr >> 7u) & 31u;
     let rs1 = (instr >> 15u) & 31u;
     let rs2 = (instr >> 20u) & 31u;
-    let funct3 = (instr >> 12u) & 7u;
 
     let va = (*cpu).regs[rs1];
-
-    // Translate virtual address
     let pa = translate_va((*cpu).satp, va);
-
-    // Check for page fault
     if (pa.x == 0xFFFFFFFFu) {
-        // Page fault: trap
         (*cpu).running = 0u;
         (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
         return;
     }
-
-    // Check if this is a device address (no atomics on MMIO)
     if (is_uart_addr(pa)) {
-        // Device access not allowed for AMOs - trap
         (*cpu).running = 0u;
         (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
         return;
     }
 
-    // Read the current 64-bit value
-    let word_addr = pa.x / 4u;
-    let px = memory[word_addr];
-    let low_val = pixel_to_instruction(px);
-    let word_addr_next = (pa.x + 4u) / 4u;
-    let px_next = memory[word_addr_next];
-    let high_val = pixel_to_instruction(px_next);
-    let mem_val = vec2<u32>(low_val, high_val);
-
-    // Compute new value based on operation (funct7[4:0] in bits [29:25])
-    // Note: LR.D and SC.D have funct3=2/3, not funct3=2 with AMOs
     let src = (*cpu).regs[rs2];
-    let funct5 = (instr >> 25u) & 31u;
-    var new_val = mem_val;
+    let is_word = funct3 != 3u;
 
-    if (funct5 == 0u) {
-        // AMOADD.D (funct7_5=00000)
-        new_val = add64(mem_val, src);
-    } else if (funct5 == 1u) {
-        // AMOSWAP.D (funct7_5=00001)
-        new_val = src;
-    } else if (funct5 == 4u) {
-        // AMOXOR.D (funct7_5=00100)
-        new_val = vec2<u32>(mem_val.x ^ src.x, mem_val.y ^ src.y);
-    } else if (funct5 == 12u) {
-        // AMOOR.D (funct7_5=01100)
-        new_val = vec2<u32>(mem_val.x | src.x, mem_val.y | src.y);
-    } else if (funct5 == 15u) {
-        // AMOAND.D (funct7_5=01111)
-        new_val = vec2<u32>(mem_val.x & src.x, mem_val.y & src.y);
-    } else if (funct5 == 8u) {
-        // AMOMIN.D (funct7_5=01000, signed)
-        if (lt64s(src, mem_val)) {
-            new_val = src;
+    if (is_word) {
+        let mem_val32 = read_phys_word(pa);
+        let src32 = src.x;
+        var new_val32 = mem_val32;
+
+        if (funct5 == 0u) { new_val32 = mem_val32 + src32; }
+        else if (funct5 == 1u) { new_val32 = src32; }
+        else if (funct5 == 4u) { new_val32 = mem_val32 ^ src32; }
+        else if (funct5 == 8u) { new_val32 = mem_val32 | src32; }
+        else if (funct5 == 12u) { new_val32 = mem_val32 & src32; }
+        else if (funct5 == 16u) {
+            if (bitcast<i32>(src32) < bitcast<i32>(mem_val32)) { new_val32 = src32; }
+        } else if (funct5 == 20u) {
+            if (bitcast<i32>(src32) > bitcast<i32>(mem_val32)) { new_val32 = src32; }
+        } else if (funct5 == 24u) {
+            if (src32 < mem_val32) { new_val32 = src32; }
+        } else if (funct5 == 28u) {
+            if (src32 > mem_val32) { new_val32 = src32; }
+        } else {
+            (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+            return;
         }
-    } else if (funct5 == 10u) {
-        // AMOMAX.D (funct7_5=01010, signed)
-        if (lt64s(mem_val, src)) {
-            new_val = src;
-        }
-    } else if (funct5 == 14u) {
-        // AMOMINU.D (funct7_5=01110, unsigned)
-        if (lt64(src, mem_val)) {
-            new_val = src;
-        }
-    } else if (funct5 == 11u) {
-        // AMOMAXU.D (funct7_5=01011, unsigned)
-        if (lt64(mem_val, src)) {
-            new_val = src;
+
+        write_phys_word(pa, new_val32);
+        if (rd != 0u) {
+            (*cpu).regs[rd] = sext32_to_64(mem_val32);
         }
     } else {
-        // Unknown AMO - illegal instruction
-        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
-        return;
-    }
+        let low_val = read_phys_word(pa);
+        let high_val = read_phys_word(add64(pa, vec2<u32>(4u, 0u)));
+        let mem_val = vec2<u32>(low_val, high_val);
+        var new_val = mem_val;
 
-    // Write the new value atomically
-    let low_word = new_val.x;
-    var px_low = memory[word_addr];
-    px_low.r = low_word & 0xFFu;
-    px_low.g = (low_word >> 8u) & 0xFFu;
-    px_low.b = (low_word >> 16u) & 0xFFu;
-    px_low.a = (low_word >> 24u) & 0xFFu;
-    memory[word_addr] = px_low;
+        if (funct5 == 0u) { new_val = add64(mem_val, src); }
+        else if (funct5 == 1u) { new_val = src; }
+        else if (funct5 == 4u) { new_val = vec2<u32>(mem_val.x ^ src.x, mem_val.y ^ src.y); }
+        else if (funct5 == 8u) { new_val = vec2<u32>(mem_val.x | src.x, mem_val.y | src.y); }
+        else if (funct5 == 12u) { new_val = vec2<u32>(mem_val.x & src.x, mem_val.y & src.y); }
+        else if (funct5 == 16u) {
+            if (lt64s(src, mem_val)) { new_val = src; }
+        } else if (funct5 == 20u) {
+            if (lt64s(mem_val, src)) { new_val = src; }
+        } else if (funct5 == 24u) {
+            if (lt64(src, mem_val)) { new_val = src; }
+        } else if (funct5 == 28u) {
+            if (lt64(mem_val, src)) { new_val = src; }
+        } else {
+            (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+            return;
+        }
 
-    let high_word = new_val.y;
-    var px_high = memory[word_addr_next];
-    px_high.r = high_word & 0xFFu;
-    px_high.g = (high_word >> 8u) & 0xFFu;
-    px_high.b = (high_word >> 16u) & 0xFFu;
-    px_high.a = (high_word >> 24u) & 0xFFu;
-    memory[word_addr_next] = px_high;
-
-    // Return the old value
-    if (rd != 0u) {
-        (*cpu).regs[rd] = mem_val;
+        write_phys_word(pa, new_val.x);
+        write_phys_word(add64(pa, vec2<u32>(4u, 0u)), new_val.y);
+        if (rd != 0u) {
+            (*cpu).regs[rd] = mem_val;
+        }
     }
 
     (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
@@ -1714,7 +2021,119 @@ fn read_byte_from_memory(satp: vec2<u32>, addr: vec2<u32>) -> u32 {
     return (word >> (byte_offset * 8u)) & 255u;
 }
 
+// Read one byte from PHYSICAL memory (SBI calls pass physical addresses)
+fn read_phys_byte(pa: vec2<u32>) -> u32 {
+    let word = read_phys_word(pa);
+    return (word >> ((pa.x & 3u) * 8u)) & 0xFFu;
+}
+
+// ============================================================================
+// SBI FIRMWARE (executed inline - the GPU emulator IS the M-mode firmware)
+//
+// An ECALL from S-mode is an "environment call to the SEE". Instead of
+// vectoring to an M-mode software handler, we implement the SBI contract
+// directly in WGSL: read a7 (EID) / a6 (FID), act, put the SBI return in
+// a0 (error) / a1 (value), and resume at pc + 4.
+// ============================================================================
+
+fn execute_sbi(cpu: ptr<function, RiscvCPU>, cpu_id: u32) {
+    let eid = (*cpu).regs[17].x;  // a7
+    let fid = (*cpu).regs[16].x;  // a6
+    let arg0 = (*cpu).regs[10];   // a0
+    let arg1 = (*cpu).regs[11];   // a1
+
+    var err = vec2<u32>(SBI_SUCCESS, 0u);
+    var val = vec2<u32>(0u, 0u);
+
+    if (eid == SBI_EXT_LEGACY_PUTCHAR) {
+        // Legacy console putchar: character in a0. Legacy calls return
+        // only a0 (0 on success); a1 is preserved.
+        (*cpu).output_ptr = uart_write_char(cpu_id, arg0.x & 0xFFu, (*cpu).output_ptr);
+        (*cpu).regs[10] = vec2<u32>(0u, 0u);
+        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        return;
+    } else if (eid == SBI_EXT_LEGACY_GETCHAR) {
+        // No input device: legacy getchar returns -1
+        (*cpu).regs[10] = vec2<u32>(0xFFFFFFFFu, 0xFFFFFFFFu);
+        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        return;
+    } else if (eid == SBI_EXT_LEGACY_SET_TIMER) {
+        // No timer interrupts yet: accept and ignore
+        (*cpu).regs[10] = vec2<u32>(0u, 0u);
+        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        return;
+    } else if (eid == SBI_EXT_BASE) {
+        if (fid == 0u) {        // sbi_get_spec_version: v2.0 (major in [30:24])
+            val = vec2<u32>(2u << 24u, 0u);
+        } else if (fid == 1u) { // sbi_get_impl_id (custom)
+            val = vec2<u32>(0x47505547u, 0u);  // "GPUG"
+        } else if (fid == 2u) { // sbi_get_impl_version
+            val = vec2<u32>(1u, 0u);
+        } else if (fid == 3u) { // sbi_probe_extension(a0 = EID)
+            let probed = arg0.x;
+            let supported = probed == SBI_EXT_BASE || probed == SBI_EXT_TIME ||
+                            probed == SBI_EXT_SRST || probed == SBI_EXT_DBCN ||
+                            probed == SBI_EXT_LEGACY_PUTCHAR || probed == SBI_EXT_LEGACY_GETCHAR;
+            val = vec2<u32>(select(0u, 1u, supported), 0u);
+        } else if (fid == 4u || fid == 5u || fid == 6u) {
+            // mvendorid / marchid / mimpid
+            val = vec2<u32>(0u, 0u);
+        } else {
+            err = vec2<u32>(SBI_ERR_NOT_SUPPORTED, 0xFFFFFFFFu);
+        }
+    } else if (eid == SBI_EXT_TIME) {
+        if (fid == 0u) {        // sbi_set_timer: no timer interrupts yet
+            // success, no-op
+        } else {
+            err = vec2<u32>(SBI_ERR_NOT_SUPPORTED, 0xFFFFFFFFu);
+        }
+    } else if (eid == SBI_EXT_DBCN) {
+        if (fid == 0u) {
+            // sbi_debug_console_write(num_bytes=a0, base_addr=a1/a2 physical)
+            let count = min(arg0.x, 4096u);
+            for (var i = 0u; i < count; i = i + 1u) {
+                let ch = read_phys_byte(add64(arg1, vec2<u32>(i, 0u)));
+                (*cpu).output_ptr = uart_write_char(cpu_id, ch, (*cpu).output_ptr);
+            }
+            val = vec2<u32>(count, 0u);  // bytes written
+        } else if (fid == 2u) {
+            // sbi_debug_console_write_byte(a0)
+            (*cpu).output_ptr = uart_write_char(cpu_id, arg0.x & 0xFFu, (*cpu).output_ptr);
+        } else if (fid == 1u) {
+            // sbi_debug_console_read: no input - 0 bytes
+            val = vec2<u32>(0u, 0u);
+        } else {
+            err = vec2<u32>(SBI_ERR_NOT_SUPPORTED, 0xFFFFFFFFu);
+        }
+    } else if (eid == SBI_EXT_SRST) {
+        // sbi_system_reset: clean shutdown of the pixel machine
+        (*cpu).running = 0u;
+    } else {
+        // HSM, IPI, RFENCE, everything else: not supported (single hart,
+        // no TLB shootdown needed, no secondary harts to start)
+        err = vec2<u32>(SBI_ERR_NOT_SUPPORTED, 0xFFFFFFFFu);
+    }
+
+    (*cpu).regs[10] = err;
+    (*cpu).regs[11] = val;
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+}
+
 fn execute_ecall(cpu: ptr<function, RiscvCPU>, cpu_id: u32) {
+    // S-mode ECALL = SBI call, handled by the inline firmware above
+    if ((*cpu).priv_mode == PRIV_S) {
+        execute_sbi(cpu, cpu_id);
+        return;
+    }
+
+    // U-mode ECALL = system call to the S-mode kernel: real trap (cause 8).
+    // pc is NOT advanced - sepc/mepc must point at the ECALL itself.
+    if ((*cpu).priv_mode == PRIV_U) {
+        take_trap(cpu, vec2<u32>(CAUSE_ECALL_U, 0u), vec2<u32>(0u, 0u));
+        return;
+    }
+
+    // M-mode ECALL: legacy test-kernel syscall shim (sys_write/sys_exit)
     let syscall_num = (*cpu).regs[17].x; // a7
 
     if (syscall_num == 64u) {
@@ -1779,6 +2198,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     if (opcode == OP_LUI) {
         execute_lui(&cpu, instr);
+    } else if (opcode == OP_AUIPC) {
+        execute_auipc(&cpu, instr);
     } else if (opcode == OP_OP_IMM) {
         let funct3 = (instr >> 12u) & 7u;
         let funct7 = (instr >> 25u) & 127u;
@@ -1794,11 +2215,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             execute_slti(&cpu, instr);
         } else if (funct3 == F3_SLTIU) {
             execute_sltiu(&cpu, instr);
-        } else if (funct3 == F3_SLLI && funct7 == F7_SLLI) {
+        } else if (funct3 == F3_SLLI && (funct7 & 0x7Eu) == F7_SLLI) {
             execute_slli(&cpu, instr);
-        } else if (funct3 == F3_SRLI && funct7 == F7_SRLI) {
+        } else if (funct3 == F3_SRLI && (funct7 & 0x7Eu) == F7_SRLI) {
             execute_srli(&cpu, instr);
-        } else if (funct3 == F3_SRAI && funct7 == F7_SRAI) {
+        } else if (funct3 == F3_SRAI && (funct7 & 0x7Eu) == (F7_SRAI & 0x7Eu)) {
             execute_srai(&cpu, instr);
         } else {
             // Unsupported OP_IMM instruction
@@ -1849,11 +2270,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let funct7 = (instr >> 25u) & 127u;
         if (funct3 == F3_ADDIW) {
             execute_addiw(&cpu, instr);
-        } else if (funct3 == F3_SLLIW && funct7 == F7_SLLIW) {
+        } else if (funct3 == F3_SLLIW && (funct7 & 0x7Eu) == F7_SLLIW) {
             execute_slliw(&cpu, instr);
-        } else if (funct3 == F3_SRLIW && funct7 == F7_SRLIW) {
+        } else if (funct3 == F3_SRLIW && (funct7 & 0x7Eu) == F7_SRLIW) {
             execute_srliw(&cpu, instr);
-        } else if (funct3 == F3_SRAIW && funct7 == F7_SRAIW) {
+        } else if (funct3 == F3_SRAIW && (funct7 & 0x7Eu) == (F7_SRAIW & 0x7Eu)) {
             execute_sraiw(&cpu, instr);
         } else {
             // Unsupported OP_IMM_32 instruction
@@ -1891,18 +2312,16 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     } else if (opcode == OP_BRANCH) {
         execute_branch(&cpu, instr);
     } else if (opcode == OP_AMO) {
-        // A extension: LR/SC + AMOs
+        // A extension: LR/SC + AMOs. funct3 selects width (2=.W, 3=.D);
+        // funct5 (top 5 bits of funct7) selects the operation.
         let funct3 = (instr >> 12u) & 7u;
-        let funct7 = (instr >> 25u) & 127u;
-        if (funct3 == 2u && funct7 == 0x10u) {
-            // LR.D
-            execute_lr(&cpu, instr);
-        } else if (funct3 == 3u && funct7 == 0x10u) {
-            // SC.D
-            execute_sc(&cpu, instr);
+        let funct5 = (instr >> 27u) & 31u;
+        if (funct5 == 2u) {
+            execute_lr(&cpu, instr, funct3);
+        } else if (funct5 == 3u) {
+            execute_sc(&cpu, instr, funct3);
         } else {
-            // AMO.D (funct7 in [0x00, 0x04, 0x08, 0x0C, 0x10, 0x14, 0x18, 0x1C])
-            execute_amo(&cpu, instr);
+            execute_amo(&cpu, instr, funct3, funct5);
         }
     } else if (opcode == OP_LOAD) {
         execute_load(cpu.satp, &cpu, instr);
@@ -1919,7 +2338,18 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
                 // EBREAK: trap if handler installed, else halt
                 handle_illegal(&cpu, instr, cpu_id);
             } else if (funct12 == F12_MRET) {
-                execute_mret(&cpu);
+                if (cpu.priv_mode == PRIV_M) {
+                    execute_mret(&cpu);
+                } else {
+                    // MRET below M-mode is an illegal instruction
+                    handle_illegal(&cpu, instr, cpu_id);
+                }
+            } else if (funct12 == F12_SRET) {
+                if (cpu.priv_mode >= PRIV_S) {
+                    execute_sret(&cpu);
+                } else {
+                    handle_illegal(&cpu, instr, cpu_id);
+                }
             } else if (funct12 == F12_WFI) {
                 // WFI: no interrupt sources yet - treat as NOP
                 cpu.pc = add64(cpu.pc, vec2<u32>(4u, 0u));
@@ -1927,12 +2357,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
                 // SFENCE.VMA: no TLB to flush - NOP
                 cpu.pc = add64(cpu.pc, vec2<u32>(4u, 0u));
             } else {
-                // SRET and others: unsupported until S-mode CSRs exist
                 handle_illegal(&cpu, instr, cpu_id);
             }
         } else if (funct3 != 4u) {
             // CSRRW/CSRRS/CSRRC/CSRRWI/CSRRSI/CSRRCI
-            execute_csr(&cpu, instr);
+            execute_csr(&cpu, instr, cpu_id);
         } else {
             handle_illegal(&cpu, instr, cpu_id);
         }

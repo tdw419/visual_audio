@@ -1,11 +1,1282 @@
 {
-  "timestamp": "2026-07-19T18:39:16.665771",
+  "timestamp": "2026-07-20T03:09:36.144802",
+  "project_root": ".",
   "summary": {
-    "total_tasks": 0,
-    "completed_tasks": 0,
-    "pending_tasks": 0,
-    "suspect_tasks": 0,
-    "suspect_percentage": 0.0
+    "total_tasks": 99,
+    "completed_tasks": 71,
+    "pending_tasks": 28,
+    "suspect_tasks": 11,
+    "suspect_percentage": 15.5
   },
-  "suspect_tasks": []
+  "tasks": [
+    {
+      "task_id": "TASK_S001",
+      "description": "Unify spectral PHY on 16-tone MFSK (codec.phy) \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "One shared PHY module (src/codec/phy.py); speak.py and all tools encode/decode through it; round-trip works for all byte values (0-255), including spaces"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_S002",
+      "description": "Vectorize UPIC synthesis path \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "2.5KB payload encodes in <2s (benchmark: 0.97s); output byte-identical to reference WAVs; `.upic.json` format unchanged"
+      ],
+      "is_suspect": true,
+      "issues": [
+        "Missing files: upic.json"
+      ],
+      "missing_files": [
+        "upic.json"
+      ]
+    },
+    {
+      "task_id": "TASK_E001",
+      "description": "Reed-Solomon over symbol sequences (spectral codec) \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Symbol-level ECC codec implemented; corrects up to 5 byte errors per payload (~5% corruption), 7/7 unit tests pass"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_E002",
+      "description": "CRC + parity for dense pixel regions \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Cartridge corruption detected, recoverable via parity blocks"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_E003",
+      "description": "Phoneme sequence redundancy \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Optimized fuzzy matching with phoneme index + bigram filtering. 100 matches: 72s \u2192 0.9s (80x speedup). All 27 tests pass including test_fuzzy_match_speed."
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_E004",
+      "description": "Air-gap transmission test (speaker \u2192 microphone) \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Air-gap test suite implemented with 6 tests (5 passing, 1 skipped - timing jitter). Tests simulate realistic acoustic impairments (noise, reverb, frequency attenuation) and verify ECC correction. CI fixtures created (mild/moderate/severe). Manual --play mode supports real hardware testing. Test: `python3 -m pytest tests/test_air_gap.py -v` (5 pass, 1 skip)"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_P001",
+      "description": "5ms crossfade between phonemes",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Verified by verify_task.py at 2026-07-14T20:14:46.644169"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_P002",
+      "description": "Amplitude modulation for emphasis",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Verified by verify_task.py at 2026-07-15T01:16:38.733612"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_P003",
+      "description": "Pitch variation for intonation",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Verified by verify_task.py at 2026-07-15T01:18:03.354634"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_P004",
+      "description": "Prosodic phrase grouping",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Verified by verify_task.py at 2026-07-15T01:20:21.896661"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_D001",
+      "description": "scipy filterbank implementation \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Bandpass filters at 500-3000Hz (phonemes) and 4000-8000Hz (bytes) using scipy.signal.butter() and scipy.signal.filtfilt()"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_D002",
+      "description": "Mixed-band encoder \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "`python3 tests/test_dual_band_roundtrip.py` passes - self-contained test creates fixtures, encodes dual-band WAV with low band (500-3000 Hz) for phonemes and high band (4000-8000 Hz) for bytes using frequency-shifted MFSK (4000-7000 Hz tones). Test verifies: byte-identical round-trip with CRC pass, both frequency bands present via FFT, crosstalk < 5%."
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_D003",
+      "description": "Band-separated decoder",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Verified by verify_task.py at 2026-07-14T16:45:25.718850"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_C030",
+      "description": "Audio codec Rust port to GeOS \u2014 WAV\u2194bytes + CRC32 \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "`cargo test audio_codec --lib` \u2192 24 passed, 0 failed (verified 2026-07-17, run in geometry_os)"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_C035",
+      "description": "Reed-Solomon ECC in audio_codec.rs",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [],
+      "is_suspect": true,
+      "issues": [
+        "No receipts provided - cannot verify completion"
+      ]
+    },
+    {
+      "task_id": "TASK_C036",
+      "description": "Pixel-region \u2194 WAV in audio_codec.rs",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [],
+      "is_suspect": true,
+      "issues": [
+        "No receipts provided - cannot verify completion"
+      ]
+    },
+    {
+      "task_id": "TASK_C031",
+      "description": "Audio boot loader (IN GEOS TASKS)",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Verified by roadmap_autonomous_v2.py at 2026-07-17T13:12:04.213766 | - Receipt: `cargo run --bin spatial_audio_boot < kernel.wav` prints \"Booted from audio\""
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_C033",
+      "description": "Signed boot manifest for QEMU launch \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Signed [\"boot\", arch, image, {opts}] ops from audio launch QEMU; architecture allowlist (riscv64, x86_64); traversal protection (bare image/drive filenames only, double-checked at parse/resolve); provenance gating (--enable-boot requires --provenance); optional bios (\"default\"|\"none\") and drive (riscv virtio-blk) fields, both allowlisted/path-safe; a signed spoken \"boot xv6\" command boots REAL xv6-riscv to its shell (init: starting sh, $), plus in-repo demo kernels for the OpenSBI and -bios none paths \u2014 all verified end-to-end"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_C034",
+      "description": "Phoneme LLM input (IN GEOS TASKS)",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Verified by roadmap_autonomous_v2.py at 2026-07-17T13:12:18.812182 | - Receipt: LLM speaks \"spawn hello_world\", GeOS executes it"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_C039",
+      "description": "Graphics display option for boot manifest",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Signed manifest with `{\"display\": \"vnc\"}` launches QEMU with VNC on localhost; manifest without the field behaves exactly as today; malformed/non-allowlisted values fail closed"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_C040",
+      "description": "Full OS disk boot (kernel + initrd + root disk)",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Verified by roadmap_autonomous_v2.py at 2026-07-17T13:12:38.658817 | - Receipt: A signed manifest boots an Ubuntu Server cloud image (kernel + initrd extracted to boot_images/, rootfs as virtio drive) to a login prompt on serial console; all new fields fail closed on traversal or injection attempts"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_C041",
+      "description": "Ubuntu Desktop boot demo (audio \u2192 GUI session)",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "screenshot/recording of desktop session reached via VNC after audio-decoded boot; boot_images/README.md documents reproduction steps"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_X001",
+      "description": "Sandboxed cartridge executor \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": "2026-07-14",
+      "receipts": [
+        "SandboxedExecutor class with defense-in-depth security; imports blocked, resource limits enforced (CPU 5s, memory 64MB, wall time 10s); malicious-cartridge test suite cannot touch host filesystem or spawn processes"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_G001",
+      "description": "Dense cartridge region executor \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "`python3 tools/dense_encoder.py run cartridge.png --geos --region test_region` works via GeOS syscall; GeOSRegionExecutor implements spatial MMIO (0x8009_0000 registry, 0x8009_2000 bytecode corridor), bytecode generation (length prefix + payload + HALT), region management"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_G2P001",
+      "description": "Integrate `phonemizer` library",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Verified by verify_task.py at 2026-07-14T20:38:13.550777"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_G2P002",
+      "description": "Extend beyond English",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Verified by verify_task.py at 2026-07-15T01:55:00Z. Multi-lingual phoneme sets with phonemizer integration."
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_W001",
+      "description": "Wordbase v2 reconciliation (visual audio + metadata) \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Unified Wordbase (db/wordbase.db) with rich metadata (id/word/pronunciation/pos/definition/examples/color_hex/image_path/image_link); 126,052 CMUdict words imported; lazy spectrogram generation via materialize(); color encoding for semantic visualization; compatibility restored for compose.py and pixel_screen.py"
+      ],
+      "is_suspect": true,
+      "issues": [
+        "Missing files: compose.py"
+      ],
+      "missing_files": [
+        "compose.py"
+      ]
+    },
+    {
+      "task_id": "TASK_W002",
+      "description": "Token-chord codec (LLM-native transport)",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [
+        "Map tokenizer IDs to 2-symbol chords (2-of-32 tones \u2248 9 bits/symbol \u2192 ~25 tokens/sec), streaming as model generates; byte-escape region falls back to PHY for out-of-vocabulary payloads. Transmit IDs over data band (17 bits \u2248 4 ms at 16-tone MFSK), receiver's wordbase reconstitutes audio/tiles locally."
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_R001",
+      "description": "Audio diff/patch format \u2014 version control you can hear",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Verified by verify_task.py at 2026-07-16T16:28:09.297270"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_R002",
+      "description": "Spectrogram as spatial VM \u2014 execute in the image",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [
+        "Frequency=register, time=program counter, amplitude=value. Program runs by being played; output re-encoded as input is iteration. True convergence with GlyphLang spatial substrate \u2014 audio IS the running machine, not transport."
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_R003",
+      "description": "Steganographic / ambient channel \u2014 software hidden in music",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [
+        "Data band pushed into psychoacoustically masked regions (under louder tones, >16 kHz). Normal-sounding music provisions device; podcast carries firmware update; room audio continuously reconfigures OS. Requires signed-frames / provenance work for safety."
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_R004",
+      "description": "Error correction as musical consonance",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [
+        "Encode data such that valid states are consonant intervals, corrupted states are dissonant. Receiver \"tunes\" toward consonance to correct errors. Human hears corruption as signal going out of tune. Error correction and aesthetics become same mechanism."
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_R005",
+      "description": "Two AIs negotiating in shared acoustic space",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [
+        "Diff channel + provenance let two AIs negotiate in same room/audiobus. Shared canvas via spoken patches, each signing utterances. Multi-agent protocol where medium itself is the mediating environment. Spectrogram log is permanent negotiation record."
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_R006",
+      "description": "Accessibility as first-class output",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Verified by verify_task.py at 2026-07-14T20:37:09.938795"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_R007",
+      "description": "Spectral mapping",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Verified by verify_task.py at 2026-07-16T16:25:11.831011"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_R008",
+      "description": "Neural synthesis",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [
+        "Train phoneme-to-envelope model on UPIC output"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_R009",
+      "description": "Cross-lingual",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [
+        "Extend phoneme sets for other languages"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_R010",
+      "description": "Voice timbre",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [
+        "Different waveforms for different speakers"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_R011",
+      "description": "Parallel synthesis",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [
+        "Multi-voice polyphonic speech (chords, counterpoint)",
+        "Compile directly to spatial opcodes"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_R017",
+      "description": "Container security sandboxing (PixelSmash mitigation) \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [],
+      "is_suspect": true,
+      "issues": [
+        "No receipts provided - cannot verify completion"
+      ]
+    },
+    {
+      "task_id": "TASK_R018",
+      "description": "Fountain code error correction for lossy channels",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_R019",
+      "description": "DCT steganography for compression-resistant storage",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_R020",
+      "description": "FFV1.3 codec parameter optimization for VM use",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_I001",
+      "description": "Live audio-visual sync",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Verified by verify_task.py at 2026-07-17T01:58:15.224988"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_I002",
+      "description": "Interactive tile manipulation \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Drag-and-drop reordering of word tiles; click-to-edit word updates underlying text; tile selection for deletion/duplication; realtime regeneration of audio from modified tile arrangement"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_I003",
+      "description": "Semantic color exploration \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "`analyze` sources words from the ACTUAL tiles (a directory of <word>_<id>.png tiles, or a PNG with a .json/.txt sidecar) \u2014 no dummy fallback \u2014 groups them by wordbase color_hex, and fails (exit 1) on missing/malformed input. Pygame explore mode adds click-to-filter legend + hover tooltips."
+      ],
+      "is_suspect": true,
+      "issues": [
+        "Missing files: json/.txt"
+      ],
+      "missing_files": [
+        "json/.txt"
+      ]
+    },
+    {
+      "task_id": "TASK_I004",
+      "description": "Cross-modal translation tools",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Image \u2192 tiles \u2192 audio (describe what you see); audio \u2192 tiles \u2192 image (draw what you hear); text \u2192 tiles \u2192 audio \u2192 image (full round-trip with visual feedback at each stage)"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_I005",
+      "description": "Collaborative visual editing",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Multiple users edit same tile canvas simultaneously; real-time sync of visual + audio state; visual diff shows tile movements between edits"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_I006",
+      "description": "Visual version control",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Git commits expressed as tile movements; \"git show\" renders before/after tile states side-by-side; visual merge conflict resolution via tile manipulation"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_A001",
+      "description": "Ollama contextual memory for container self-awareness",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [
+        "Enhanced tools/ollama_prompt.py with conversation history tracking across container sessions"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_A002",
+      "description": "Container task scheduler using frame metadata",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [
+        "New tools/task_scheduler.py that reads frame metadata to prioritize and schedule tasks"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_A003",
+      "description": "Automated container audit loop (Ollama analyzes itself)",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [
+        "Container runs periodic self-audit using tools/ollama_prompt.py to analyze ROADMAP, identify suspect tasks, verify code exists"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_A004",
+      "description": "Security analysis enhancement using Ollama",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [
+        "Enhanced security tests that use Ollama to propose new attack vectors and verify mitigation"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_A005",
+      "description": "Frame-based progress tracking with LLM interpretation",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [
+        "New tools/progress_tracker.py that reads frame metadata and uses Ollama to interpret progress"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_A006",
+      "description": "Documentation for Ollama-container integration",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [
+        "docs/PHASE13_INTEGRATION.md with setup guide, security considerations, examples"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_C001",
+      "description": "Behavior-opcode primitive for executable blocks \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "`[\"op\", \"spatial_set\", x, y, color, region_id]` primitive added to compose.py; compiled programs embed GlyphLang opcodes; render mode splits visual vs code projections; verify-opcodes flag confirms opcode embedding"
+      ],
+      "is_suspect": true,
+      "issues": [
+        "Missing files: compose.py"
+      ],
+      "missing_files": [
+        "compose.py"
+      ]
+    },
+    {
+      "task_id": "TASK_M001",
+      "description": "Pixel tokenizer (text \u2194 word id \u2194 RGB pixel) \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "`src/pixel_tokenizer.py` with encode(text) \u2192 word-id list \u2192 RGB pixel array and decode(pixels) \u2192 text. Reserved ids 0\u201315 for specials (PAD/BOS/EOS/UNK/NEWLINE/SPACE/TAB). OOV words auto-added to wordbase via existing G2P path with proper XSAMPA\u2192ARPAbet mapping (tools/xsampa_to_arpabet.py). Round-trip preserves case, whitespace (including multiple spaces), and newlines exactly by default; punctuation is stripped per design. Tests use temp_wordbase fixture and never modify production data. Whitespace fidelity is the default behavior (skip_special_tokens=False)."
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_M002",
+      "description": "Pixel corpus builder",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Verified by verify_task.py at 2026-07-16T15:56:59.619281"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_M003",
+      "description": "Word-pixel embeddings from wordbase features",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Verified by verify_task.py at 2026-07-16T16:45:00Z.  builds 64-dim embeddings from color_hex (semantic RGB), pronunciation (phoneme n-gram hash), and POS tag. All 6 tests pass including neighbor quality verification."
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_M004",
+      "description": "Train pixel-token transformer \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "`tools/train_pixel_lm.py` trains a small decoder-only transformer (~10\u201325M params, vocab = top ~16k words + specials, others \u2192 UNK) on the pixel corpus; checkpoint saved to `models/pixel_lm.pt`; validation perplexity beats a unigram baseline computed by the same script. Test is a fast smoke run (tiny corpus, few hundred steps, CPU-safe) asserting loss decreases \u2014 full training documented in docs/PIXEL_LM.md. | Executed by SkillOpt autonomous executor at 2026-07-17T14:35:00Z"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_M005",
+      "description": "Generation \u2192 pixel/tile/audio rendering \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "`tools/pixel_lm_generate.py --prompt \"...\"` samples a continuation and emits: pixel-strip PNG (one pixel per token), word-tile PNG (via wordbase tiles), and text. Same id sequence drives all three projections."
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_M006",
+      "description": "Model output over the audio channel (round-trip) \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Generated id sequence \u2192 bytes (3 bytes/id) \u2192 PhyECC + Phy16Tone WAV \u2192 decode \u2192 identical id sequence \u2192 identical pixel strip. The model \"speaks\" its pixels; a receiver with the same wordbase reconstructs text/tiles locally. Round-trip verified with 5% injected corruption."
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_M007",
+      "description": "Pixel OS input channel",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "`tools/pixel_os_listener.py` accepts a pixel-LM stream as an input source: model generates pixels \u2192 decoded to words \u2192 dispatched as pixel OS commands. Demonstrates the LLM \u2192 visual audio \u2192 software loop end to end."
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_T001",
+      "description": "Create pixel OS input channel test",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_T002",
+      "description": "Create VAMP ECC tiles test",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_T003",
+      "description": "Create VAMP executable cartridges test",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_T004",
+      "description": "Create VAMP voice query test",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_V001",
+      "description": "Dense encoder bridge replacement \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "`pixelpack/scripts/memory_to_png.py` uses `tools/dense_encoder.py` for encoding; 3 bytes/pixel density achieved; CRC verification passes on all generated tiles; backward-compatible with existing Memory Palace building"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_V002",
+      "description": "Audio knowledge export layer \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Dual-band WAV generation for each memory batch; phoneme band (500-3000Hz) contains human-readable summaries; byte band (4000-8000Hz) contains full structured JSON; audio export integrated into memory_to_png.py workflow"
+      ],
+      "is_suspect": true,
+      "issues": [
+        "Missing files: memory_to_png.py"
+      ],
+      "missing_files": [
+        "memory_to_png.py"
+      ]
+    },
+    {
+      "task_id": "TASK_V003",
+      "description": "Reed-Solomon ECC for memory tiles \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Each memory tile wrapped with PhyECC (10 parity bytes per 128-byte block); corruption recovery up to 5% tile loss verified; ECC metadata stored in PNG text chunk ('ecc_blocks', 'ecc_parity'); memory integrity log tracks recovery events"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_V004",
+      "description": "Executable knowledge cartridges \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "High-frequency facts (preferences, conventions) converted to runnable cartridges; cartridge execution via `dense_encoder.py run` with sandbox; cartridge metadata includes execution_result, last_run_timestamp, consistency_check_status"
+      ],
+      "is_suspect": true,
+      "issues": [
+        "Missing files: dense_encoder.py"
+      ],
+      "missing_files": [
+        "dense_encoder.py"
+      ]
+    },
+    {
+      "task_id": "TASK_V005",
+      "description": "Voice query interface \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "CLI tool `tools/vamp_query.py` accepts spoken queries; phoneme query matches against fact summaries via fuzzy matching; returns top N matches with confidence scores; optional audio playback of matched fact; results include full JSON structure"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_V006",
+      "description": "GeOS memory palace visualization update",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "`programs/memory_palace.asm` updated with new color bands: magenta (audio-active), yellow (ECC-protected), cyan (executable cartridges); click-to-play audio via audio_codec.rs; visual ECC status overlay (corrupted tiles highlighted); cartridge execution from GeOS"
+      ],
+      "is_suspect": true,
+      "issues": [
+        "Missing files: audio_codec.rs"
+      ],
+      "missing_files": [
+        "audio_codec.rs"
+      ]
+    },
+    {
+      "task_id": "TASK_V007",
+      "description": "MKV container \u2192 Memory Palace bridge",
+      "status": "IN_PROGRESS",
+      "completed": null,
+      "receipts": [
+        "Verified by verify_task.py at 2026-07-18T13:23:36.628975"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_COV_UTILS",
+      "description": "Add test coverage for utils module",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [
+        "All utils functionality tested"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_COV_PHONEMES",
+      "description": "Add test coverage for phonemes module",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [
+        "All phonemes functionality tested"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_C037",
+      "description": "Wire PhyECC into audio transmit path \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [],
+      "is_suspect": true,
+      "issues": [
+        "No receipts provided - cannot verify completion"
+      ]
+    },
+    {
+      "task_id": "TASK_C038",
+      "description": "Native in-hypervisor pixel boot",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Verified by roadmap_autonomous_v2.py at 2026-07-17T13:13:00.148276"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_SE001",
+      "description": "Pixel region layout specification \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "`docs/SPATIAL_ENGINE_LAYOUT.md` with coordinate mapping tables; region boundaries documented for cartridge integration; coordinate tables validated for non-overlap via `tests/test_spatial_layout.py`"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_SE002",
+      "description": "Seed-pixel procedural generation \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "`src/spatial/procedural.py` generates deterministic infinite terrain from pixel seed; same seed produces identical map at any (x, y) coordinate"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_SE003",
+      "description": "Diff-overlay storage layer \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "`src/spatial/diff_overlay.py` stores/retrieves modifications; `cartridge.json` includes diff metadata; diff export to pixel region (10 bytes per record, concatenated)"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_SE004",
+      "description": "Temporal frame logging \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": "2026-07-18",
+      "receipts": [
+        "`src/spatial/temporal_log.py` writes/reads state snapshots; timeline seek operation returns historical state; frame format matches dense codec (CRC, UA frame)"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_SE005",
+      "description": "Nested frame buffer compositing \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "`src/spatial/nested_buffer.py` composites metadata + display zones; System Time advances master execution; Media Time advances nested video independently; compositing output renderable to screen"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_SE006",
+      "description": "Pixel-token LM integration (Phase 8 \u2192 procedural generation) \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "LM pipeline outputs seed+palette as 24-bit RGB pixels; procedural engine accepts LM-generated seeds; deterministic map generation from LM output"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_SE007",
+      "description": "Spatial Glyph Emulator implementation \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": "2026-07-19",
+      "receipts": [
+        "`tools/mkv_glyph_emulator.py` (OpcodeMap, GlyphAssembler, GlyphCPU), `tools/test_glyph_simple.py` (working demo), `tools/test_glyph_trace.py` (detailed trace), `tools/wgsl_spatial_glyph_engine.py` (WGSL prototype)"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_SE008",
+      "description": "Expand ISA to Turing-complete \ud83d\udfe1 PLANNED",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [
+        "Extended OpcodeMap with ~20 opcodes; assembly syntax documentation; example programs demonstrating stack operations, memory access, bitwise logic"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_SE009",
+      "description": "WGSL GPU-native execution engine \u2705 COMPLETE (2026-07-19)",
+      "status": "COMPLETE",
+      "completed": "2026-07-19",
+      "receipts": [
+        "`tools/wgsl_glyph_full_execute.py` \u2014 Complete GPU-native CPU with 10 opcodes (LDI, ADD, SUB, MUL, JMP, JZ, CMP, MOV, PRT, HALT), 8 registers, 1KB memory. Verification: GPU and Python emulators produce identical output [5] for test program \"LDI r0 2; LDI r1 3; ADD r0 r1; PRT r0; HALT\"."
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_SE010",
+      "description": "Geometry OS hypervisor syscall integration \ud83d\udfe1 PLANNED",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [
+        "SYSCALL opcode implementation; syscall number mapping; integration with Geometry OS hypervisor bridge"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_SE011",
+      "description": "Error correction layer (Reed-Solomon) \ud83d\udfe1 PLANNED",
+      "status": "PENDING",
+      "completed": null,
+      "receipts": [
+        "ECC encoding/decoding integrated into GlyphAssembler/GlyphCPU; corruption recovery tests (5% bit errors)"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_SE012",
+      "description": "VLM Spatial Observer \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": "2026-07-19",
+      "receipts": [
+        "`tools/ollama_prompt.py` enhanced with spatial observation; test_vlm_coords.py verifies coordinate extraction"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_SE013",
+      "description": "Spatial Compiler \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": "2026-07-19",
+      "receipts": [
+        "WGSL compute shader applies patches; AUTONOMOUS_EVOLUTION_ACHIEVEMENT.md documents architecture"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_SE014",
+      "description": "End-to-end autonomous evolution demo \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": "2026-07-19",
+      "receipts": [
+        "AUTONOMOUS_EVOLUTION_ACHIEVEMENT.md documents complete architecture; end-to-end demo verified"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_VAC001",
+      "description": "Container reader/writer implementation \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "`tools/va_container.py` with init/add/cat/ls/verify subcommands; supports role tagging; CRC32+sha256 verification"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_VAC002",
+      "description": "Initial container population \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "`visual_audio.mkv` contains 8 entries (bootstrap, spec, codec, state, cache, content\u00d72, docs); 201K size, 11 frames"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_VAC003",
+      "description": "Container documentation \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "`CONTAINER_README.md` in repo, also added to container as `docs/CONTAINER_README.md`"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_VAC004",
+      "description": "Frame allocation scheme \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "`docs/FRAME_ALLOCATION.md` documents functional zones, frame-based development loop (READ-PROCESS-WRITE-VERIFY)"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_VAC005",
+      "description": "Frame-based development tools \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "5 tools created, all added to container as bootstrap/tools/ entries, verified functional"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_VAC006",
+      "description": "Self-hosting tool execution (`run` command) \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "`python3 tools/va_container.py run visual_audio.mkv tools/create_test_frame.py 0xCAFEBABE` works, exposes bugs in tools"
+      ],
+      "is_suspect": false,
+      "issues": []
+    },
+    {
+      "task_id": "TASK_VAC007",
+      "description": "Append-only tool updates (`update` command) \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "`python3 tools/va_container.py update visual_audio.mkv tools/create_test_frame.py fixed.py` creates v1/v2 history"
+      ],
+      "is_suspect": false,
+      "issues": []
+    }
+  ],
+  "suspect_tasks": [
+    {
+      "task_id": "TASK_S002",
+      "description": "Vectorize UPIC synthesis path \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "2.5KB payload encodes in <2s (benchmark: 0.97s); output byte-identical to reference WAVs; `.upic.json` format unchanged"
+      ],
+      "is_suspect": true,
+      "issues": [
+        "Missing files: upic.json"
+      ],
+      "missing_files": [
+        "upic.json"
+      ]
+    },
+    {
+      "task_id": "TASK_C035",
+      "description": "Reed-Solomon ECC in audio_codec.rs",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [],
+      "is_suspect": true,
+      "issues": [
+        "No receipts provided - cannot verify completion"
+      ]
+    },
+    {
+      "task_id": "TASK_C036",
+      "description": "Pixel-region \u2194 WAV in audio_codec.rs",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [],
+      "is_suspect": true,
+      "issues": [
+        "No receipts provided - cannot verify completion"
+      ]
+    },
+    {
+      "task_id": "TASK_W001",
+      "description": "Wordbase v2 reconciliation (visual audio + metadata) \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Unified Wordbase (db/wordbase.db) with rich metadata (id/word/pronunciation/pos/definition/examples/color_hex/image_path/image_link); 126,052 CMUdict words imported; lazy spectrogram generation via materialize(); color encoding for semantic visualization; compatibility restored for compose.py and pixel_screen.py"
+      ],
+      "is_suspect": true,
+      "issues": [
+        "Missing files: compose.py"
+      ],
+      "missing_files": [
+        "compose.py"
+      ]
+    },
+    {
+      "task_id": "TASK_R017",
+      "description": "Container security sandboxing (PixelSmash mitigation) \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [],
+      "is_suspect": true,
+      "issues": [
+        "No receipts provided - cannot verify completion"
+      ]
+    },
+    {
+      "task_id": "TASK_I003",
+      "description": "Semantic color exploration \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "`analyze` sources words from the ACTUAL tiles (a directory of <word>_<id>.png tiles, or a PNG with a .json/.txt sidecar) \u2014 no dummy fallback \u2014 groups them by wordbase color_hex, and fails (exit 1) on missing/malformed input. Pygame explore mode adds click-to-filter legend + hover tooltips."
+      ],
+      "is_suspect": true,
+      "issues": [
+        "Missing files: json/.txt"
+      ],
+      "missing_files": [
+        "json/.txt"
+      ]
+    },
+    {
+      "task_id": "TASK_C001",
+      "description": "Behavior-opcode primitive for executable blocks \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "`[\"op\", \"spatial_set\", x, y, color, region_id]` primitive added to compose.py; compiled programs embed GlyphLang opcodes; render mode splits visual vs code projections; verify-opcodes flag confirms opcode embedding"
+      ],
+      "is_suspect": true,
+      "issues": [
+        "Missing files: compose.py"
+      ],
+      "missing_files": [
+        "compose.py"
+      ]
+    },
+    {
+      "task_id": "TASK_V002",
+      "description": "Audio knowledge export layer \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "Dual-band WAV generation for each memory batch; phoneme band (500-3000Hz) contains human-readable summaries; byte band (4000-8000Hz) contains full structured JSON; audio export integrated into memory_to_png.py workflow"
+      ],
+      "is_suspect": true,
+      "issues": [
+        "Missing files: memory_to_png.py"
+      ],
+      "missing_files": [
+        "memory_to_png.py"
+      ]
+    },
+    {
+      "task_id": "TASK_V004",
+      "description": "Executable knowledge cartridges \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "High-frequency facts (preferences, conventions) converted to runnable cartridges; cartridge execution via `dense_encoder.py run` with sandbox; cartridge metadata includes execution_result, last_run_timestamp, consistency_check_status"
+      ],
+      "is_suspect": true,
+      "issues": [
+        "Missing files: dense_encoder.py"
+      ],
+      "missing_files": [
+        "dense_encoder.py"
+      ]
+    },
+    {
+      "task_id": "TASK_V006",
+      "description": "GeOS memory palace visualization update",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [
+        "`programs/memory_palace.asm` updated with new color bands: magenta (audio-active), yellow (ECC-protected), cyan (executable cartridges); click-to-play audio via audio_codec.rs; visual ECC status overlay (corrupted tiles highlighted); cartridge execution from GeOS"
+      ],
+      "is_suspect": true,
+      "issues": [
+        "Missing files: audio_codec.rs"
+      ],
+      "missing_files": [
+        "audio_codec.rs"
+      ]
+    },
+    {
+      "task_id": "TASK_C037",
+      "description": "Wire PhyECC into audio transmit path \u2705 COMPLETE",
+      "status": "COMPLETE",
+      "completed": null,
+      "receipts": [],
+      "is_suspect": true,
+      "issues": [
+        "No receipts provided - cannot verify completion"
+      ]
+    }
+  ]
 }

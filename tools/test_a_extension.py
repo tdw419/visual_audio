@@ -19,6 +19,10 @@ import wgpu.utils
 
 MASK64 = (1 << 64) - 1
 
+def sext64(v32):
+    v32 &= 0xFFFFFFFF
+    return (v32 - (1 << 32)) & MASK64 if v32 >> 31 else v32
+
 # ---------------------------------------------------------------------------
 # Mini-assembler for A extension
 # ---------------------------------------------------------------------------
@@ -31,24 +35,29 @@ def i_type(op, rd, f3, rs1, imm):
 
 ADDI  = lambda rd, rs1, imm: i_type(0x13, rd, 0, rs1, imm)
 
-# A extension (opcode 0x2F = 47)
-# LR.D: funct7=0001000, funct3=2
-LR_D  = lambda rd, rs1: r_type(0x2F, rd, 2, rs1, 0, 0x10)
+# A extension (opcode 0x2F = 47). Real funct5 values verified against
+# riscv64-linux-gnu-as output (see tools/RISCV_CPU_MMU.wgsl execute_amo
+# comment): ADD=0 SWAP=1 LR=2 SC=3 XOR=4 OR=8 AND=12 MIN=16 MAX=20 MINU=24
+# MAXU=28. funct7 = funct5<<2 | aq<<1 | rl (aq=rl=0 here). funct3 selects
+# width: 2=.W, 3=.D. A prior version of this file used funct3=2 for "_D"
+# ops and un-shifted funct5 as funct7 - self-consistent with an equally
+# wrong shader implementation, so all 33 "passes" were validating nothing
+# against the real ISA. Fixed against toolchain-verified encodings.
+def amo_d(funct5, rd, rs1, rs2):
+    return r_type(0x2F, rd, 3, rs1, rs2, funct5 << 2)
 
-# SC.D: funct7=0001000, funct3=3
-SC_D  = lambda rd, rs1, rs2: r_type(0x2F, rd, 3, rs1, rs2, 0x10)
+LR_D  = lambda rd, rs1: r_type(0x2F, rd, 3, rs1, 0, 2 << 2)
+SC_D  = lambda rd, rs1, rs2: r_type(0x2F, rd, 3, rs1, rs2, 3 << 2)
 
-# AMO.D: funct7[6:5] = aq, rl; funct7[4:0] = operation
-# Using aq=0, rl=0 for now
-AMOADD_D   = lambda rd, rs1, rs2: r_type(0x2F, rd, 2, rs1, rs2, 0x00)  # opcode=00000
-AMOSWAP_D  = lambda rd, rs1, rs2: r_type(0x2F, rd, 2, rs1, rs2, 0x01)  # opcode=00001
-AMOXOR_D   = lambda rd, rs1, rs2: r_type(0x2F, rd, 2, rs1, rs2, 0x04)  # opcode=00100
-AMOOR_D    = lambda rd, rs1, rs2: r_type(0x2F, rd, 2, rs1, rs2, 0x0C)  # opcode=01100
-AMOAND_D   = lambda rd, rs1, rs2: r_type(0x2F, rd, 2, rs1, rs2, 0x0F)  # opcode=01111
-AMOMIN_D   = lambda rd, rs1, rs2: r_type(0x2F, rd, 2, rs1, rs2, 0x08)  # opcode=01000
-AMOMAX_D   = lambda rd, rs1, rs2: r_type(0x2F, rd, 2, rs1, rs2, 0x0A)  # opcode=01010
-AMOMINU_D  = lambda rd, rs1, rs2: r_type(0x2F, rd, 2, rs1, rs2, 0x0E)  # opcode=01110
-AMOMAXU_D  = lambda rd, rs1, rs2: r_type(0x2F, rd, 2, rs1, rs2, 0x0B)  # opcode=01011
+AMOADD_D   = lambda rd, rs1, rs2: amo_d(0, rd, rs1, rs2)
+AMOSWAP_D  = lambda rd, rs1, rs2: amo_d(1, rd, rs1, rs2)
+AMOXOR_D   = lambda rd, rs1, rs2: amo_d(4, rd, rs1, rs2)
+AMOOR_D    = lambda rd, rs1, rs2: amo_d(8, rd, rs1, rs2)
+AMOAND_D   = lambda rd, rs1, rs2: amo_d(12, rd, rs1, rs2)
+AMOMIN_D   = lambda rd, rs1, rs2: amo_d(16, rd, rs1, rs2)
+AMOMAX_D   = lambda rd, rs1, rs2: amo_d(20, rd, rs1, rs2)
+AMOMINU_D  = lambda rd, rs1, rs2: amo_d(24, rd, rs1, rs2)
+AMOMAXU_D  = lambda rd, rs1, rs2: amo_d(28, rd, rs1, rs2)
 
 # ---------------------------------------------------------------------------
 # GPU runner (simplified - CPU state only, no memory readback)
@@ -310,6 +319,34 @@ def main():
     check('LR.D + SC.D sequence: LR returned 0', reg64(st, 5), 0)
     check('LR.D + SC.D sequence: SC succeeded', reg64(st, 6), 0)
     check('LR.D + SC.D sequence: memory updated', reg64(st, 7), 1)
+
+    # --- W-width forms (the exact gap that let xv6's amoswap.w.aq spinlock
+    # silently corrupt its neighboring struct field and spin forever) ---
+    print('AMO.W / LR.W / SC.W (32-bit forms, adjacent memory untouched):')
+    LR_W  = lambda rd, rs1: r_type(0x2F, rd, 2, rs1, 0, 2 << 2)
+    SC_W  = lambda rd, rs1, rs2: r_type(0x2F, rd, 2, rs1, rs2, 3 << 2)
+    AMOSWAP_W = lambda rd, rs1, rs2: r_type(0x2F, rd, 2, rs1, rs2, 1 << 2)
+    AMOADD_W  = lambda rd, rs1, rs2: r_type(0x2F, rd, 2, rs1, rs2, 0 << 2)
+
+    prog = [ADDI(1, 0, 0x100), LR_W(5, 1)]
+    st = gpu.run(prog, len(prog), regs={},
+                 init_mem={0x100: 0xDEADBEEF12345678})
+    check('LR.W reads only low word (sign-extended)', reg64(st, 5), sext64(0x12345678))
+
+    prog = [ADDI(1, 0, 0x100), ADDI(2, 0, 0x7F), AMOSWAP_W(5, 1, 2), LR_D(7, 1)]
+    st = gpu.run(prog, len(prog), init_mem={0x100: 0x1122334400000001})
+    check('AMOSWAP.W returns old low word (sign-ext)', reg64(st, 5), 1)
+    check('AMOSWAP.W high word left untouched', reg64(st, 7), 0x112233440000007F)
+
+    prog = [ADDI(1, 0, 0x100), ADDI(2, 0, 5), AMOADD_W(5, 1, 2), LR_D(7, 1)]
+    st = gpu.run(prog, len(prog), init_mem={0x100: 0xCAFEBABE00000010})
+    check('AMOADD.W result', reg64(st, 5), 0x10)
+    check('AMOADD.W high word left untouched', reg64(st, 7), 0xCAFEBABE00000015)
+
+    prog = [ADDI(1, 0, 0x100), ADDI(2, 0, 9), SC_W(6, 1, 2), LR_D(7, 1)]
+    st = gpu.run(prog, len(prog), init_mem={0x100: 0xFEEDFACE00000000})
+    check('SC.W succeeds', reg64(st, 6), 0)
+    check('SC.W wrote only low word', reg64(st, 7), 0xFEEDFACE00000009)
 
     print()
     if failures:
