@@ -949,8 +949,9 @@ fn execute_auipc(cpu: ptr<function, RiscvCPU>, instr: u32) {
 fn execute_andi(cpu: ptr<function, RiscvCPU>, instr: u32) {
     let decoded = decode_i_type(instr);
     if (decoded.rd != 0u) {
-        (*cpu).regs[decoded.rd].x = (*cpu).regs[decoded.rs1].x & decoded.imm;
-        (*cpu).regs[decoded.rd].y = (*cpu).regs[decoded.rs1].y & 0xFFFFFFFFu;
+        let imm64 = sext32_to_64(decoded.imm);
+        (*cpu).regs[decoded.rd].x = (*cpu).regs[decoded.rs1].x & imm64.x;
+        (*cpu).regs[decoded.rd].y = (*cpu).regs[decoded.rs1].y & imm64.y;
     }
     (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
 }
@@ -959,8 +960,9 @@ fn execute_andi(cpu: ptr<function, RiscvCPU>, instr: u32) {
 fn execute_ori(cpu: ptr<function, RiscvCPU>, instr: u32) {
     let decoded = decode_i_type(instr);
     if (decoded.rd != 0u) {
-        (*cpu).regs[decoded.rd].x = (*cpu).regs[decoded.rs1].x | decoded.imm;
-        (*cpu).regs[decoded.rd].y = (*cpu).regs[decoded.rs1].y;
+        let imm64 = sext32_to_64(decoded.imm);
+        (*cpu).regs[decoded.rd].x = (*cpu).regs[decoded.rs1].x | imm64.x;
+        (*cpu).regs[decoded.rd].y = (*cpu).regs[decoded.rs1].y | imm64.y;
     }
     (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
 }
@@ -969,8 +971,9 @@ fn execute_ori(cpu: ptr<function, RiscvCPU>, instr: u32) {
 fn execute_xori(cpu: ptr<function, RiscvCPU>, instr: u32) {
     let decoded = decode_i_type(instr);
     if (decoded.rd != 0u) {
-        (*cpu).regs[decoded.rd].x = (*cpu).regs[decoded.rs1].x ^ decoded.imm;
-        (*cpu).regs[decoded.rd].y = (*cpu).regs[decoded.rs1].y;
+        let imm64 = sext32_to_64(decoded.imm);
+        (*cpu).regs[decoded.rd].x = (*cpu).regs[decoded.rs1].x ^ imm64.x;
+        (*cpu).regs[decoded.rd].y = (*cpu).regs[decoded.rs1].y ^ imm64.y;
     }
     (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
 }
@@ -2373,6 +2376,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         handle_illegal(&cpu, instr, cpu_id);
     }
 
+    cpu.regs[0] = vec2<u32>(0u, 0u); // Ensure x0 is always 0
     cpu.instr_count = cpu.instr_count + 1u;
     cpus[cpu_id] = cpu;
 }
