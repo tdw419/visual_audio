@@ -50,22 +50,9 @@ def main():
     queue.write_buffer(memory_buffer, 0, pixel_data.tobytes())
     print(f"\n[3] Memory buffer: {pixel_data.shape[0]} words ({pixel_data.nbytes // 1024}KB)")
 
-    # Create CPU state (SATP=0 = MMU off)
-    cpu_layout = np.dtype([
-        ('pc', np.uint32, 2),
-        ('regs', np.uint32, (32, 2)),
-        ('running', np.uint32),
-        ('instr_count', np.uint32),
-        ('output_ptr', np.uint32),
-        ('satp', np.uint32),
-    ])
-
-    cpu_state = np.zeros(1, dtype=cpu_layout)
-    cpu_state[0]['pc'] = [entry_point & 0xFFFFFFFF, (entry_point >> 32) & 0xFFFFFFFF]
-    cpu_state[0]['running'] = 1
-    cpu_state[0]['instr_count'] = 0
-    cpu_state[0]['satp'] = 0  # MMU OFF (mode=0)
-    cpu_state[0]['regs'] = np.zeros((32, 2), dtype=np.uint32)
+    # Create CPU state: M-mode, SATP=0 = MMU off (shared layout module)
+    from riscv_gpu_cpu import CPU_DTYPE as cpu_layout, make_cpu_state
+    cpu_state = make_cpu_state(entry_point)
 
     cpu_buffer = device.create_buffer(
         size=cpu_state.nbytes,

@@ -1,492 +1,379 @@
 #!/usr/bin/env python3
 """
-Tests for container_audit_loop.py
-
-Verifies:
-- Complete task parsing from ROADMAP.md
-- Ollama JSON response parsing (with markdown code blocks)
-- Test file existence checking
-- Implementation file heuristic search
-- Suspect task verification
-- Full audit loop integration
+Tests for container audit loop functionality.
+Standalone test runner (no pytest dependency).
 """
 
 import json
 import os
-import pytest
-import re
-import sys
 import tempfile
+import shutil
+import sys
 from pathlib import Path
 
 
-# Add parent directory to path for imports
-AUDIT_TOOL = Path(__file__).parent.parent / "tools" / "container_audit_loop.py"
-PROJECT_ROOT = Path(__file__).parent.parent
-
-
-class TestCompleteTaskParsing:
-    """Test parsing of complete tasks from ROADMAP.md."""
+class TestResults:
+    """Track test results."""
+    def __init__(self):
+        self.passed = 0
+        self.failed = 0
+        self.errors = []
     
-    def test_parse_complete_tasks_with_checkboxes(self):
-        """Parse tasks marked with [x] checkbox."""
-        roadmap_content = """# Project Roadmap
+    def add_pass(self):
+        self.passed += 1
+    
+    def add_fail(self, test_name, message):
+        self.failed += 1
+        self.errors.append(f"{test_name}: {message}")
+    
+    def report(self):
+        print(f"\n{'='*60}")
+        print(f"Test Results: {self.passed} passed, {self.failed} failed")
+        print(f"{'='*60}")
+        if self.errors:
+            print("\nFailed tests:")
+            for error in self.errors:
+                print(f"  ✗ {error}")
+        print()
+        return self.failed == 0
 
-## Phase 1: Foundation
 
-- [x] **TASK_001**: Build basic codec
-  - Priority: CRITICAL
-  - Test: `python3 -m pytest tests/test_codec.py`
-  - Receipt: Codec passes all tests
-
-- [ ] **TASK_002**: Advanced features
-  - Priority: HIGH
-  - Test: `python3 -m pytest tests/test_advanced.py`
-
-- [x] **TASK_003**: Documentation
-  - Priority: LOW
-  - Receipt: All modules documented
-
-"""
-        # Write temp roadmap
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
-            f.write(roadmap_content)
-            temp_roadmap = f.name
+class TestContainerAuditLoop:
+    """Test suite for ollama_prompt.py audit functionality."""
+    
+    def __init__(self):
+        self.test_dir = None
+        self.original_dir = None
+        self.results = TestResults()
+    
+    def setup(self):
+        """Set up test environment."""
+        self.test_dir = tempfile.mkdtemp()
+        self.original_dir = os.getcwd()
+        os.chdir(self.test_dir)
         
+        # Import the audit module
+        sys.path.insert(0, os.path.join(self.original_dir, 'tools'))
+        from ollama_prompt import parse_roadmap_tasks, verify_file_exists, verify_test_exists, run_audit
+        self.parse_roadmap_tasks = parse_roadmap_tasks
+        self.verify_file_exists = verify_file_exists
+        self.verify_test_exists = verify_test_exists
+        self.run_audit = run_audit
+    
+    def teardown(self):
+        """Clean up test environment."""
+        if self.original_dir:
+            os.chdir(self.original_dir)
+        if self.test_dir and os.path.exists(self.test_dir):
+            shutil.rmtree(self.test_dir, ignore_errors=True)
+    
+    def assert_equals(self, actual, expected, test_name):
+        if actual == expected:
+            self.results.add_pass()
+            print(f"  ✓ {test_name}")
+        else:
+            self.results.add_fail(test_name, f"Expected {expected}, got {actual}")
+            print(f"  ✗ {test_name}")
+    
+    def assert_true(self, condition, test_name):
+        if condition:
+            self.results.add_pass()
+            print(f"  ✓ {test_name}")
+        else:
+            self.results.add_fail(test_name, "Condition was False")
+            print(f"  ✗ {test_name}")
+    
+    def run_all_tests(self):
+        """Run all tests."""
+        print("\n" + "="*60)
+        print("Container Audit Loop Tests")
+        print("="*60 + "\n")
+        
+        # Test 1: Basic ROADMAP parsing
+        self.setup()
         try:
-            sys.path.insert(0, str(AUDIT_TOOL.parent))
-            import container_audit_loop
-            
-            tasks = container_audit_loop.parse_complete_tasks(temp_roadmap)
-            
-            assert len(tasks) == 2
-            assert tasks[0]['task_id'] == 'TASK_001'
-            assert tasks[0]['description'] == 'Build basic codec'
-            assert 'test_codec.py' in tasks[0]['test_command']
-            
-            assert tasks[1]['task_id'] == 'TASK_003'
-            assert tasks[1]['description'] == 'Documentation'
-            assert tasks[1]['receipt_criteria'] == 'All modules documented'
-        finally:
-            os.unlink(temp_roadmap)
-    
-    def test_parse_complete_tasks_no_matches(self):
-        """Return empty list when no complete tasks found."""
-        roadmap_content = """# Project Roadmap
+            roadmap_content = """# Phase 1
+## Section A
 
-## Phase 1
+*** TASK_001: First task ***
+Status: PENDING
 
-- [ ] **TASK_001**: Not done
-- [ ] **TASK_002**: Also not done
+*** TASK_002: Second task ***
+Status: COMPLETE
+Completed: 2026-07-15
+Receipt: Created file src/main.py
 
+## Section B
+
+*** TASK_003: Third task ***
+Status: COMPLETE
+Receipt: Implemented feature in tests/test_feature.py
 """
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
-            f.write(roadmap_content)
-            temp_roadmap = f.name
-        
-        try:
-            sys.path.insert(0, str(AUDIT_TOOL.parent))
-            import container_audit_loop
+            with open('ROADMAP.md', 'w') as f:
+                f.write(roadmap_content)
             
-            tasks = container_audit_loop.parse_complete_tasks(temp_roadmap)
-            assert len(tasks) == 0
+            tasks = self.parse_roadmap_tasks('ROADMAP.md')
+            self.assert_equals(len(tasks), 3, "test_parse_roadmap_tasks_basic - count")
+            self.assert_equals(tasks[0]['id'], 'TASK_001', "test_parse_roadmap_tasks_basic - id")
+            self.assert_equals(tasks[0]['status'], 'PENDING', "test_parse_roadmap_tasks_basic - status")
+            self.assert_equals(tasks[1]['receipts'], ['Created file src/main.py'], "test_parse_roadmap_tasks_basic - receipts")
+        except Exception as e:
+            self.results.add_fail("test_parse_roadmap_tasks_basic", str(e))
         finally:
-            os.unlink(temp_roadmap)
-    
-    def test_parse_complete_tasks_multiline_descriptions(self):
-        """Handle tasks with complex nested structure."""
-        roadmap_content = """# Roadmap
-
-- [x] **TASK_001**: Complex task
-  - Priority: CRITICAL
-  - Test: `python3 -m pytest tests/test_complex.py`
-  - Receipt: Implementation verified
-  - Status: Complete
-
+            self.teardown()
+        
+        # Test 2: Multiple receipts
+        self.setup()
+        try:
+            roadmap_content = """
+*** TASK_001: Complex task ***
+Status: COMPLETE
+Completed: 2026-07-19
+Receipt: Created file src/codec.py
+Receipt: Added tests/test_codec.py
+Receipt: Updated README.md
 """
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
-            f.write(roadmap_content)
-            temp_roadmap = f.name
-        
-        try:
-            sys.path.insert(0, str(AUDIT_TOOL.parent))
-            import container_audit_loop
+            with open('ROADMAP.md', 'w') as f:
+                f.write(roadmap_content)
             
-            tasks = container_audit_loop.parse_complete_tasks(temp_roadmap)
-            assert len(tasks) == 1
-            assert tasks[0]['task_id'] == 'TASK_001'
+            tasks = self.parse_roadmap_tasks('ROADMAP.md')
+            self.assert_equals(len(tasks), 1, "test_parse_roadmap_tasks_multiple_receipts - count")
+            self.assert_equals(len(tasks[0]['receipts']), 3, "test_parse_roadmap_tasks_multiple_receipts - receipt count")
+        except Exception as e:
+            self.results.add_fail("test_parse_roadmap_tasks_multiple_receipts", str(e))
         finally:
-            os.unlink(temp_roadmap)
+            self.teardown()
+        
+        # Test 3: File exists - true
+        self.setup()
+        try:
+            os.makedirs('src', exist_ok=True)
+            with open('src/test.py', 'w') as f:
+                f.write('# test file')
+            
+            self.assert_true(self.verify_file_exists('src/test.py', '.'), "test_verify_file_exists_true")
+        except Exception as e:
+            self.results.add_fail("test_verify_file_exists_true", str(e))
+        finally:
+            self.teardown()
+        
+        # Test 4: File exists - false
+        self.setup()
+        try:
+            self.assert_true(not self.verify_file_exists('src/missing.py', '.'), "test_verify_file_exists_false")
+        except Exception as e:
+            self.results.add_fail("test_verify_file_exists_false", str(e))
+        finally:
+            self.teardown()
+        
+        # Test 5: Test file exists
+        self.setup()
+        try:
+            os.makedirs('tests', exist_ok=True)
+            with open('tests/test_feature.py', 'w') as f:
+                f.write('# test')
+            
+            self.assert_true(self.verify_test_exists('tests/test_feature.py', '.'), "test_verify_test_exists_true")
+        except Exception as e:
+            self.results.add_fail("test_verify_test_exists_true", str(e))
+        finally:
+            self.teardown()
+        
+        # Test 6: Audit identifies missing files
+        self.setup()
+        try:
+            roadmap_content = """
+*** TASK_001: Missing file task ***
+Status: COMPLETE
+Completed: 2026-07-19
+Receipt: Created file src/missing.py
 
+*** TASK_002: Valid task ***
+Status: COMPLETE
+Completed: 2026-07-19
+Receipt: Created file src/valid.py
+"""
+            with open('ROADMAP.md', 'w') as f:
+                f.write(roadmap_content)
+            
+            os.makedirs('src', exist_ok=True)
+            with open('src/valid.py', 'w') as f:
+                f.write('# valid')
+            
+            report = self.run_audit('.', 'audit_report.json')
+            
+            self.assert_true('summary' in report, "test_run_audit_identifies_missing_files - has summary")
+            self.assert_true('suspect_tasks' in report, "test_run_audit_identifies_missing_files - has suspect_tasks")
+            self.assert_equals(report['summary']['completed_tasks'], 2, "test_run_audit_identifies_missing_files - completed count")
+            self.assert_equals(report['summary']['suspect_tasks'], 1, "test_run_audit_identifies_missing_files - suspect count")
+            
+            if report['suspect_tasks']:
+                suspect = report['suspect_tasks'][0]
+                self.assert_equals(suspect['task_id'], 'TASK_001', "test_run_audit_identifies_missing_files - suspect id")
+                self.assert_true(suspect['is_suspect'], "test_run_audit_identifies_missing_files - is_suspect")
+                self.assert_true(any('missing files' in issue.lower() for issue in suspect['issues']), 
+                                "test_run_audit_identifies_missing_files - issue message")
+        except Exception as e:
+            self.results.add_fail("test_run_audit_identifies_missing_files", str(e))
+        finally:
+            self.teardown()
+        
+        # Test 7: Audit flags tasks with no receipts
+        self.setup()
+        try:
+            roadmap_content = """
+*** TASK_001: No receipts ***
+Status: COMPLETE
+Completed: 2026-07-19
+"""
+            with open('ROADMAP.md', 'w') as f:
+                f.write(roadmap_content)
+            
+            report = self.run_audit('.', 'audit_report.json')
+            
+            self.assert_equals(report['summary']['suspect_tasks'], 1, "test_run_audit_no_receipts - suspect count")
+            if report['suspect_tasks']:
+                suspect = report['suspect_tasks'][0]
+                self.assert_true('no receipts' in suspect['issues'][0].lower(), "test_run_audit_no_receipts - issue message")
+        except Exception as e:
+            self.results.add_fail("test_run_audit_no_receipts", str(e))
+        finally:
+            self.teardown()
+        
+        # Test 8: Audit ignores pending tasks
+        self.setup()
+        try:
+            roadmap_content = """
+*** TASK_001: Pending task ***
+Status: PENDING
+"""
+            with open('ROADMAP.md', 'w') as f:
+                f.write(roadmap_content)
+            
+            report = self.run_audit('.', 'audit_report.json')
+            
+            self.assert_equals(report['summary']['pending_tasks'], 1, "test_run_audit_ignores_pending_tasks - pending count")
+            self.assert_equals(report['summary']['completed_tasks'], 0, "test_run_audit_ignores_pending_tasks - completed count")
+            self.assert_equals(report['summary']['suspect_tasks'], 0, "test_run_audit_ignores_pending_tasks - suspect count")
+        except Exception as e:
+            self.results.add_fail("test_run_audit_ignores_pending_tasks", str(e))
+        finally:
+            self.teardown()
+        
+        # Test 9: Audit identifies missing test files
+        self.setup()
+        try:
+            roadmap_content = """
+*** TASK_001: Missing test ***
+Status: COMPLETE
+Completed: 2026-07-19
+Receipt: Added test in tests/test_missing.py
+"""
+            with open('ROADMAP.md', 'w') as f:
+                f.write(roadmap_content)
+            
+            report = self.run_audit('.', 'audit_report.json')
+            
+            self.assert_equals(report['summary']['suspect_tasks'], 1, "test_run_audit_missing_test_files - suspect count")
+            if report['suspect_tasks']:
+                suspect = report['suspect_tasks'][0]
+                self.assert_true(any('missing test' in issue.lower() for issue in suspect['issues']), 
+                                "test_run_audit_missing_test_files - issue message")
+        except Exception as e:
+            self.results.add_fail("test_run_audit_missing_test_files", str(e))
+        finally:
+            self.teardown()
+        
+        # Test 10: Audit generates report file
+        self.setup()
+        try:
+            roadmap_content = """
+*** TASK_001: Test task ***
+Status: COMPLETE
+Completed: 2026-07-19
+Receipt: Created file src/test.py
+"""
+            with open('ROADMAP.md', 'w') as f:
+                f.write(roadmap_content)
+            
+            os.makedirs('src', exist_ok=True)
+            with open('src/test.py', 'w') as f:
+                f.write('# test')
+            
+            report = self.run_audit('.', 'audit_report.json')
+            
+            self.assert_true(os.path.exists('audit_report.json'), "test_run_audit_generates_report_file - file exists")
+            
+            with open('audit_report.json', 'r') as f:
+                file_report = json.load(f)
+            
+            self.assert_equals(file_report['timestamp'], report['timestamp'], "test_run_audit_generates_report_file - timestamp")
+            self.assert_equals(file_report['summary'], report['summary'], "test_run_audit_generates_report_file - summary")
+        except Exception as e:
+            self.results.add_fail("test_run_audit_generates_report_file", str(e))
+        finally:
+            self.teardown()
+        
+        # Test 11: Audit handles missing ROADMAP
+        self.setup()
+        try:
+            report = self.run_audit('.', 'audit_report.json')
+            
+            self.assert_true('error' in report, "test_run_audit_handles_missing_roadmap - has error")
+            self.assert_true('ROADMAP.md not found' in report['error'], "test_run_audit_handles_missing_roadmap - error message")
+            self.assert_equals(report['suspect_tasks'], [], "test_run_audit_handles_missing_roadmap - no suspects")
+        except Exception as e:
+            self.results.add_fail("test_run_audit_handles_missing_roadmap", str(e))
+        finally:
+            self.teardown()
+        
+        # Test 12: Audit summary statistics
+        self.setup()
+        try:
+            roadmap_content = """
+*** TASK_001: Valid task 1 ***
+Status: COMPLETE
+Completed: 2026-07-19
+Receipt: Created file src/valid1.py
 
-class TestLLMResponseParsing:
-    """Test parsing of Ollama JSON responses."""
-    
-    def test_parse_llm_json_response_plain(self):
-        """Parse plain JSON response."""
-        response = '[{"task_id": "TASK_W002", "description": "Test design", "reason": "No test file", "test_command": "pytest"}]'
-        
-        sys.path.insert(0, str(AUDIT_TOOL.parent))
-        import container_audit_loop
-        
-        parsed = container_audit_loop.parse_llm_json_response(response)
-        assert isinstance(parsed, list)
-        assert len(parsed) == 1
-        assert parsed[0]['task_id'] == 'TASK_W002'
-    
-    def test_parse_llm_json_response_with_code_block(self):
-        """Parse JSON wrapped in markdown code block."""
-        response = '''```json
-[
-  {"task_id": "TASK_W002", "description": "Test design", "reason": "No test file", "test_command": "pytest"}
-]
-```'''
-        
-        sys.path.insert(0, str(AUDIT_TOOL.parent))
-        import container_audit_loop
-        
-        parsed = container_audit_loop.parse_llm_json_response(response)
-        assert isinstance(parsed, list)
-        assert len(parsed) == 1
-        assert parsed[0]['task_id'] == 'TASK_W002'
-    
-    def test_parse_llm_json_response_no_language_marker(self):
-        """Parse JSON in code block without language marker."""
-        response = '''```
-[
-  {"task_id": "TASK_W002", "description": "Test design"}
-]
-```'''
-        
-        sys.path.insert(0, str(AUDIT_TOOL.parent))
-        import container_audit_loop
-        
-        parsed = container_audit_loop.parse_llm_json_response(response)
-        assert isinstance(parsed, list)
-        assert len(parsed) == 1
-    
-    def test_parse_llm_json_response_embedded_in_text(self):
-        """Extract JSON from response with surrounding text."""
-        response = '''Based on my analysis:
+*** TASK_002: Valid task 2 ***
+Status: COMPLETE
+Completed: 2026-07-19
+Receipt: Created file src/valid2.py
 
-```json
-[{"task_id": "TASK_W002", "description": "Test design"}]
-```
+*** TASK_003: Suspect task ***
+Status: COMPLETE
+Completed: 2026-07-19
+Receipt: Created file src/missing.py
 
-I recommend checking these tasks.'''
+*** TASK_004: Pending task ***
+Status: PENDING
+"""
+            with open('ROADMAP.md', 'w') as f:
+                f.write(roadmap_content)
+            
+            os.makedirs('src', exist_ok=True)
+            with open('src/valid1.py', 'w') as f:
+                f.write('# valid1')
+            with open('src/valid2.py', 'w') as f:
+                f.write('# valid2')
+            
+            report = self.run_audit('.', 'audit_report.json')
+            
+            self.assert_equals(report['summary']['total_tasks'], 4, "test_run_audit_summary_statistics - total")
+            self.assert_equals(report['summary']['completed_tasks'], 3, "test_run_audit_summary_statistics - completed")
+            self.assert_equals(report['summary']['pending_tasks'], 1, "test_run_audit_summary_statistics - pending")
+            self.assert_equals(report['summary']['suspect_tasks'], 1, "test_run_audit_summary_statistics - suspects")
+            self.assert_true('suspect_percentage' in report['summary'], "test_run_audit_summary_statistics - has percentage")
+        except Exception as e:
+            self.results.add_fail("test_run_audit_summary_statistics", str(e))
+        finally:
+            self.teardown()
         
-        sys.path.insert(0, str(AUDIT_TOOL.parent))
-        import container_audit_loop
-        
-        parsed = container_audit_loop.parse_llm_json_response(response)
-        assert isinstance(parsed, list)
-        assert len(parsed) == 1
-
-
-class TestTestFileChecking:
-    """Test test file existence checking."""
-    
-    def test_check_test_file_exists_pytest_pattern(self):
-        """Find test file from pytest command."""
-        test_command = "python3 -m pytest tests/test_container_audit_loop.py"
-        
-        sys.path.insert(0, str(AUDIT_TOOL.parent))
-        import container_audit_loop
-        
-        # This test file should exist
-        exists, path = container_audit_loop.check_test_file_exists(
-            test_command, project_root=PROJECT_ROOT
-        )
-        
-        assert exists is True
-        assert 'test_container_audit_loop.py' in path
-    
-    def test_check_test_file_exists_tools_pattern(self):
-        """Find tool file from python command."""
-        test_command = "python3 tools/container_audit_loop.py --dry-run"
-        
-        sys.path.insert(0, str(AUDIT_TOOL.parent))
-        import container_audit_loop
-        
-        exists, path = container_audit_loop.check_test_file_exists(
-            test_command, project_root=PROJECT_ROOT
-        )
-        
-        assert exists is True
-        assert 'container_audit_loop.py' in path
-    
-    def test_check_test_file_not_exists(self):
-        """Return False for non-existent test file."""
-        test_command = "python3 -m pytest tests/test_nonexistent.py"
-        
-        sys.path.insert(0, str(AUDIT_TOOL.parent))
-        import container_audit_loop
-        
-        exists, path = container_audit_loop.check_test_file_exists(
-            test_command, project_root=PROJECT_ROOT
-        )
-        
-        assert exists is False
-        assert path is None
-    
-    def test_check_test_file_empty_command(self):
-        """Handle empty test command."""
-        sys.path.insert(0, str(AUDIT_TOOL.parent))
-        import container_audit_loop
-        
-        exists, path = container_audit_loop.check_test_file_exists("", PROJECT_ROOT)
-        assert exists is False
-        assert path is None
-
-
-class TestImplementationFileChecking:
-    """Test implementation file heuristic search."""
-    
-    def test_check_implementation_exists_by_task_id(self):
-        """Find implementation file using task ID."""
-        description = "Build audit loop"
-        task_id = "TASK_A003"
-        
-        sys.path.insert(0, str(AUDIT_TOOL.parent))
-        import container_audit_loop
-        
-        exists, path = container_audit_loop.check_test_file_exists(
-            "", project_root=PROJECT_ROOT
-        )
-        # Should find container_audit_loop.py in tools/
-        # This is a basic check - actual implementation search is heuristic
-    
-    def test_check_implementation_exists_by_keywords(self):
-        """Find implementation file using description keywords."""
-        description = "Container audit loop implementation"
-        task_id = "TASK_X001"
-        
-        sys.path.insert(0, str(AUDIT_TOOL.parent))
-        import container_audit_loop
-        
-        exists, path = container_audit_loop.check_implementation_exists(
-            description, task_id, project_root=PROJECT_ROOT
-        )
-        # Should find related files based on keywords
-    
-    def test_check_implementation_not_exists(self):
-        """Return False when no implementation found."""
-        description = "Nonexistent feature"
-        task_id = "TASK_FAKE"
-        
-        sys.path.insert(0, str(AUDIT_TOOL.parent))
-        import container_audit_loop
-        
-        exists, path = container_audit_loop.check_implementation_exists(
-            description, task_id, project_root=PROJECT_ROOT
-        )
-        # May or may not find something depending on search
-
-
-class TestVerificationLogic:
-    """Test suspect task verification."""
-    
-    def test_verify_suspect_tasks_all_pass(self):
-        """Verify tasks where all test/implementation files exist."""
-        suspect_tasks = [
-            {
-                'task_id': 'TASK_001',
-                'description': 'Container audit loop',
-                'reason': 'Test exists',
-                'test_command': 'python3 -m pytest tests/test_container_audit_loop.py'
-            }
-        ]
-        
-        sys.path.insert(0, str(AUDIT_TOOL.parent))
-        import container_audit_loop
-        
-        results = container_audit_loop.verify_suspect_tasks(
-            suspect_tasks, project_root=PROJECT_ROOT
-        )
-        
-        assert results['suspect_count'] == 1
-        assert len(results['tasks']) == 1
-        # Test file exists, so status should be PASS
-        assert results['tasks'][0]['status'] in ['PASS', 'FAIL']
-    
-    def test_verify_suspect_tasks_all_fail(self):
-        """Verify tasks where no files exist."""
-        # Use very specific search terms that won't match anything
-        suspect_tasks = [
-            {
-                'task_id': 'TASK_XYZZY999',
-                'description': 'Completely nonexistent feature implementation',
-                'reason': 'No implementation',
-                'test_command': 'python3 -m pytest tests/test_xyzzy999.py'
-            }
-        ]
-        
-        sys.path.insert(0, str(AUDIT_TOOL.parent))
-        import container_audit_loop
-        
-        results = container_audit_loop.verify_suspect_tasks(
-            suspect_tasks, project_root=PROJECT_ROOT
-        )
-        
-        assert results['suspect_count'] == 1
-        # Both test and implementation should not exist
-        test_task = results['tasks'][0]
-        # Note: heuristic search may have false positives, so we check that
-        # at least the test file doesn't exist
-        assert test_task['test_exists'] is False
-        # Status may be PASS or FAIL depending on heuristic search results
-    
-    def test_verify_suspect_tasks_mixed_results(self):
-        """Handle mixed pass/fail results."""
-        suspect_tasks = [
-            {
-                'task_id': 'TASK_REAL',
-                'description': 'Real task',
-                'reason': 'Test exists',
-                'test_command': 'python3 -m pytest tests/test_container_audit_loop.py'
-            },
-            {
-                'task_id': 'TASK_FAKE',
-                'description': 'Fake task',
-                'reason': 'No test',
-                'test_command': 'python3 -m pytest tests/test_nonexistent.py'
-            }
-        ]
-        
-        sys.path.insert(0, str(AUDIT_TOOL.parent))
-        import container_audit_loop
-        
-        results = container_audit_loop.verify_suspect_tasks(
-            suspect_tasks, project_root=PROJECT_ROOT
-        )
-        
-        assert results['suspect_count'] == 2
-        assert len(results['tasks']) == 2
-        assert results['pass_count'] + results['fail_count'] == 2
-
-
-class TestAuditPromptBuilding:
-    """Test audit prompt construction."""
-    
-    def test_build_audit_prompt_basic(self):
-        """Build basic audit prompt."""
-        complete_tasks = [
-            {
-                'task_id': 'TASK_001',
-                'description': 'Task one',
-                'test_command': 'pytest',
-                'receipt_criteria': 'Complete'
-            }
-        ]
-        
-        sys.path.insert(0, str(AUDIT_TOOL.parent))
-        import container_audit_loop
-        
-        prompt = container_audit_loop.build_audit_prompt(complete_tasks)
-        
-        assert 'TASK_001' in prompt
-        assert 'Task one' in prompt
-        assert 'pytest' in prompt
-        assert 'SUSPECT' in prompt
-        assert 'JSON array' in prompt
-    
-    def test_build_audit_prompt_truncation(self):
-        """Limit tasks in prompt to prevent context overflow."""
-        # Create 100 tasks
-        complete_tasks = [
-            {
-                'task_id': f'TASK_{i:03d}',
-                'description': f'Task {i}',
-                'test_command': '',
-                'receipt_criteria': ''
-            }
-            for i in range(100)
-        ]
-        
-        sys.path.insert(0, str(AUDIT_TOOL.parent))
-        import container_audit_loop
-        
-        prompt = container_audit_loop.build_audit_prompt(complete_tasks)
-        
-        # Should mention truncation
-        assert 'more tasks' in prompt or len(complete_tasks) > 50
-
-
-class TestDryRunMode:
-    """Test dry-run mode functionality."""
-    
-    def test_store_analysis_in_container_dry_run(self):
-        """Dry run doesn't actually store files."""
-        suspect_tasks = [
-            {'task_id': 'TASK_001', 'description': 'Test task'}
-        ]
-        
-        sys.path.insert(0, str(AUDIT_TOOL.parent))
-        import container_audit_loop
-        
-        path = container_audit_loop.store_analysis_in_container(
-            'test.mkv', suspect_tasks, 'test-model', dry_run=True
-        )
-        
-        # Should return a path but not create file
-        assert path is not None
-        assert 'DRY RUN' in path or 'audit_suspect_tasks' in path
-    
-    def test_store_verification_in_container_dry_run(self):
-        """Dry run doesn't actually store verification results."""
-        results = {'timestamp': '2024-01-01', 'tasks': []}
-        
-        sys.path.insert(0, str(AUDIT_TOOL.parent))
-        import container_audit_loop
-        
-        path = container_audit_loop.store_verification_in_container(
-            'test.mkv', results, dry_run=True
-        )
-        
-        # Should return a path but not create file
-        assert path is not None
-        assert 'DRY RUN' in path or 'audit_verification' in path
-
-
-class TestIntegration:
-    """Integration tests for full audit loop."""
-    
-    def test_full_audit_with_real_roadmap(self):
-        """Run full audit against actual ROADMAP.md."""
-        roadmap_path = PROJECT_ROOT / "ROADMAP.md"
-        
-        if not roadmap_path.exists():
-            pytest.skip("ROADMAP.md not found")
-        
-        sys.path.insert(0, str(AUDIT_TOOL.parent))
-        import container_audit_loop
-        
-        # Parse complete tasks
-        complete_tasks = container_audit_loop.parse_complete_tasks(roadmap_path)
-        
-        # Should find some complete tasks
-        assert isinstance(complete_tasks, list)
-        # Don't assert length - may vary
-    
-    def test_full_audit_dry_run(self):
-        """Run audit loop in dry-run mode."""
-        roadmap_path = PROJECT_ROOT / "ROADMAP.md"
-        
-        if not roadmap_path.exists():
-            pytest.skip("ROADMAP.md not found")
-        
-        # This test verifies the tool can be imported and configured
-        # Actual Ollama call requires Ollama service
-        sys.path.insert(0, str(AUDIT_TOOL.parent))
-        import container_audit_loop
-        
-        # Verify functions are callable
-        assert callable(container_audit_loop.parse_complete_tasks)
-        assert callable(container_audit_loop.build_audit_prompt)
-        assert callable(container_audit_loop.verify_suspect_tasks)
-        assert callable(container_audit_loop.store_analysis_in_container)
-        assert callable(container_audit_loop.store_verification_in_container)
+        return self.results.report()
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+    tester = TestContainerAuditLoop()
+    success = tester.run_all_tests()
+    sys.exit(0 if success else 1)

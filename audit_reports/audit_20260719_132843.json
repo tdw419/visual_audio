@@ -1,0 +1,1026 @@
+{
+  "timestamp": "2026-07-19T13:28:43.891030",
+  "summary": {
+    "total_tasks": 79,
+    "pending_tasks": 24,
+    "suspect_tasks": 0,
+    "missing_implementation": 10,
+    "implementation_status_breakdown": {
+      "MISSING": 10,
+      "UNKNOWN": 7,
+      "PARTIAL": 5,
+      "PRESENT": 2
+    }
+  },
+  "suspect_tasks": [],
+  "missing_implementation": [
+    {
+      "id": "TASK_C035",
+      "title": "TASK_C035: Reed-Solomon ECC in audio_codec.rs",
+      "description": "Reed-Solomon ECC in audio_codec.rs",
+      "status": "PENDING",
+      "phase": {
+        "number": 4,
+        "title": "Geometry OS Integration",
+        "status": "\ud83d\udfe1",
+        "blocked": false
+      },
+      "priority": "MEDIUM",
+      "dependencies": [
+        "TASK_C030"
+      ],
+      "test_command": "Manual (verified in geometry_os, not the visual_audio cron): a NEW named RS test in audio_codec.rs recovers \u22655 injected byte errors, and `cargo test audio_codec --lib` passes with it present (+ Python\u2194Rust fixture if interop chosen). NOTE: a bare `cargo test audio_codec --lib` already passes without RS \u2014 it must NOT be used as this receipt.",
+      "receipt_criteria": null,
+      "files_verified": {
+        "task_id": "TASK_C035",
+        "files_found": [],
+        "files_missing": [
+          "tools/c035.py"
+        ],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "MISSING"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_C036",
+      "title": "TASK_C036: Pixel-region \u2194 WAV in audio_codec.rs",
+      "description": "Pixel-region \u2194 WAV in audio_codec.rs",
+      "status": "PENDING",
+      "phase": {
+        "number": 4,
+        "title": "Geometry OS Integration",
+        "status": "\ud83d\udfe1",
+        "blocked": false
+      },
+      "priority": "MEDIUM",
+      "dependencies": [
+        "TASK_C030"
+      ],
+      "test_command": "Manual (verified in geometry_os): a NEW named pixel-region round-trip test in audio_codec.rs passes byte-identical, present in `cargo test audio_codec --lib`. NOTE: bare `cargo test audio_codec --lib` already passes without this \u2014 not a valid receipt on its own.",
+      "receipt_criteria": null,
+      "files_verified": {
+        "task_id": "TASK_C036",
+        "files_found": [],
+        "files_missing": [
+          "tools/c036.py"
+        ],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "MISSING"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_C039",
+      "title": "TASK_C039: Graphics display option for boot manifest",
+      "description": "Graphics display option for boot manifest",
+      "status": "PENDING",
+      "phase": {
+        "number": 4,
+        "title": "Geometry OS Integration",
+        "status": "\ud83d\udfe1",
+        "blocked": false
+      },
+      "priority": "MEDIUM",
+      "dependencies": [
+        "TASK_C033"
+      ],
+      "test_command": "extend `test_boot_manifest.py` with display-field cases (allowlist accept, unknown value reject, localhost-only argv assertion); existing 6/6 still pass",
+      "receipt_criteria": "Signed manifest with `{\"display\": \"vnc\"}` launches QEMU with VNC on localhost; manifest without the field behaves exactly as today; malformed/non-allowlisted values fail closed",
+      "files_verified": {
+        "task_id": "TASK_C039",
+        "files_found": [],
+        "files_missing": [
+          "tools/c039.py"
+        ],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "MISSING"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_C041",
+      "title": "TASK_C041: Ubuntu Desktop boot demo (audio \u2192 GUI session)",
+      "description": "Ubuntu Desktop boot demo (audio \u2192 GUI session)",
+      "status": "PENDING",
+      "phase": {
+        "number": 4,
+        "title": "Geometry OS Integration",
+        "status": "\ud83d\udfe1",
+        "blocked": false
+      },
+      "priority": "LOW",
+      "dependencies": [
+        "TASK_C039",
+        "TASK_C040"
+      ],
+      "test_command": "Manual \u2014 full pipeline run per README steps; automated envelope tests from TASK_C039/C040 cover the security surface",
+      "receipt_criteria": "screenshot/recording of desktop session reached via VNC after audio-decoded boot; boot_images/README.md documents reproduction steps",
+      "files_verified": {
+        "task_id": "TASK_C041",
+        "files_found": [],
+        "files_missing": [
+          "tools/c041.py"
+        ],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "MISSING"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_A002",
+      "title": "TASK_A002: Container task scheduler using frame metadata",
+      "description": "Container task scheduler using frame metadata",
+      "status": "PENDING",
+      "phase": {
+        "number": 13,
+        "title": "Container Self-Awareness & Enhanced Security",
+        "status": "\ud83d\udd34",
+        "blocked": false
+      },
+      "priority": "HIGH",
+      "dependencies": [
+        "Frame-based tools",
+        "self-hosting capability",
+        "tools/ollama_prompt.py"
+      ],
+      "test_command": "`python3 tests/test_container_task_scheduler.py` verifies correct task prioritization",
+      "receipt_criteria": "New tools/task_scheduler.py that reads frame metadata to prioritize and schedule tasks",
+      "files_verified": {
+        "task_id": "TASK_A002",
+        "files_found": [],
+        "files_missing": [
+          "/home/jericho/projects/zion/projects/visual_audio/tests/test_container_task_scheduler.py",
+          "tools/task_scheduler.py"
+        ],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "MISSING"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_A004",
+      "title": "TASK_A004: Security analysis enhancement using Ollama",
+      "description": "Security analysis enhancement using Ollama",
+      "status": "PENDING",
+      "phase": {
+        "number": 13,
+        "title": "Container Self-Awareness & Enhanced Security",
+        "status": "\ud83d\udd34",
+        "blocked": false
+      },
+      "priority": "HIGH",
+      "dependencies": [
+        "test_container_security.py (7/7 pass)",
+        "tools/ollama_prompt.py"
+      ],
+      "test_command": "`python3 tests/test_ollama_security_analysis.py` verifies LLM-driven security improvements",
+      "receipt_criteria": "Enhanced security tests that use Ollama to propose new attack vectors and verify mitigation",
+      "files_verified": {
+        "task_id": "TASK_A004",
+        "files_found": [],
+        "files_missing": [
+          "/home/jericho/projects/zion/projects/visual_audio/tests/test_ollama_security_analysis.py"
+        ],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "MISSING"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_A005",
+      "title": "TASK_A005: Frame-based progress tracking with LLM interpretation",
+      "description": "Frame-based progress tracking with LLM interpretation",
+      "status": "PENDING",
+      "phase": {
+        "number": 13,
+        "title": "Container Self-Awareness & Enhanced Security",
+        "status": "\ud83d\udd34",
+        "blocked": false
+      },
+      "priority": "MEDIUM",
+      "dependencies": [
+        "Frame-based tools",
+        "tools/ollama_prompt.py"
+      ],
+      "test_command": "`python3 tests/test_frame_based_progress_tracking.py` verifies LLM interprets progress correctly",
+      "receipt_criteria": "New tools/progress_tracker.py that reads frame metadata and uses Ollama to interpret progress",
+      "files_verified": {
+        "task_id": "TASK_A005",
+        "files_found": [],
+        "files_missing": [
+          "/home/jericho/projects/zion/projects/visual_audio/tests/test_frame_based_progress_tracking.py",
+          "tools/progress_tracker.py"
+        ],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "MISSING"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_V006",
+      "title": "TASK_V006: GeOS memory palace visualization update",
+      "description": "GeOS memory palace visualization update",
+      "status": "PENDING",
+      "phase": {
+        "number": 10,
+        "title": "Visual Audio Memory Palace (VAMP)",
+        "status": "\ud83d\udfe2",
+        "blocked": false
+      },
+      "priority": "LOW",
+      "dependencies": [
+        "TASK_V002",
+        "TASK_V003"
+      ],
+      "test_command": "Manual verification in GeOS: magenta bands play audio, yellow tiles show ECC status, cyan cartridges execute when clicked",
+      "receipt_criteria": "`programs/memory_palace.asm` updated with new color bands: magenta (audio-active), yellow (ECC-protected), cyan (executable cartridges); click-to-play audio via audio_codec.rs; visual ECC status overlay (corrupted tiles highlighted); cartridge execution from GeOS",
+      "files_verified": {
+        "task_id": "TASK_V006",
+        "files_found": [],
+        "files_missing": [
+          "tools/v006.py"
+        ],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "MISSING"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_COV_UTILS",
+      "title": "TASK_COV_UTILS: Add test coverage for utils module",
+      "description": "Add test coverage for utils module",
+      "status": "PENDING",
+      "phase": {
+        "number": 10,
+        "title": "Visual Audio Memory Palace (VAMP)",
+        "status": "\ud83d\udfe2",
+        "blocked": false
+      },
+      "priority": "MEDIUM",
+      "dependencies": [],
+      "test_command": "`python3 -m pytest tests/test_utils.py -v`",
+      "receipt_criteria": "All utils functionality tested",
+      "files_verified": {
+        "task_id": "TASK_COV_UTILS",
+        "files_found": [],
+        "files_missing": [
+          "/home/jericho/projects/zion/projects/visual_audio/tests/test_utils.py",
+          "tests/test_task_cov_utils.py",
+          "tools/cov_utils.py"
+        ],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "MISSING"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_COV_PHONEMES",
+      "title": "TASK_COV_PHONEMES: Add test coverage for phonemes module",
+      "description": "Add test coverage for phonemes module",
+      "status": "PENDING",
+      "phase": {
+        "number": 10,
+        "title": "Visual Audio Memory Palace (VAMP)",
+        "status": "\ud83d\udfe2",
+        "blocked": false
+      },
+      "priority": "MEDIUM",
+      "dependencies": [],
+      "test_command": "`python3 -m pytest tests/test_phonemes.py -v`",
+      "receipt_criteria": "All phonemes functionality tested",
+      "files_verified": {
+        "task_id": "TASK_COV_PHONEMES",
+        "files_found": [],
+        "files_missing": [
+          "/home/jericho/projects/zion/projects/visual_audio/tests/test_phonemes.py",
+          "tests/test_task_cov_phonemes.py",
+          "tools/cov_phonemes.py"
+        ],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "MISSING"
+      },
+      "code_exists": false
+    }
+  ],
+  "all_pending_tasks": [
+    {
+      "id": "TASK_C035",
+      "title": "TASK_C035: Reed-Solomon ECC in audio_codec.rs",
+      "description": "Reed-Solomon ECC in audio_codec.rs",
+      "status": "PENDING",
+      "phase": {
+        "number": 4,
+        "title": "Geometry OS Integration",
+        "status": "\ud83d\udfe1",
+        "blocked": false
+      },
+      "priority": "MEDIUM",
+      "dependencies": [
+        "TASK_C030"
+      ],
+      "test_command": "Manual (verified in geometry_os, not the visual_audio cron): a NEW named RS test in audio_codec.rs recovers \u22655 injected byte errors, and `cargo test audio_codec --lib` passes with it present (+ Python\u2194Rust fixture if interop chosen). NOTE: a bare `cargo test audio_codec --lib` already passes without RS \u2014 it must NOT be used as this receipt.",
+      "receipt_criteria": null,
+      "files_verified": {
+        "task_id": "TASK_C035",
+        "files_found": [],
+        "files_missing": [
+          "tools/c035.py"
+        ],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "MISSING"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_C036",
+      "title": "TASK_C036: Pixel-region \u2194 WAV in audio_codec.rs",
+      "description": "Pixel-region \u2194 WAV in audio_codec.rs",
+      "status": "PENDING",
+      "phase": {
+        "number": 4,
+        "title": "Geometry OS Integration",
+        "status": "\ud83d\udfe1",
+        "blocked": false
+      },
+      "priority": "MEDIUM",
+      "dependencies": [
+        "TASK_C030"
+      ],
+      "test_command": "Manual (verified in geometry_os): a NEW named pixel-region round-trip test in audio_codec.rs passes byte-identical, present in `cargo test audio_codec --lib`. NOTE: bare `cargo test audio_codec --lib` already passes without this \u2014 not a valid receipt on its own.",
+      "receipt_criteria": null,
+      "files_verified": {
+        "task_id": "TASK_C036",
+        "files_found": [],
+        "files_missing": [
+          "tools/c036.py"
+        ],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "MISSING"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_C039",
+      "title": "TASK_C039: Graphics display option for boot manifest",
+      "description": "Graphics display option for boot manifest",
+      "status": "PENDING",
+      "phase": {
+        "number": 4,
+        "title": "Geometry OS Integration",
+        "status": "\ud83d\udfe1",
+        "blocked": false
+      },
+      "priority": "MEDIUM",
+      "dependencies": [
+        "TASK_C033"
+      ],
+      "test_command": "extend `test_boot_manifest.py` with display-field cases (allowlist accept, unknown value reject, localhost-only argv assertion); existing 6/6 still pass",
+      "receipt_criteria": "Signed manifest with `{\"display\": \"vnc\"}` launches QEMU with VNC on localhost; manifest without the field behaves exactly as today; malformed/non-allowlisted values fail closed",
+      "files_verified": {
+        "task_id": "TASK_C039",
+        "files_found": [],
+        "files_missing": [
+          "tools/c039.py"
+        ],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "MISSING"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_C041",
+      "title": "TASK_C041: Ubuntu Desktop boot demo (audio \u2192 GUI session)",
+      "description": "Ubuntu Desktop boot demo (audio \u2192 GUI session)",
+      "status": "PENDING",
+      "phase": {
+        "number": 4,
+        "title": "Geometry OS Integration",
+        "status": "\ud83d\udfe1",
+        "blocked": false
+      },
+      "priority": "LOW",
+      "dependencies": [
+        "TASK_C039",
+        "TASK_C040"
+      ],
+      "test_command": "Manual \u2014 full pipeline run per README steps; automated envelope tests from TASK_C039/C040 cover the security surface",
+      "receipt_criteria": "screenshot/recording of desktop session reached via VNC after audio-decoded boot; boot_images/README.md documents reproduction steps",
+      "files_verified": {
+        "task_id": "TASK_C041",
+        "files_found": [],
+        "files_missing": [
+          "tools/c041.py"
+        ],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "MISSING"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_I004",
+      "title": "TASK_I004: Cross-modal translation tools",
+      "description": "Cross-modal translation tools",
+      "status": "PENDING",
+      "phase": {
+        "number": 9,
+        "title": "Interactive Visual Interfaces",
+        "status": "\ud83d\udfe2",
+        "blocked": false
+      },
+      "priority": "MEDIUM",
+      "dependencies": [
+        "TASK_M004 (pixel LM)",
+        "TASK_M001 (tokenizer)"
+      ],
+      "test_command": "`python3 tools/cross_modal.py from-image scene.png --output scene.wav && tools/cross_modal.py from-audio scene.wav --output scene_reconstructed.png`",
+      "receipt_criteria": "Image \u2192 tiles \u2192 audio (describe what you see); audio \u2192 tiles \u2192 image (draw what you hear); text \u2192 tiles \u2192 audio \u2192 image (full round-trip with visual feedback at each stage)",
+      "files_verified": {
+        "task_id": "TASK_I004",
+        "files_found": [],
+        "files_missing": [],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "UNKNOWN"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_I005",
+      "title": "TASK_I005: Collaborative visual editing",
+      "description": "Collaborative visual editing",
+      "status": "PENDING",
+      "phase": {
+        "number": 9,
+        "title": "Interactive Visual Interfaces",
+        "status": "\ud83d\udfe2",
+        "blocked": false
+      },
+      "priority": "LOW",
+      "dependencies": [
+        "TASK_I002"
+      ],
+      "test_command": "Manual verification - two browser tabs editing same canvas see each other's changes",
+      "receipt_criteria": "Multiple users edit same tile canvas simultaneously; real-time sync of visual + audio state; visual diff shows tile movements between edits",
+      "files_verified": {
+        "task_id": "TASK_I005",
+        "files_found": [],
+        "files_missing": [],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "UNKNOWN"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_I006",
+      "title": "TASK_I006: Visual version control",
+      "description": "Visual version control",
+      "status": "PENDING",
+      "phase": {
+        "number": 9,
+        "title": "Interactive Visual Interfaces",
+        "status": "\ud83d\udfe2",
+        "blocked": false
+      },
+      "priority": "LOW",
+      "dependencies": [
+        "TASK_I005"
+      ],
+      "test_command": "`python3 tools/visual_git.py diff HEAD~1 --visual` shows tile diff grid",
+      "receipt_criteria": "Git commits expressed as tile movements; \"git show\" renders before/after tile states side-by-side; visual merge conflict resolution via tile manipulation",
+      "files_verified": {
+        "task_id": "TASK_I006",
+        "files_found": [],
+        "files_missing": [],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "UNKNOWN"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_A001",
+      "title": "TASK_A001: Ollama contextual memory for container self-awareness",
+      "description": "Ollama contextual memory for container self-awareness",
+      "status": "PENDING",
+      "phase": {
+        "number": 13,
+        "title": "Container Self-Awareness & Enhanced Security",
+        "status": "\ud83d\udd34",
+        "blocked": false
+      },
+      "priority": "HIGH",
+      "dependencies": [
+        "tools/ollama_prompt.py",
+        "self-hosting capability"
+      ],
+      "test_command": "`python3 tests/test_ollama_contextual_memory.py` verifies context persists between queries",
+      "receipt_criteria": "Enhanced tools/ollama_prompt.py with conversation history tracking across container sessions",
+      "files_verified": {
+        "task_id": "TASK_A001",
+        "files_found": [
+          "tools/ollama_prompt.py"
+        ],
+        "files_missing": [
+          "/home/jericho/projects/zion/projects/visual_audio/tests/test_ollama_contextual_memory.py"
+        ],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "PARTIAL"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_A002",
+      "title": "TASK_A002: Container task scheduler using frame metadata",
+      "description": "Container task scheduler using frame metadata",
+      "status": "PENDING",
+      "phase": {
+        "number": 13,
+        "title": "Container Self-Awareness & Enhanced Security",
+        "status": "\ud83d\udd34",
+        "blocked": false
+      },
+      "priority": "HIGH",
+      "dependencies": [
+        "Frame-based tools",
+        "self-hosting capability",
+        "tools/ollama_prompt.py"
+      ],
+      "test_command": "`python3 tests/test_container_task_scheduler.py` verifies correct task prioritization",
+      "receipt_criteria": "New tools/task_scheduler.py that reads frame metadata to prioritize and schedule tasks",
+      "files_verified": {
+        "task_id": "TASK_A002",
+        "files_found": [],
+        "files_missing": [
+          "/home/jericho/projects/zion/projects/visual_audio/tests/test_container_task_scheduler.py",
+          "tools/task_scheduler.py"
+        ],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "MISSING"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_A003",
+      "title": "TASK_A003: Automated container audit loop (Ollama analyzes itself)",
+      "description": "Automated container audit loop (Ollama analyzes itself)",
+      "status": "PENDING",
+      "phase": {
+        "number": 13,
+        "title": "Container Self-Awareness & Enhanced Security",
+        "status": "\ud83d\udd34",
+        "blocked": false
+      },
+      "priority": "CRITICAL",
+      "dependencies": [
+        "tools/ollama_prompt.py",
+        "test_container_security.py (7/7 pass)",
+        "self-hosting capability"
+      ],
+      "test_command": "`python3 tests/test_container_audit_loop.py` verifies audit detects missing implementations",
+      "receipt_criteria": "Container runs periodic self-audit using tools/ollama_prompt.py to analyze ROADMAP, identify suspect tasks, verify code exists",
+      "files_verified": {
+        "task_id": "TASK_A003",
+        "files_found": [
+          "/home/jericho/projects/zion/projects/visual_audio/tests/test_container_audit_loop.py",
+          "tools/ollama_prompt.py"
+        ],
+        "files_missing": [],
+        "test_exists": true,
+        "test_passing": true,
+        "implementation_status": "PRESENT"
+      },
+      "code_exists": true
+    },
+    {
+      "id": "TASK_A004",
+      "title": "TASK_A004: Security analysis enhancement using Ollama",
+      "description": "Security analysis enhancement using Ollama",
+      "status": "PENDING",
+      "phase": {
+        "number": 13,
+        "title": "Container Self-Awareness & Enhanced Security",
+        "status": "\ud83d\udd34",
+        "blocked": false
+      },
+      "priority": "HIGH",
+      "dependencies": [
+        "test_container_security.py (7/7 pass)",
+        "tools/ollama_prompt.py"
+      ],
+      "test_command": "`python3 tests/test_ollama_security_analysis.py` verifies LLM-driven security improvements",
+      "receipt_criteria": "Enhanced security tests that use Ollama to propose new attack vectors and verify mitigation",
+      "files_verified": {
+        "task_id": "TASK_A004",
+        "files_found": [],
+        "files_missing": [
+          "/home/jericho/projects/zion/projects/visual_audio/tests/test_ollama_security_analysis.py"
+        ],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "MISSING"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_A005",
+      "title": "TASK_A005: Frame-based progress tracking with LLM interpretation",
+      "description": "Frame-based progress tracking with LLM interpretation",
+      "status": "PENDING",
+      "phase": {
+        "number": 13,
+        "title": "Container Self-Awareness & Enhanced Security",
+        "status": "\ud83d\udd34",
+        "blocked": false
+      },
+      "priority": "MEDIUM",
+      "dependencies": [
+        "Frame-based tools",
+        "tools/ollama_prompt.py"
+      ],
+      "test_command": "`python3 tests/test_frame_based_progress_tracking.py` verifies LLM interprets progress correctly",
+      "receipt_criteria": "New tools/progress_tracker.py that reads frame metadata and uses Ollama to interpret progress",
+      "files_verified": {
+        "task_id": "TASK_A005",
+        "files_found": [],
+        "files_missing": [
+          "/home/jericho/projects/zion/projects/visual_audio/tests/test_frame_based_progress_tracking.py",
+          "tools/progress_tracker.py"
+        ],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "MISSING"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_A006",
+      "title": "TASK_A006: Documentation for Ollama-container integration",
+      "description": "Documentation for Ollama-container integration",
+      "status": "PENDING",
+      "phase": {
+        "number": 13,
+        "title": "Container Self-Awareness & Enhanced Security",
+        "status": "\ud83d\udd34",
+        "blocked": false
+      },
+      "priority": "MEDIUM",
+      "dependencies": [
+        "TASK_A001-TASK_A005"
+      ],
+      "test_command": "Manual review \u2014 documentation enables successful integration by external developers",
+      "receipt_criteria": "docs/PHASE13_INTEGRATION.md with setup guide, security considerations, examples",
+      "files_verified": {
+        "task_id": "TASK_A006",
+        "files_found": [],
+        "files_missing": [],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "UNKNOWN"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_T001",
+      "title": "TASK_T001: Create pixel OS input channel test",
+      "description": "Create pixel OS input channel test",
+      "status": "PENDING",
+      "phase": {
+        "number": 8,
+        "title": "Pixel-Token Language Model",
+        "status": "\u26aa",
+        "blocked": false
+      },
+      "priority": "CRITICAL",
+      "dependencies": [
+        "TASK_M006"
+      ],
+      "test_command": "`python3 -m pytest tests/test_pixel_os_lm_input.py`",
+      "receipt_criteria": null,
+      "files_verified": {
+        "task_id": "TASK_T001",
+        "files_found": [
+          "/home/jericho/projects/zion/projects/visual_audio/tests/test_pixel_os_lm_input.py"
+        ],
+        "files_missing": [
+          "tests/test_task_t001.py"
+        ],
+        "test_exists": true,
+        "test_passing": true,
+        "implementation_status": "PARTIAL"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_T002",
+      "title": "TASK_T002: Create VAMP ECC tiles test",
+      "description": "Create VAMP ECC tiles test",
+      "status": "PENDING",
+      "phase": {
+        "number": 8,
+        "title": "Pixel-Token Language Model",
+        "status": "\u26aa",
+        "blocked": false
+      },
+      "priority": "HIGH",
+      "dependencies": [
+        "TASK_V001",
+        "TASK_E001"
+      ],
+      "test_command": "`python3 -m pytest tests/test_vamp_ecc_tiles.py`",
+      "receipt_criteria": null,
+      "files_verified": {
+        "task_id": "TASK_T002",
+        "files_found": [
+          "/home/jericho/projects/zion/projects/visual_audio/tests/test_vamp_ecc_tiles.py"
+        ],
+        "files_missing": [
+          "tests/test_task_t002.py"
+        ],
+        "test_exists": true,
+        "test_passing": true,
+        "implementation_status": "PARTIAL"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_T003",
+      "title": "TASK_T003: Create VAMP executable cartridges test",
+      "description": "Create VAMP executable cartridges test",
+      "status": "PENDING",
+      "phase": {
+        "number": 8,
+        "title": "Pixel-Token Language Model",
+        "status": "\u26aa",
+        "blocked": false
+      },
+      "priority": "HIGH",
+      "dependencies": [
+        "TASK_V001",
+        "TASK_X001"
+      ],
+      "test_command": "`python3 -m pytest tests/test_vamp_executable_cartridges.py`",
+      "receipt_criteria": null,
+      "files_verified": {
+        "task_id": "TASK_T003",
+        "files_found": [
+          "/home/jericho/projects/zion/projects/visual_audio/tests/test_vamp_executable_cartridges.py"
+        ],
+        "files_missing": [
+          "tests/test_task_t003.py"
+        ],
+        "test_exists": true,
+        "test_passing": true,
+        "implementation_status": "PARTIAL"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_T004",
+      "title": "TASK_T004: Create VAMP voice query test",
+      "description": "Create VAMP voice query test",
+      "status": "PENDING",
+      "phase": {
+        "number": 8,
+        "title": "Pixel-Token Language Model",
+        "status": "\u26aa",
+        "blocked": false
+      },
+      "priority": "HIGH",
+      "dependencies": [
+        "TASK_V002",
+        "TASK_W001"
+      ],
+      "test_command": "`python3 -m pytest tests/test_vamp_voice_query.py`",
+      "receipt_criteria": null,
+      "files_verified": {
+        "task_id": "TASK_T004",
+        "files_found": [
+          "/home/jericho/projects/zion/projects/visual_audio/tests/test_vamp_voice_query.py"
+        ],
+        "files_missing": [
+          "tests/test_task_t004.py"
+        ],
+        "test_exists": true,
+        "test_passing": true,
+        "implementation_status": "PARTIAL"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_V006",
+      "title": "TASK_V006: GeOS memory palace visualization update",
+      "description": "GeOS memory palace visualization update",
+      "status": "PENDING",
+      "phase": {
+        "number": 10,
+        "title": "Visual Audio Memory Palace (VAMP)",
+        "status": "\ud83d\udfe2",
+        "blocked": false
+      },
+      "priority": "LOW",
+      "dependencies": [
+        "TASK_V002",
+        "TASK_V003"
+      ],
+      "test_command": "Manual verification in GeOS: magenta bands play audio, yellow tiles show ECC status, cyan cartridges execute when clicked",
+      "receipt_criteria": "`programs/memory_palace.asm` updated with new color bands: magenta (audio-active), yellow (ECC-protected), cyan (executable cartridges); click-to-play audio via audio_codec.rs; visual ECC status overlay (corrupted tiles highlighted); cartridge execution from GeOS",
+      "files_verified": {
+        "task_id": "TASK_V006",
+        "files_found": [],
+        "files_missing": [
+          "tools/v006.py"
+        ],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "MISSING"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_COV_UTILS",
+      "title": "TASK_COV_UTILS: Add test coverage for utils module",
+      "description": "Add test coverage for utils module",
+      "status": "PENDING",
+      "phase": {
+        "number": 10,
+        "title": "Visual Audio Memory Palace (VAMP)",
+        "status": "\ud83d\udfe2",
+        "blocked": false
+      },
+      "priority": "MEDIUM",
+      "dependencies": [],
+      "test_command": "`python3 -m pytest tests/test_utils.py -v`",
+      "receipt_criteria": "All utils functionality tested",
+      "files_verified": {
+        "task_id": "TASK_COV_UTILS",
+        "files_found": [],
+        "files_missing": [
+          "/home/jericho/projects/zion/projects/visual_audio/tests/test_utils.py",
+          "tests/test_task_cov_utils.py",
+          "tools/cov_utils.py"
+        ],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "MISSING"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_COV_PHONEMES",
+      "title": "TASK_COV_PHONEMES: Add test coverage for phonemes module",
+      "description": "Add test coverage for phonemes module",
+      "status": "PENDING",
+      "phase": {
+        "number": 10,
+        "title": "Visual Audio Memory Palace (VAMP)",
+        "status": "\ud83d\udfe2",
+        "blocked": false
+      },
+      "priority": "MEDIUM",
+      "dependencies": [],
+      "test_command": "`python3 -m pytest tests/test_phonemes.py -v`",
+      "receipt_criteria": "All phonemes functionality tested",
+      "files_verified": {
+        "task_id": "TASK_COV_PHONEMES",
+        "files_found": [],
+        "files_missing": [
+          "/home/jericho/projects/zion/projects/visual_audio/tests/test_phonemes.py",
+          "tests/test_task_cov_phonemes.py",
+          "tools/cov_phonemes.py"
+        ],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "MISSING"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_SE008",
+      "title": "TASK_SE008: Expand ISA to Turing-complete \ud83d\udfe1 PLANNED",
+      "description": "Expand ISA to Turing-complete \ud83d\udfe1 PLANNED",
+      "status": "PENDING",
+      "phase": {
+        "number": 11,
+        "title": "Spatial Execution Engine",
+        "status": "\ud83d\udfe2",
+        "blocked": false
+      },
+      "priority": "HIGH",
+      "dependencies": [
+        "TASK_SE007"
+      ],
+      "test_command": "Complex programs (Fibonacci, sorting, recursive functions) execute correctly on expanded ISA",
+      "receipt_criteria": "Extended OpcodeMap with ~20 opcodes; assembly syntax documentation; example programs demonstrating stack operations, memory access, bitwise logic",
+      "files_verified": {
+        "task_id": "TASK_SE008",
+        "files_found": [],
+        "files_missing": [],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "UNKNOWN"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_SE009",
+      "title": "TASK_SE009: WGSL GPU-native execution engine \ud83d\udfe1 PLANNED",
+      "description": "WGSL GPU-native execution engine \ud83d\udfe1 PLANNED",
+      "status": "PENDING",
+      "phase": {
+        "number": 11,
+        "title": "Spatial Execution Engine",
+        "status": "\ud83d\udfe2",
+        "blocked": false
+      },
+      "priority": "HIGH",
+      "dependencies": [
+        "TASK_SE008"
+      ],
+      "test_command": "Run 1000+ spatial CPUs concurrently on GPU; verify identical output to Python emulator; measure throughput improvement",
+      "receipt_criteria": "`tools/wgsl_spatial_glyph_engine.py` fully functional (load program image, create CPU instances, run compute shader, read output). Performance benchmarks (instructions/sec, CPU count scaling).",
+      "files_verified": {
+        "task_id": "TASK_SE009",
+        "files_found": [
+          "tools/wgsl_spatial_glyph_engine.py"
+        ],
+        "files_missing": [],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "PRESENT"
+      },
+      "code_exists": true
+    },
+    {
+      "id": "TASK_SE010",
+      "title": "TASK_SE010: Geometry OS hypervisor syscall integration \ud83d\udfe1 PLANNED",
+      "description": "Geometry OS hypervisor syscall integration \ud83d\udfe1 PLANNED",
+      "status": "PENDING",
+      "phase": {
+        "number": 11,
+        "title": "Spatial Execution Engine",
+        "status": "\ud83d\udfe2",
+        "blocked": false
+      },
+      "priority": "MEDIUM",
+      "dependencies": [
+        "TASK_SE009"
+      ],
+      "test_command": "Spatial program writes to Memory Palace via syscall; file I/O operations execute correctly",
+      "receipt_criteria": "SYSCALL opcode implementation; syscall number mapping; integration with Geometry OS hypervisor bridge",
+      "files_verified": {
+        "task_id": "TASK_SE010",
+        "files_found": [],
+        "files_missing": [],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "UNKNOWN"
+      },
+      "code_exists": false
+    },
+    {
+      "id": "TASK_SE011",
+      "title": "TASK_SE011: Error correction layer (Reed-Solomon) \ud83d\udfe1 PLANNED",
+      "description": "Error correction layer (Reed-Solomon) \ud83d\udfe1 PLANNED",
+      "status": "PENDING",
+      "phase": {
+        "number": 11,
+        "title": "Spatial Execution Engine",
+        "status": "\ud83d\udfe2",
+        "blocked": false
+      },
+      "priority": "MEDIUM",
+      "dependencies": [
+        "TASK_SE007"
+      ],
+      "test_command": "Corrupted program image (5% errors) decodes and executes correctly; ECC overhead measured",
+      "receipt_criteria": "ECC encoding/decoding integrated into GlyphAssembler/GlyphCPU; corruption recovery tests (5% bit errors)",
+      "files_verified": {
+        "task_id": "TASK_SE011",
+        "files_found": [],
+        "files_missing": [],
+        "test_exists": false,
+        "test_passing": null,
+        "implementation_status": "UNKNOWN"
+      },
+      "code_exists": false
+    }
+  ]
+}

@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
 """
-container_audit_loop.py — Automated container self-audit using Ollama
+container_audit_loop.py — Automated container self-audit system.
 
-The container "thinks about itself" by:
-1. Parsing ROADMAP.md to find tasks marked [x] (complete)
-2. Using Ollama (via ollama_prompt.py) to identify suspect tasks
-3. Verifying suspect tasks by checking test/implementation files exist
-4. Storing analysis and verification results in the container
+The container periodically analyzes ROADMAP.md using Ollama to identify
+suspect tasks (marked complete but lacking verification or code implementations).
 
-Usage (from container):
-  python3 tools/container_audit_loop.py [--dry-run] [--container visual_audio.mkv]
+Usage:
+  python3 tools/container_audit_loop.py --dry-run --once
+  python3 tools/container_audit_loop.py --daemon --interval 3600
 
-Usage (from host with VA_CONTAINER env):
-  VA_CONTAINER=visual_audio.mkv python3 tools/container_audit_loop.py
+Requirements:
+  - Ollama service running
+  - VA_CONTAINER environment variable set (if in container mode)
 """
 
 import argparse
@@ -21,666 +20,448 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
+import time
+from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
-
-# Default models (configurable via --model)
-DEFAULT_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:14b")
-FALLBACK_MODELS = ["qwen2.5-coder:latest", "phi3:latest"]
-
-# Maximum number of tasks to include in Ollama prompt (prevent context overflow)
-MAX_TASKS_IN_PROMPT = 50
+from typing import List, Optional, Dict, Any
 
 
-def get_container_path():
-    """Get container path from VA_CONTAINER env var or args."""
-    container = os.environ.get("VA_CONTAINER")
-    if not container:
-        return None
-    return container
+@dataclass
+class Task:
+    """Represents a task from ROADMAP.md."""
+    id: str
+    description: str
+    status: str
+    phase: Optional[str] = None
+    test_command: Optional[str] = None
+    receipt_criteria: Optional[str] = None
 
 
-def parse_complete_tasks(roadmap_path):
+class ContainerAuditor:
     """
-    Parse ROADMAP.md to extract tasks marked as complete ([x]).
+    Automated container self-audit system.
 
-    Returns list of dicts with keys:
-    - task_id: e.g., "TASK_W002"
-    - description: task description text
-    - test_command: test command if present
-    - receipt_criteria: receipt criteria if present
-    - status: current status field if present
+    Analyzes ROADMAP.md and identifies tasks marked as complete that may
+    lack proper verification or code implementations.
     """
-    tasks = []
-    
-    if not os.path.exists(roadmap_path):
-        print(f"ERROR: ROADMAP.md not found at {roadmap_path}", file=sys.stderr)
+
+    def __init__(
+        self,
+        project_root: Optional[Path] = None,
+        model: str = "qwen2.5-coder:14b",
+        dry_run: bool = False,
+        audit_dir: Optional[Path] = None
+    ):
+        """Initialize the auditor."""
+        self.project_root = project_root or Path(__file__).parent.parent
+        self.model = model
+        self.dry_run = dry_run
+        self.audit_dir = audit_dir or self.project_root / ".container_audit"
+        self.roadmap_path = self.project_root / "ROADMAP.md"
+
+        # Ensure audit directory exists
+        if not self.dry_run:
+            self.audit_dir.mkdir(parents=True, exist_ok=True)
+
+    def parse_roadmap(self) -> List[Task]:
+        """
+        Parse ROADMAP.md and extract all tasks.
+
+        Returns:
+            List of Task objects
+        """
+        tasks = []
+        current_phase = None
+
+        if not self.roadmap_path.exists():
+            print(f"WARNING: ROADMAP.md not found at {self.roadmap_path}")
+            return tasks
+
+        with open(self.roadmap_path) as f:
+            for line in f:
+                # Extract phase header
+                phase_match = re.match(r"^##+\s+(.+?)\s*$", line)
+                if phase_match:
+                    current_phase = phase_match.group(1).strip()
+                    continue
+
+                # Extract task line - ROADMAP format: "- [x] **TASK_XXX**:" or "- [ ] **TASK_XXX**:"
+                task_match = re.match(r"^\-\s+\[([xX\s])\]\s+\*\*(TASK_\w+)\*\*:\s+(.+)", line)
+                if task_match:
+                    status_char, task_id, description = task_match.groups()
+                    status = "completed" if status_char.lower() == "x" else "pending"
+
+                    tasks.append(Task(
+                        id=task_id,
+                        description=description.strip(),
+                        status=status,
+                        phase=current_phase
+                    ))
+
         return tasks
-    
-    with open(roadmap_path, 'r') as f:
-        content = f.read()
-    
-    # Parse line by line for better control
-    lines = content.split('\n')
-    i = 0
-    
-    while i < len(lines):
-        line = lines[i]
-        
-        # Check for complete task: - [x] **TASK_ID**: Description
-        # Also allow variations: * [x] or [x] without bold
-        task_match = re.match(r'^[\s\-\*]*\s+\[x\]\s+\*\*(TASK_[A-Z0-9]+)\*\*:\s*(.+)', line)
-        if not task_match:
-            # Try alternative pattern without bold
-            task_match = re.match(r'^[\s\-\*]*\s+\[x\]\s+(TASK_[A-Z0-9]+):\s*(.+)', line)
-        
-        if task_match:
-            task_id = task_match.group(1)
-            description = task_match.group(2).strip()
-            
-            task = {
-                'task_id': task_id,
-                'description': description,
-                'test_command': '',
-                'receipt_criteria': '',
-                'status': ''
-            }
-            
-            # Look ahead for task details (indented lines starting with -)
-            j = i + 1
-            while j < len(lines):
-                detail_line = lines[j]
-                
-                # Stop when we reach a non-indented line or a new task
-                if detail_line.strip() and not re.match(r'^\s{2,}-', detail_line):
-                    # Check if this is a new task line
-                    if re.match(r'^[\s\-\*]*\s+\[[x\s]\]\s+\*?\*?TASK_', detail_line):
-                        break
-                    # Stop at any other non-empty line at lower indentation
-                    if not detail_line.startswith(' ' * 2):
-                        break
-                
-                # Parse detail fields
-                test_match = re.search(r'Test:\s*`(.+?)`', detail_line)
-                if test_match:
-                    task['test_command'] = test_match.group(1)
-                
-                receipt_match = re.search(r'Receipt:\s*(.+)', detail_line)
-                if receipt_match:
-                    task['receipt_criteria'] = receipt_match.group(1).strip()
-                
-                status_match = re.search(r'Status:\s*(.+)', detail_line)
-                if status_match:
-                    task['status'] = status_match.group(1).strip()
-                
-                j += 1
-            
-            tasks.append(task)
-        
-        i += 1
-    
-    return tasks
 
+    def verify_code_exists(self, task: Task) -> Dict[str, Any]:
+        """
+        Verify if code implementation exists for a task.
 
-def build_audit_prompt(complete_tasks):
-    """
-    Build prompt for Ollama to identify suspect tasks.
+        Searches for task ID in codebase and checks for related files.
 
-    Suspect tasks are those marked complete but potentially lacking verification:
-    - No test command specified
-    - Test file doesn't exist (Ollama can't check, but can flag)
-    - Receipt criteria are vague or missing
-    - Status suggests incomplete work
-    """
-    # Limit tasks to prevent context overflow
-    tasks_to_audit = complete_tasks[:MAX_TASKS_IN_PROMPT]
-    
-    prompt = """You are auditing a Visual Audio project ROADMAP.md to identify "suspect tasks" - tasks marked complete ([x]) but potentially lacking proper verification.
+        Args:
+            task: Task to verify
 
-ANALYZE EACH COMPLETE TASK AND IDENTIFY SUSPECTS:
+        Returns:
+            Dict with 'found', 'files', 'evidence' keys
+        """
+        # Search for task ID in files
+        task_id = task.id
+        task_id_lower = task.id.lower()
+        evidence = []
 
-For each task, check:
-1. Test command specified? If missing, suspect.
-2. Test command looks plausible? (e.g., "pytest tests/test_*.py" or "python3 tool.py") If missing/malformed, suspect.
-3. Receipt criteria specific? If vague ("complete", "done"), suspect.
-4. Status field suggests issues? If empty or questionable, suspect.
+        # Direct filename matches (limit to first 5 for speed in dry-run)
+        matching_files = list(self.project_root.rglob(f"*{task_id_lower}*"))[:10 if self.dry_run else 100]
+        evidence.append(f"Direct filename matches: {len(matching_files)}")
 
-TASKS TO ANALYZE:
+        found = len(matching_files) > 0
 
-"""
-    
-    for task in tasks_to_audit:
-        prompt += f"\n**{task['task_id']}**: {task['description']}\n"
-        prompt += f"  Test command: {task['test_command'] if task['test_command'] else '[MISSING]'}\n"
-        prompt += f"  Receipt: {task['receipt_criteria'][:100] if task['receipt_criteria'] else '[MISSING]'}...\n"
-        status = task.get('status', '')
-        prompt += f"  Status: {status[:80] if status else '[NOT SPECIFIED]'}\n"
-    
-    if len(complete_tasks) > MAX_TASKS_IN_PROMPT:
-        prompt += f"\n[... {len(complete_tasks) - MAX_TASKS_IN_PROMPT} more tasks truncated due to context limits ...]\n"
-    
-    prompt += """
-
-RESPONSE FORMAT:
-Return ONLY a JSON array of suspect tasks. Each entry must have:
-- task_id: exact task ID from ROADMAP (e.g., "TASK_W002")
-- description: brief description of the issue
-- reason: why this task is suspect (e.g., "No test command specified", "Receipt criteria too vague")
-- test_command: the test command from the task (or empty string)
-
-Example response:
-```json
-[
-  {
-    "task_id": "TASK_W002",
-    "description": "Test design decision",
-    "reason": "No test command specified - cannot verify completion",
-    "test_command": ""
-  }
-]
-```
-
-If no suspect tasks found, return empty array: []
-"""
-    
-    return prompt
-
-
-def parse_llm_json_response(response):
-    """
-    Parse Ollama JSON response, handling markdown code blocks.
-
-    Ollama often wraps JSON in ```json ... ``` or just ``` ... ```
-    """
-    if not response:
-        return []
-    
-    # Try to extract JSON from markdown code blocks
-    patterns = [
-        r'```json\s*\n(.*?)\n```',  # ```json ... ```
-        r'```\s*\n(.*?)\n```',       # ``` ... ```
-    ]
-    
-    for pattern in patterns:
-        match = re.search(pattern, response, re.DOTALL)
-        if match:
-            json_text = match.group(1)
+        # Skip grep search in dry-run mode for speed
+        if not self.dry_run:
+            # Content search (grep-like)
             try:
-                return json.loads(json_text)
-            except json.JSONDecodeError:
-                continue
-    
-    # Try parsing entire response as JSON
-    try:
-        return json.loads(response)
-    except json.JSONDecodeError:
-        pass
-    
-    return []
-
-
-def check_test_file_exists(test_command, project_root):
-    """
-    Check if the test file specified in test_command exists.
-
-    Returns tuple (exists: bool, path: str|None)
-    """
-    if not test_command:
-        return False, None
-    
-    # Extract file path from test command
-    # Patterns: "python3 -m pytest tests/test_*.py"
-    #          "python3 tools/tool.py"
-    #          "pytest tests/*.py"
-    
-    # Match pytest patterns
-    pytest_match = re.search(r'(?:python3 -m )?pytest\s+(\S+)', test_command)
-    if pytest_match:
-        path_pattern = pytest_match.group(1)
-        
-        # Handle wildcards - check if any files match
-        if '*' in path_pattern or '?' in path_pattern:
-            from glob import glob
-            matches = glob(str(project_root / path_pattern))
-            return len(matches) > 0, matches[0] if matches else None
+                result = subprocess.run(
+                    ["grep", "-r", "-l", task_id, str(self.project_root)],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+                if result.returncode == 0:
+                    files_with_id = result.stdout.strip().split('\n')
+                    evidence.append(f"Content references: {len(files_with_id)}")
+                else:
+                    evidence.append("Content references: 0")
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                evidence.append("Content search skipped (grep unavailable)")
         else:
-            path = project_root / path_pattern
-            return path.exists(), str(path) if path.exists() else None
-    
-    # Match python tool patterns
-    python_match = re.search(r'python3\s+(\S+)', test_command)
-    if python_match:
-        path = project_root / python_match.group(1)
-        return path.exists(), str(path) if path.exists() else None
-    
-    return False, None
+            evidence.append("Content search: skipped (dry run)")
 
-
-def check_implementation_exists(description, task_id, project_root):
-    """
-    Heuristically search for implementation files based on task metadata.
-
-    Returns tuple (exists: bool, path: str|None)
-    """
-    # Strategy 1: Search for files named after task_id
-    # e.g., TASK_A003 -> search for "audit", "container", "loop"
-    
-    keywords = []
-    
-    # Extract keywords from task_id
-    if task_id:
-        # TASK_A003 -> "A003" -> look for "a003" patterns
-        id_part = task_id.replace('TASK_', '').lower()
-        keywords.append(id_part)
-    
-    # Extract keywords from description
-    if description:
-        # Split on common delimiters, keep meaningful words
-        desc_words = re.findall(r'[a-z]{3,}', description.lower())
-        keywords.extend(desc_words[:5])  # Take first 5 keywords
-    
-    # Search in common directories
-    search_dirs = [
-        project_root / "tools",
-        project_root / "src",
-        project_root / "scripts",
-        project_root,
-    ]
-    
-    for search_dir in search_dirs:
-        if not search_dir.exists():
-            continue
-        
-        # Search for files matching keywords
-        for keyword in keywords:
-            # Try exact filename match
-            for ext in ['.py', '.rs', '.js', '.md']:
-                potential_path = search_dir / f"{keyword}{ext}"
-                if potential_path.exists():
-                    return True, str(potential_path)
-            
-            # Try substring match in filenames
+        # Check test files for task ID (limit to 5 files in dry-run)
+        test_files = list(self.project_root.rglob("test_*.py"))[:5 if self.dry_run else 50]
+        test_matches = []
+        for test_file in test_files:
             try:
-                for file_path in search_dir.rglob('*.py'):
-                    if keyword in file_path.name.lower():
-                        return True, str(file_path)
-            except (PermissionError, RecursionError):
-                continue
-    
-    return False, None
+                content = test_file.read_text()
+                if task_id in content:
+                    test_matches.append(str(test_file.relative_to(self.project_root)))
+            except Exception:
+                pass
+        evidence.append(f"Test file matches: {len(test_matches)}")
 
+        found = found or len(test_matches) > 0
 
-def verify_suspect_tasks(suspect_tasks, project_root):
-    """
-    Verify suspect tasks by checking test and implementation files.
-
-    Returns dict with keys:
-    - timestamp: ISO timestamp of verification
-    - suspect_count: number of tasks to verify
-    - pass_count: number of tasks that passed verification
-    - fail_count: number of tasks that failed verification
-    - tasks: list of verification results for each task
-    """
-    results = {
-        'timestamp': datetime.utcnow().isoformat() + 'Z',
-        'suspect_count': len(suspect_tasks),
-        'pass_count': 0,
-        'fail_count': 0,
-        'tasks': []
-    }
-    
-    for task in suspect_tasks:
-        task_id = task.get('task_id', 'UNKNOWN')
-        description = task.get('description', '')
-        
-        # Check test file
-        test_exists, test_path = check_test_file_exists(
-            task.get('test_command', ''), project_root
-        )
-        
-        # Check implementation file
-        impl_exists, impl_path = check_implementation_exists(
-            description, task_id, project_root
-        )
-        
-        # Determine status
-        # Task passes if either test OR implementation exists
-        # (ideally both, but at least one)
-        status = 'PASS' if (test_exists or impl_exists) else 'FAIL'
-        
-        task_result = {
-            'task_id': task_id,
-            'description': description,
-            'reason': task.get('reason', ''),
-            'test_command': task.get('test_command', ''),
-            'test_exists': test_exists,
-            'test_path': test_path,
-            'impl_exists': impl_exists,
-            'impl_path': impl_path,
-            'status': status
+        return {
+            "found": found,
+            "files": [str(f.relative_to(self.project_root)) for f in matching_files[:10]],
+            "test_files": test_matches[:10],
+            "evidence": evidence
         }
-        
-        results['tasks'].append(task_result)
-        
-        if status == 'PASS':
-            results['pass_count'] += 1
+
+    def _build_analysis_prompt(
+        self,
+        completed_tasks: List[Task],
+        verification_results: Dict[str, Dict[str, Any]]
+    ) -> str:
+        """
+        Build analysis prompt for Ollama.
+
+        Args:
+            completed_tasks: List of completed tasks
+            verification_results: Verification results for each task
+
+        Returns:
+            Prompt string for Ollama
+        """
+        prompt_parts = [
+            "You are analyzing a software project's ROADMAP.md to identify SUSPECT tasks.",
+            "",
+            "A SUSPECT task is marked as complete [X] but may be missing:",
+            "  - Code implementation",
+            "  - Test coverage",
+            "  - Verification procedures",
+            "",
+            "Analyze these completed tasks and identify SUSPECT ones:",
+            ""
+        ]
+
+        for task in completed_tasks:
+            verification = verification_results.get(task.id, {})
+            prompt_parts.append(f"\nTASK ID: {task.id}")
+            prompt_parts.append(f"Description: {task.description}")
+            prompt_parts.append(f"Phase: {task.phase or 'Unknown'}")
+
+            if verification:
+                prompt_parts.append(f"Files found: {verification.get('found', False)}")
+                prompt_parts.append(f"Evidence: {'; '.join(verification.get('evidence', []))}")
+            else:
+                prompt_parts.append("Verification: NOT RUN")
+
+        prompt_parts.extend([
+            "",
+            "OUTPUT FORMAT (JSON only, no extra text):",
+            "{",
+            '  "suspect_tasks": [',
+            '    {',
+            '      "task_id": "TASK_XXX",',
+            '      "reason": "explanation of why this is suspect",',
+            '      "severity": "HIGH|MEDIUM|LOW"',
+            '    }',
+            '  ],',
+            '  "recommendation": "overall assessment and next steps"',
+            "}"
+        ])
+
+        return "\n".join(prompt_parts)
+
+    def call_ollama(self, prompt: str) -> Optional[str]:
+        """
+        Call Ollama with the analysis prompt.
+
+        Args:
+            prompt: Analysis prompt
+
+        Returns:
+            Ollama response or None if failed
+        """
+        try:
+            result = subprocess.run(
+                ["ollama", "run", self.model, prompt],
+                capture_output=True,
+                text=True,
+                timeout=300
+            )
+
+            if result.returncode != 0:
+                print(f"ERROR: Ollama call failed: {result.stderr}")
+                return None
+
+            return result.stdout
+        except subprocess.TimeoutExpired:
+            print("ERROR: Ollama call timed out")
+            return None
+        except FileNotFoundError:
+            print("ERROR: Ollama not found in PATH")
+            return None
+
+    def run_audit(self) -> Dict[str, Any]:
+        """
+        Run the complete audit cycle.
+
+        Returns:
+            Dict with audit results
+        """
+        print("Starting container audit...")
+        print(f"Project root: {self.project_root}")
+        print(f"ROADMAP: {self.roadmap_path}")
+        print(f"Model: {self.model}")
+        print(f"Dry run: {self.dry_run}")
+
+        # Parse roadmap
+        print("\nParsing ROADMAP.md...")
+        tasks = self.parse_roadmap()
+        print(f"Found {len(tasks)} tasks")
+
+        completed_tasks = [t for t in tasks if t.status == "completed"]
+        pending_tasks = [t for t in tasks if t.status == "pending"]
+
+        print(f"  Completed: {len(completed_tasks)}")
+        print(f"  Pending: {len(pending_tasks)}")
+
+        if not completed_tasks:
+            print("\nNo completed tasks to audit")
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "model": self.model,
+                "findings": [],
+                "suspect_tasks": [],
+                "status": "complete"
+            }
+
+        # Verify code exists for completed tasks
+        print("\nVerifying code implementations...")
+        verification_results = {}
+        for task in completed_tasks:
+            verification = self.verify_code_exists(task)
+            verification_results[task.id] = verification
+            found_status = "FOUND" if verification["found"] else "NOT FOUND"
+            print(f"  {task.id}: {found_status}")
+
+        # Build analysis prompt
+        print("\nBuilding analysis prompt...")
+        prompt = self._build_analysis_prompt(completed_tasks, verification_results)
+
+        # Call Ollama for analysis
+        print("\nAnalyzing with Ollama...")
+        ollama_response = None
+        suspect_tasks = []
+
+        if not self.dry_run:
+            ollama_response = self.call_ollama(prompt)
+
+            if ollama_response:
+                # Try to parse JSON response
+                try:
+                    analysis = json.loads(ollama_response)
+                    suspect_tasks = analysis.get("suspect_tasks", [])
+                except json.JSONDecodeError:
+                    print("WARNING: Failed to parse Ollama JSON response")
+                    # Try to extract JSON from response
+                    json_match = re.search(r'\{[\s\S]*\}', ollama_response)
+                    if json_match:
+                        try:
+                            analysis = json.loads(json_match.group())
+                            suspect_tasks = analysis.get("suspect_tasks", [])
+                        except json.JSONDecodeError:
+                            pass
         else:
-            results['fail_count'] += 1
-    
-    return results
+            print("(Dry run: skipping Ollama call)")
+            # In dry-run mode, do basic suspect detection locally
+            print("(Dry run: performing basic suspect detection locally)")
+            for task in completed_tasks:
+                verification = verification_results.get(task.id, {})
+                if not verification.get("found", False):
+                    suspect_tasks.append({
+                        "task_id": task.id,
+                        "reason": "No code files or tests found for this completed task",
+                        "severity": "HIGH"
+                    })
 
+        # Compile audit results
+        audit_result = {
+            "timestamp": datetime.now().isoformat(),
+            "model": self.model,
+            "summary": {
+                "total_tasks": len(tasks),
+                "completed_tasks": len(completed_tasks),
+                "pending_tasks": len(pending_tasks),
+                "suspect_tasks": len(suspect_tasks)
+            },
+            "verifications": {
+                task_id: {
+                    "found": v["found"],
+                    "files": v["files"],
+                    "evidence": v["evidence"]
+                }
+                for task_id, v in verification_results.items()
+            },
+            "suspect_tasks": suspect_tasks,
+            "ollama_response": ollama_response if ollama_response else "Skipped (dry run)",
+            "status": "complete"
+        }
 
-def store_analysis_in_container(container, suspect_tasks, model, dry_run=False):
-    """
-    Store Ollama analysis results in container.
+        # Save audit log
+        if not self.dry_run:
+            log_file = self.audit_dir / f"audit_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            with open(log_file, "w") as f:
+                json.dump(audit_result, f, indent=2)
+            print(f"\nAudit log saved to: {log_file}")
 
-    Returns path to stored file (or temp path if dry_run)
-    """
-    import tempfile
-    
-    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-    entry_name = f"audit_suspect_tasks_{timestamp}.json"
-    
-    # Create analysis report
-    report = {
-        'timestamp': datetime.utcnow().isoformat() + 'Z',
-        'model': model,
-        'suspect_count': len(suspect_tasks),
-        'tasks': suspect_tasks
-    }
-    
-    fd, temp_path = tempfile.mkstemp(suffix='_audit_suspect.json')
-    os.close(fd)
-    
-    with open(temp_path, 'w') as f:
-        json.dump(report, f, indent=2)
-    
-    if dry_run:
-        return f"[DRY RUN] Would store in container as {entry_name}"
-    
-    # Use va_container.py to store in container
-    script_dir = Path(__file__).parent
-    container_tool = script_dir / "va_container.py"
-    
-    if not container_tool.exists():
-        container_tool = "tools/va_container.py"
-    
-    note = f"Ollama audit analysis ({model}): {len(suspect_tasks)} suspect tasks identified"
-    
-    result = subprocess.run(
-        [sys.executable, str(container_tool), "update", container, entry_name,
-         temp_path, "--note", note],
-        capture_output=True, text=True
-    )
-    
-    if result.returncode != 0:
-        result = subprocess.run(
-            [sys.executable, str(container_tool), "add", container, temp_path,
-             "--name", entry_name, "--role", "audit", "--note", note],
-            capture_output=True, text=True
-        )
-    
-    os.unlink(temp_path)
-    
-    if result.returncode != 0:
-        print(f"WARNING: Failed to store analysis in container: {result.stderr}", file=sys.stderr)
-        return None
-    
-    return entry_name
+        return audit_result
 
+    def print_summary(self, audit_result: Dict[str, Any]):
+        """Print audit summary to console."""
+        print("\n" + "="*60)
+        print("AUDIT SUMMARY")
+        print("="*60)
 
-def store_verification_in_container(container, verification_results, dry_run=False):
-    """
-    Store verification results in container.
+        summary = audit_result.get("summary", {})
+        print(f"Total tasks: {summary.get('total_tasks', 0)}")
+        print(f"Completed: {summary.get('completed_tasks', 0)}")
+        print(f"Pending: {summary.get('pending_tasks', 0)}")
+        print(f"SUSPECT: {summary.get('suspect_tasks', 0)}")
 
-    Returns path to stored file (or temp path if dry_run)
-    """
-    import tempfile
-    
-    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-    entry_name = f"audit_verification_{timestamp}.json"
-    
-    fd, temp_path = tempfile.mkstemp(suffix='_audit_verification.json')
-    os.close(fd)
-    
-    with open(temp_path, 'w') as f:
-        json.dump(verification_results, f, indent=2)
-    
-    if dry_run:
-        return f"[DRY RUN] Would store in container as {entry_name}"
-    
-    # Use va_container.py to store in container
-    script_dir = Path(__file__).parent
-    container_tool = script_dir / "va_container.py"
-    
-    if not container_tool.exists():
-        container_tool = "tools/va_container.py"
-    
-    pass_rate = 0
-    if verification_results['suspect_count'] > 0:
-        pass_rate = (verification_results['pass_count'] / verification_results['suspect_count']) * 100
-    
-    note = f"Audit verification: {verification_results['pass_count']}/{verification_results['suspect_count']} passed ({pass_rate:.1f}%)"
-    
-    result = subprocess.run(
-        [sys.executable, str(container_tool), "update", container, entry_name,
-         temp_path, "--note", note],
-        capture_output=True, text=True
-    )
-    
-    if result.returncode != 0:
-        result = subprocess.run(
-            [sys.executable, str(container_tool), "add", container, temp_path,
-             "--name", entry_name, "--role", "audit", "--note", note],
-            capture_output=True, text=True
-        )
-    
-    os.unlink(temp_path)
-    
-    if result.returncode != 0:
-        print(f"WARNING: Failed to store verification in container: {result.stderr}", file=sys.stderr)
-        return None
-    
-    return entry_name
+        suspect_tasks = audit_result.get("suspect_tasks", [])
+        if suspect_tasks:
+            print("\nSUSPECT TASKS:")
+            for suspect in suspect_tasks:
+                print(f"  [{suspect.get('severity', 'MEDIUM')}] {suspect.get('task_id', 'Unknown')}")
+                print(f"    Reason: {suspect.get('reason', 'N/A')}")
+        else:
+            print("\nNo suspect tasks identified")
 
-
-def call_ollama_via_script(prompt, model, context_path=None):
-    """
-    Call Ollama using ollama_prompt.py script.
-
-    Returns response text or None on failure.
-    """
-    script_dir = Path(__file__).parent
-    ollama_script = script_dir / "ollama_prompt.py"
-    
-    if not ollama_script.exists():
-        print(f"ERROR: ollama_prompt.py not found at {ollama_script}", file=sys.stderr)
-        return None
-    
-    # Build command
-    cmd = [
-        sys.executable,
-        str(ollama_script),
-        "--prompt", prompt,
-        "--model", model,
-        "--print"
-    ]
-    
-    if context_path:
-        cmd.extend(["--context", context_path])
-    
-    # Run with timeout
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-    
-    if result.returncode != 0:
-        print(f"ERROR: ollama_prompt.py failed: {result.stderr}", file=sys.stderr)
-        return None
-    
-    return result.stdout
+        print("="*60)
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Automated container self-audit using Ollama"
-    )
-    parser.add_argument(
-        "--container",
-        help="Container path (default: VA_CONTAINER env var)"
-    )
-    parser.add_argument(
-        "--roadmap",
-        default="ROADMAP.md",
-        help="Path to ROADMAP.md (default: ROADMAP.md)"
+        description="Automated container self-audit system"
     )
     parser.add_argument(
         "--model",
-        default=DEFAULT_MODEL,
-        help=f"Ollama model (default: {DEFAULT_MODEL})"
+        default=os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:14b"),
+        help="Ollama model to use"
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Dry run: don't store results in container"
+        help="Run without calling Ollama or saving logs"
     )
     parser.add_argument(
-        "--no-ollama",
+        "--once",
         action="store_true",
-        help="Skip Ollama analysis, just parse ROADMAP and test/impl checking"
+        help="Run audit once and exit (default behavior)"
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--daemon",
         action="store_true",
-        help="Verbose output"
+        help="Run as daemon with periodic audits"
     )
-    
+    parser.add_argument(
+        "--interval",
+        type=int,
+        default=3600,
+        help="Audit interval in seconds (default: 3600)"
+    )
+    parser.add_argument(
+        "--project-root",
+        type=Path,
+        help="Override project root directory"
+    )
+    parser.add_argument(
+        "--audit-dir",
+        type=Path,
+        help="Override audit log directory"
+    )
+
     args = parser.parse_args()
-    
-    # Get container path
-    container = args.container or get_container_path()
-    if not container and not args.dry_run:
-        print("ERROR: Container path required (set VA_CONTAINER or use --container)", file=sys.stderr)
-        print("Use --dry-run to test without container", file=sys.stderr)
-        return 1
-    
-    # Get project root (directory containing ROADMAP.md)
-    roadmap_path = Path(args.roadmap).resolve()
-    project_root = roadmap_path.parent
-    
-    if args.verbose:
-        print(f"Project root: {project_root}")
-        print(f"ROADMAP: {roadmap_path}")
-        print(f"Container: {container if container else '[DRY RUN]'}")
-    
-    # Step 1: Parse complete tasks from ROADMAP
-    if args.verbose:
-        print("\nStep 1: Parsing complete tasks from ROADMAP.md...")
-    
-    complete_tasks = parse_complete_tasks(roadmap_path)
-    
-    if args.verbose:
-        print(f"Found {len(complete_tasks)} complete tasks")
-    
-    if not complete_tasks:
-        print("WARNING: No complete tasks found in ROADMAP.md", file=sys.stderr)
-        return 0
-    
-    # Step 2: Build audit prompt and call Ollama
-    suspect_tasks = []
-    analysis_entry = None
-    
-    if not args.no_ollama:
-        if args.verbose:
-            print("\nStep 2: Building audit prompt and calling Ollama...")
-        
-        prompt = build_audit_prompt(complete_tasks)
-        
-        # Use ollama_prompt.py to call Ollama
-        response = call_ollama_via_script(prompt, args.model)
-        
-        if not response:
-            print("ERROR: Failed to get Ollama response", file=sys.stderr)
-            return 1
-        
-        # Parse JSON response
-        suspect_tasks = parse_llm_json_response(response)
-        
-        if args.verbose:
-            print(f"Ollama identified {len(suspect_tasks)} suspect tasks")
-        
-        # Store analysis in container
-        analysis_entry = store_analysis_in_container(
-            container, suspect_tasks, args.model, args.dry_run
-        )
-        
-        if args.verbose and analysis_entry:
-            print(f"Analysis stored: {analysis_entry}")
-    else:
-        print("Skipping Ollama analysis (--no-ollama)")
-    
-    # If Ollama found no suspects or --no-ollama was used,
-    # we can still do a basic sanity check on all complete tasks
-    if not suspect_tasks and not args.no_ollama:
-        print("No suspect tasks identified by Ollama")
-    
-    # Step 3: Verify suspect tasks
-    if args.verbose:
-        print("\nStep 3: Verifying suspect tasks...")
-    
-    # If no suspects from Ollama but --no-ollama, verify all complete tasks
-    tasks_to_verify = suspect_tasks
-    if not tasks_to_verify and args.no_ollama:
-        # Convert complete_tasks to suspect_tasks format for verification
-        tasks_to_verify = [
-            {
-                'task_id': t['task_id'],
-                'description': t['description'],
-                'reason': 'Full audit (--no-ollama)',
-                'test_command': t['test_command']
-            }
-            for t in complete_tasks
-        ]
-    
-    if not tasks_to_verify:
-        print("No tasks to verify")
-        return 0
-    
-    verification_results = verify_suspect_tasks(tasks_to_verify, project_root)
-    
-    if args.verbose:
-        print(f"Verification: {verification_results['pass_count']}/{verification_results['suspect_count']} passed")
-    
-    # Step 4: Store verification results
-    verification_entry = store_verification_in_container(
-        container, verification_results, args.dry_run
+
+    # Create auditor
+    auditor = ContainerAuditor(
+        project_root=args.project_root,
+        model=args.model,
+        dry_run=args.dry_run,
+        audit_dir=args.audit_dir
     )
-    
-    if args.verbose and verification_entry:
-        print(f"Verification stored: {verification_entry}")
-    
-    # Print summary
-    print("\n" + "="*60)
-    print("AUDIT SUMMARY")
-    print("="*60)
-    print(f"Complete tasks analyzed: {len(complete_tasks)}")
-    print(f"Suspect tasks identified: {verification_results['suspect_count']}")
-    print(f"Verification passed: {verification_results['pass_count']}")
-    print(f"Verification failed: {verification_results['fail_count']}")
-    
-    if verification_results['suspect_count'] > 0:
-        pass_rate = (verification_results['pass_count'] / verification_results['suspect_count']) * 100
-        print(f"Pass rate: {pass_rate:.1f}%")
-    
-    # Print failed tasks
-    if verification_results['fail_count'] > 0:
-        print("\nFailed tasks (missing verification):")
-        for task in verification_results['tasks']:
-            if task['status'] == 'FAIL':
-                print(f"  - {task['task_id']}: {task['description']}")
-                print(f"    Reason: {task['reason']}")
-                print(f"    Test exists: {task['test_exists']}")
-                print(f"    Implementation exists: {task['impl_exists']}")
-    
+
+    # Run audit
+    if args.daemon:
+        print(f"Starting daemon mode (interval: {args.interval}s)")
+        while True:
+            try:
+                audit_result = auditor.run_audit()
+                auditor.print_summary(audit_result)
+
+                print(f"\nNext audit in {args.interval}s...")
+                time.sleep(args.interval)
+            except KeyboardInterrupt:
+                print("\nDaemon stopped by user")
+                break
+            except Exception as e:
+                print(f"ERROR: {e}")
+                time.sleep(args.interval)
+    else:
+        # Single run
+        audit_result = auditor.run_audit()
+        auditor.print_summary(audit_result)
+
     return 0
 
 

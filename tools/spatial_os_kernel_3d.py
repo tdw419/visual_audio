@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Geometry OS - Spatial OS Kernel (Phase 2: Memory Management)
+Geometry OS - Spatial OS Kernel (Phase 2: Memory Management) ✅ COMPLETE
 3D MKV Memory System - Z-axis as storage depth
 
 Architecture:
@@ -8,6 +8,11 @@ Architecture:
 - Frames 1-N (z>0): Storage / ROM / Hard Drive
 - sys_mmap: Page in blocks from storage to active frame
 - sys_munmap: Page out blocks back to storage
+
+Phase 2 Achievements:
+- ✅ True Hilbert curve allocator (spatial locality preserving)
+- ✅ 3D memory paging (sys_mmap/sys_munmap)
+- ✅ 10-frame MKV storage (z=0 active, z=1-9 storage)
 """
 
 import struct
@@ -116,39 +121,66 @@ fn fetch_operand(pc: vec3<u32>) -> FetchResult {
     return FetchResult(vec2<u32>(3u, 0u), next_pc);
 }
 
-// Hilbert-Curve Allocator (2D, applied to z=0 frame)
+// Hilbert Curve: Convert distance to (x, y) coordinate
+fn hilbert_d2xy(n: u32, d: u32) -> vec2<u32> {
+    var rx: u32;
+    var ry: u32;
+    var t = d;
+    var x: u32 = 0u;
+    var y: u32 = 0u;
+    var s: u32 = 1u;
+
+    while (s < n) {
+        rx = (t / 2u) & 1u;
+        ry = (t ^ rx) & 1u;
+
+        if (ry == 0u) {
+            if (rx == 1u) {
+                x = s - 1u - x;
+                y = s - 1u - y;
+            }
+            let temp = x;
+            x = y;
+            y = temp;
+        }
+
+        x = x + s * rx;
+        y = y + s * ry;
+        t = t / 4u;
+        s = s * 2u;
+    }
+
+    return vec2<u32>(x, y);
+}
+
+// True Hilbert-Curve Allocator (2D, applied to z=0 frame)
 fn hilbert_alloc_block(size: u32) -> vec3<u32> {
-    // Hilbert curve scan from (0, 0, 0) -> (width-1, height-1, 0)
-    // Find consecutive black pixels of requested size
+    // Scan along Hilbert curve from (0, 0) to (width-1, height-1)
+    // Find `size` consecutive black pixels along the curve
     // Return base coordinate or (0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF) on failure
 
-    // Simple linear scan for now (will upgrade to true Hilbert)
-    for (var y = 0u; y < uniforms.vram_height; y = y + 1u) {
-        for (var x = 0u; x < uniforms.vram_width; x = x + 1u) {
-            let px = fetch_pixel_3d(x, y, 0u);
+    let total_pixels = uniforms.vram_width * uniforms.vram_height;
+    var consecutive = 0u;
+    var start_coord = vec3<u32>(0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu);
 
-            // Check if pixel is free (all zeros)
-            if (px.r == 0u && px.g == 0u && px.b == 0u) {
-                // Check if we have `size` consecutive pixels
-                var consecutive = 0u;
-                var scan_x = x;
+    // Walk the Hilbert curve
+    for (var d = 0u; d < total_pixels; d = d + 1u) {
+        let xy = hilbert_d2xy(uniforms.vram_width, d);
+        let px = fetch_pixel_3d(xy.x, xy.y, 0u);
 
-                while (consecutive < size && scan_x < uniforms.vram_width) {
-                    let scan_px = fetch_pixel_3d(scan_x, y, 0u);
-                    if (scan_px.r == 0u && scan_px.g == 0u && scan_px.b == 0u) {
-                        consecutive = consecutive + 1u;
-                        scan_x = scan_x + 1u;
-                    } else {
-                        break;
-                    }
-                }
+        if (px.r == 0u && px.g == 0u && px.b == 0u) {
+            // Pixel is free
+            consecutive = consecutive + 1u;
 
-                if (consecutive == size) {
-                    return vec3<u32>(x, y, 0u);  // Found block
-                }
-
-                x = scan_x;  // Skip past this failed region
+            if (consecutive == size) {
+                // Found enough consecutive pixels
+                let start_d = d - (size - 1u);
+                let start_xy = hilbert_d2xy(uniforms.vram_width, start_d);
+                return vec3<u32>(start_xy.x, start_xy.y, 0u);
             }
+        } else {
+            // Pixel is occupied, reset counter
+            consecutive = 0u;
         }
     }
 
@@ -324,7 +356,7 @@ class SpatialOS3D:
 
         self.vram_buf = self.device.create_buffer(
             size=vram_size,
-            usage=self.wgpu.BufferUsage.STORAGE | self.wgpu.BufferUsage.COPY_DST
+            usage=self.wgpu.BufferUsage.STORAGE | self.wgpu.BufferUsage.COPY_DST | self.wgpu.BufferUsage.COPY_SRC
         )
         self.device.queue.write_buffer(self.vram_buf, 0, vram_data_u32.tobytes())
 

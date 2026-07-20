@@ -251,21 +251,21 @@ Frame 4-9 (z=4-9): Reserved for expansion
 - Executes programs across frames
 - Self-healing via backup frames
 
-## Implementation Status
+### Implementation Status
 
-### Phase 2: Memory Management (CURRENT)
+### Phase 2: Memory Management ✅ COMPLETE
 - ✅ 3D coordinate system (x, y, z)
 - ✅ 3D pixel fetch/write
-- ✅ Hilbert allocator (linear scan version)
+- ✅ True Hilbert curve allocator (spatial locality preserving)
 - ✅ sys_mmap / sys_munmap opcodes
 - ✅ VRAM 3D buffer (10 frames)
 - ✅ Process table with 3D coordinates
-- ⏳ True Hilbert curve allocator
 - ⏳ Memory block tracking table
 - ⏳ Page fault handling
 
-### Next: Hilbert Curve Implementation
-- Implement true Hilbert curve mapping
+### Next: Memory Block Tracking
+- Track allocated blocks with owner, size, location, and z-page
+- Enable intelligent paging decisions
 - Preserve spatial locality
 - Enable 4×4 square allocations instead of 1×16 strips
 

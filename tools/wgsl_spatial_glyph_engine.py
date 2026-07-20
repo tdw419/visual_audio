@@ -5,17 +5,29 @@ The fetch-decode-execute loop runs entirely on the GPU.
 Thousands of spatial CPUs can execute concurrently across texture planes.
 
 Architecture:
-- Storage: storage texture binding_0 (ROM)
-- PC: uniform buffer per workgroup
-- Registers: storage buffer (8 x uint32)
-- Memory: storage buffer (1KB x uint8)
+- Storage: storage buffer binding_0 (ROM as RGBA32 pixels)
+- PC: storage buffer with cpu_id indexing
+- Registers: storage buffer (8 x uint32 per CPU)
+- Memory: storage buffer (1KB x uint8 per CPU)
 - Output: storage buffer (output log)
 
 Each workgroup = one spatial CPU instance.
 """
 
+import struct
+import asyncio
+from pathlib import Path
+import numpy as np
+
 # WGSL Spatial Glyph Compute Shader
 WGSL_SHADER = """
+struct Pixel {
+    r: u32,
+    g: u32,
+    b: u32,
+    a: u32,
+}
+
 struct SpatialCPU {
     pc: vec2<u32>,        // 2D program counter
     registers: array<u32, 8>,  // r0-r7
@@ -27,9 +39,11 @@ struct SpatialCPU {
 struct Uniforms {
     max_instructions: u32,
     output_buffer_size: u32,
+    image_width: u32,
+    image_height: u32,
 }
 
-@group(0) @binding(0) var<storage, read> rom: texture_2d<vec4<u32>>;
+@group(0) @binding(0) var<storage, read> rom: array<Pixel>;
 @group(0) @binding(1) var<storage, read_write> cpus: array<SpatialCPU>;
 @group(0) @binding(2) var<storage, read_write> output_buffer: array<u32>;
 @group(0) @binding(3) var<uniform> uniforms: Uniforms;
@@ -46,24 +60,27 @@ const OPCODE_MOV: u32 = 7;
 const OPCODE_PRT: u32 = 8;
 const OPCODE_HALT: u32 = 9;
 
-fn rgb_to_opcode(rgb: vec3<u32>) -> u32 {
-    // Convert RGB pixel to opcode
-    // Uses deterministic hashing like Python version
-    let hash_val = (u32(rgb.r) * 7u) + (u32(rgb.g) * 13u) + (u32(rgb.b) * 17u);
-
-    // Match Python deterministic RGB generation
-    if (rgb == vec3<u32>(236u, 80u, 80u)) { return OPCODE_LDI; }
-    if (rgb == vec3<u32>(80u, 236u, 120u)) { return OPCODE_ADD; }
-    if (rgb == vec3<u32>(151u, 244u, 80u)) { return OPCODE_SUB; }
-    if (rgb == vec3<u32>(80u, 190u, 80u)) { return OPCODE_MUL; }
-    if (rgb == vec3<u32>(220u, 20u, 60u)) { return OPCODE_JMP; }
-    if (rgb == vec3<u32>(242u, 230u, 222u)) { return OPCODE_JZ; }
-    if (rgb == vec3<u32>(80u, 131u, 175u)) { return OPCODE_CMP; }
-    if (rgb == vec3<u32>(178u, 34u, 34u)) { return OPCODE_MOV; }
-    if (rgb == vec3<u32>(247u, 83u, 80u)) { return OPCODE_PRT; }
-    if (rgb == vec3<u32>(255u, 0u, 0u)) { return OPCODE_HALT; }
+// Simple opcode lookup by color (simpler than vector comparison)
+fn get_opcode_from_color(r: u32, g: u32, b: u32) -> u32 {
+    // Exact matches only
+    if (r == 236u && g == 80u && b == 80u) { return OPCODE_LDI; }
+    if (r == 80u && g == 236u && b == 120u) { return OPCODE_ADD; }
+    if (r == 151u && g == 244u && b == 80u) { return OPCODE_SUB; }
+    if (r == 80u && g == 190u && b == 80u) { return OPCODE_MUL; }
+    if (r == 220u && g == 20u && b == 60u) { return OPCODE_JMP; }
+    if (r == 242u && g == 230u && b == 222u) { return OPCODE_JZ; }
+    if (r == 80u && g == 131u && b == 175u) { return OPCODE_CMP; }
+    if (r == 178u && g == 34u && b == 34u) { return OPCODE_MOV; }
+    if (r == 247u && g == 83u && b == 80u) { return OPCODE_PRT; }
+    if (r == 255u && g == 0u && b == 0u) { return OPCODE_HALT; }
 
     return 1000u; // Unknown opcode
+}
+
+fn load_pixel(x: u32, y: u32) -> vec3<u32> {
+    let index = y * uniforms.image_width + x;
+    let pixel = rom[index];
+    return vec3<u32>(pixel.r, pixel.g, pixel.b);
 }
 
 fn fetch_operand(cpu_id: u32, pc: ptr<function, vec2<u32>>) -> vec2<u32> {
@@ -71,7 +88,7 @@ fn fetch_operand(cpu_id: u32, pc: ptr<function, vec2<u32>>) -> vec2<u32> {
     let x = (*pc).x;
     let y = (*pc).y;
 
-    let pixel = textureLoad(rom, vec2<i32>(i32(x), i32(y)), 0);
+    let pixel = load_pixel(x, y);
     let r = pixel.r;
     let g = pixel.g;
     let b = pixel.b;
@@ -81,13 +98,11 @@ fn fetch_operand(cpu_id: u32, pc: ptr<function, vec2<u32>>) -> vec2<u32> {
 
     // Check for immediate value (r=0, g=0, b>0)
     if (r == 0u && g == 0u && b > 0u) {
-        // b is offset by 1 during encoding
         return vec2<u32>(0u, b - 1u); // type=0 (imm), value=b-1
     }
 
     // Check for coordinate (r=0, g>0, b>0)
     if (r == 0u && g > 0u && b > 0u) {
-        // Offset by 1 during encoding
         return vec2<u32>(1u, (g - 1u) | ((b - 1u) << 16u)); // type=1 (coord), packed coords
     }
 
@@ -123,33 +138,30 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     }
 
     // Fetch opcode
-    let pixel = textureLoad(rom, vec2<i32>(i32(cpu.pc.x), i32(cpu.pc.y)), 0);
-    let opcode = rgb_to_opcode(pixel.rgb);
+    let pixel = load_pixel(cpu.pc.x, cpu.pc.y);
+    let opcode = get_opcode_from_color(pixel.r, pixel.g, pixel.b);
 
     // Advance PC past opcode
     cpu.pc.x = cpu.pc.x + 1u;
 
     // Decode and execute
     if (opcode == OPCODE_LDI) {
-        // LDI r, imm
         let op1 = fetch_operand(cpu_id, &cpu.pc);
         let op2 = fetch_operand(cpu_id, &cpu.pc);
 
-        if (op1.x == 2u) { // register
+        if (op1.x == 2u) {
             cpu.registers[op1.y] = op2.y;
         }
 
     } else if (opcode == OPCODE_ADD) {
-        // ADD r1, r2
         let op1 = fetch_operand(cpu_id, &cpu.pc);
         let op2 = fetch_operand(cpu_id, &cpu.pc);
 
-        if (op1.x == 2u && op2.x == 2u) { // both registers
+        if (op1.x == 2u && op2.x == 2u) {
             cpu.registers[op1.y] = cpu.registers[op1.y] + cpu.registers[op2.y];
         }
 
     } else if (opcode == OPCODE_SUB) {
-        // SUB r1, r2
         let op1 = fetch_operand(cpu_id, &cpu.pc);
         let op2 = fetch_operand(cpu_id, &cpu.pc);
 
@@ -158,7 +170,6 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         }
 
     } else if (opcode == OPCODE_MUL) {
-        // MUL r1, r2
         let op1 = fetch_operand(cpu_id, &cpu.pc);
         let op2 = fetch_operand(cpu_id, &cpu.pc);
 
@@ -167,7 +178,6 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         }
 
     } else if (opcode == OPCODE_CMP) {
-        // CMP r1, r2 → set r0 = 1 if equal else 0
         let op1 = fetch_operand(cpu_id, &cpu.pc);
         let op2 = fetch_operand(cpu_id, &cpu.pc);
 
@@ -180,7 +190,6 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         }
 
     } else if (opcode == OPCODE_MOV) {
-        // MOV r1, r2
         let op1 = fetch_operand(cpu_id, &cpu.pc);
         let op2 = fetch_operand(cpu_id, &cpu.pc);
 
@@ -189,28 +198,25 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         }
 
     } else if (opcode == OPCODE_PRT) {
-        // PRT r → write to output buffer
         let op1 = fetch_operand(cpu_id, &cpu.pc);
 
         if (op1.x == 2u) {
-            let output_idx = atomicMin(&cpu.output_ptr, uniforms.output_buffer_size - 1u);
+            let output_idx = cpu.output_ptr;
             if (output_idx < uniforms.output_buffer_size) {
-                output_buffer[output_idx] = cpu.registers[op1.y];
+                output_buffer[cpu_id * uniforms.output_buffer_size + output_idx] = cpu.registers[op1.y];
             }
             cpu.output_ptr = cpu.output_ptr + 1u;
         }
 
     } else if (opcode == OPCODE_JMP) {
-        // JMP x, y
         let op1 = fetch_operand(cpu_id, &cpu.pc);
 
-        if (op1.x == 1u) { // coordinate
+        if (op1.x == 1u) {
             let coord = unpack_coord(op1.y);
             cpu.pc = coord;
         }
 
     } else if (opcode == OPCODE_JZ) {
-        // JZ x, y → jump if r0 == 0
         let op1 = fetch_operand(cpu_id, &cpu.pc);
 
         if (op1.x == 1u && cpu.registers[0] == 0u) {
@@ -239,23 +245,61 @@ class WGSLSpatialEngine:
         self.device = None
         self.shader_module = None
         self.compute_pipeline = None
-        self.bind_group = None
+        self.wgpu = None
 
     async def initialize(self):
         """Initialize WebGPU device and pipeline."""
         try:
-            import wgpu
-            self.device = wgpu.utils.get_default_device()
+            self.wgpu = __import__('wgpu')
+            self.device = self.wgpu.utils.get_default_device()
 
-            # Create compute pipeline
+            # Create shader module
             self.shader_module = self.device.create_shader_module(
                 code=WGSL_SHADER
             )
 
+            # Create bind group layout
+            bind_group_layout = self.device.create_bind_group_layout(
+                entries=[
+                    {
+                        "binding": 0,
+                        "visibility": self.wgpu.ShaderStage.COMPUTE,
+                        "buffer": {
+                            "type": self.wgpu.BufferBindingType.read_only_storage,
+                        },
+                    },
+                    {
+                        "binding": 1,
+                        "visibility": self.wgpu.ShaderStage.COMPUTE,
+                        "buffer": {
+                            "type": self.wgpu.BufferBindingType.storage,
+                        },
+                    },
+                    {
+                        "binding": 2,
+                        "visibility": self.wgpu.ShaderStage.COMPUTE,
+                        "buffer": {
+                            "type": self.wgpu.BufferBindingType.storage,
+                        },
+                    },
+                    {
+                        "binding": 3,
+                        "visibility": self.wgpu.ShaderStage.COMPUTE,
+                        "buffer": {
+                            "type": self.wgpu.BufferBindingType.uniform,
+                        },
+                    },
+                ]
+            )
+
+            # Create pipeline layout
+            pipeline_layout = self.device.create_pipeline_layout(
+                bind_group_layouts=[bind_group_layout]
+            )
+
+            # Create compute pipeline
             self.compute_pipeline = self.device.create_compute_pipeline(
-                layout=self.device.create_pipeline_layout(
-                    bind_group_layouts=[]
-                ),
+                layout=pipeline_layout,
                 compute={
                     "module": self.shader_module,
                     "entry_point": "main",
@@ -270,49 +314,41 @@ class WGSLSpatialEngine:
             return False
         except Exception as e:
             print(f"✗ WGSL initialization failed: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
     def load_program_image(self, image_path: str):
-        """Load pixel-encoded program image as GPU texture."""
+        """Load pixel-encoded program image as GPU buffer."""
         from PIL import Image
-        import numpy as np
+
+        if not self.device:
+            raise RuntimeError("Engine not initialized. Call initialize() first.")
 
         img = Image.open(image_path)
         rgba = np.array(img)
 
         # Convert to RGBA32 if needed
         if rgba.shape[2] == 3:
-            # Add alpha channel
             rgba = np.dstack([rgba, np.full(rgba.shape[:2], 255, dtype=rgba.dtype)])
 
-        # Create texture
-        texture = self.device.create_texture(
-            size=(rgba.shape[1], rgba.shape[0], 1),
-            usage=wgpu.TextureUsage.STORAGE_BINDING | wgpu.TextureUsage.COPY_DST,
-            format=wgpu.TextureFormat.RGBA8UINT,
+        height, width = rgba.shape[:2]
+
+        # Flatten to RGBA32 array (4 x u32 per pixel)
+        flat_data = rgba.reshape(-1, 4)
+
+        # Create storage buffer
+        buffer = self.device.create_buffer(
+            size=len(flat_data) * 4 * 4,  # 4 channels * 4 bytes per u32
+            usage=self.wgpu.BufferUsage.STORAGE | self.wgpu.BufferUsage.COPY_DST,
         )
 
-        # Upload texture data
-        self.device.queue.write_texture(
-            {
-                "offset": 0,
-                "bytes_per_row": rgba.shape[1] * 4,
-                "rows_per_image": rgba.shape[0],
-            },
-            rgba.tobytes(),
-            {
-                "buffer": texture,
-                "origin": (0, 0, 0),
-                "size": (rgba.shape[1], rgba.shape[0], 1),
-            },
-        )
+        self.device.queue.write_buffer(buffer, 0, flat_data.tobytes())
 
-        return texture
+        return buffer, width, height
 
     def create_cpu_instances(self, num_cpus: int = 1000):
         """Create buffer for multiple CPU instances."""
-        import struct
-
         # Each CPU: pc(2x4) + registers(8x4) + memory(256x4) + running(4) + output_ptr(4)
         # = 8 + 32 + 1024 + 4 + 4 = 1072 bytes per CPU
         cpu_size = 1072
@@ -334,7 +370,7 @@ class WGSLSpatialEngine:
 
         buffer = self.device.create_buffer(
             size=len(cpu_data),
-            usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.COPY_SRC,
+            usage=self.wgpu.BufferUsage.STORAGE | self.wgpu.BufferUsage.COPY_DST | self.wgpu.BufferUsage.COPY_SRC,
         )
         self.device.queue.write_buffer(buffer, 0, cpu_data)
 
@@ -344,20 +380,32 @@ class WGSLSpatialEngine:
         """Create output buffer for PRT operations."""
         buffer = self.device.create_buffer(
             size=size * 4,  # u32 per output
-            usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.COPY_SRC,
+            usage=self.wgpu.BufferUsage.STORAGE | self.wgpu.BufferUsage.COPY_DST | self.wgpu.BufferUsage.COPY_SRC,
         )
         return buffer
 
-    def run(self, texture, cpus_buffer, output_buffer, num_cpus: int = 1000, dispatches: int = 100):
+    def run(self, rom_buffer, image_width, image_height, cpus_buffer, output_buffer, num_cpus: int = 1000, dispatches: int = 100):
         """Run spatial CPUs on GPU."""
 
+        # Create uniform buffer
+        uniform_data = struct.pack('IIII', dispatches, output_buffer.size // 4 // num_cpus, image_width, image_height)
+        uniform_buffer = self.device.create_buffer(
+            size=16,
+            usage=self.wgpu.BufferUsage.UNIFORM | self.wgpu.BufferUsage.COPY_DST,
+        )
+        self.device.queue.write_buffer(uniform_buffer, 0, uniform_data)
+
         # Create bind group
-        self.bind_group = self.device.create_bind_group(
+        bind_group = self.device.create_bind_group(
             layout=self.compute_pipeline.get_bind_group_layout(0),
             entries=[
                 {
                     "binding": 0,
-                    "resource": texture.create_view(),
+                    "resource": {
+                        "buffer": rom_buffer,
+                        "offset": 0,
+                        "size": rom_buffer.size,
+                    },
                 },
                 {
                     "binding": 1,
@@ -378,12 +426,9 @@ class WGSLSpatialEngine:
                 {
                     "binding": 3,
                     "resource": {
-                        "buffer": self.device.create_buffer(
-                            size=8,  # max_instructions(4) + output_buffer_size(4)
-                            usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST,
-                        ),
+                        "buffer": uniform_buffer,
                         "offset": 0,
-                        "size": 8,
+                        "size": 16,
                     },
                 },
             ],
@@ -392,19 +437,11 @@ class WGSLSpatialEngine:
         # Encode commands
         command_encoder = self.device.create_command_encoder()
 
-        # Set uniforms
-        uniform_data = struct.pack('II', dispatches, output_buffer.size // 4)
-        uniform_buffer = self.device.create_buffer(
-            size=8,
-            usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST,
-        )
-        self.device.queue.write_buffer(uniform_buffer, 0, uniform_data)
-
         # Run compute shader multiple times (simulating instruction loop)
         for _ in range(dispatches):
             compute_pass = command_encoder.begin_compute_pass()
             compute_pass.set_pipeline(self.compute_pipeline)
-            compute_pass.set_bind_group(0, self.bind_group)
+            compute_pass.set_bind_group(0, bind_group)
             compute_pass.dispatch_workgroups(num_cpus)
             compute_pass.end()
 
@@ -415,11 +452,9 @@ class WGSLSpatialEngine:
 
     def read_output(self, output_buffer):
         """Read output buffer from GPU."""
-        import struct
-
         staging_buffer = self.device.create_buffer(
             size=output_buffer.size,
-            usage=wgpu.BufferUsage.MAP_READ | wgpu.BufferUsage.COPY_DST,
+            usage=self.wgpu.BufferUsage.MAP_READ | self.wgpu.BufferUsage.COPY_DST,
         )
 
         command_encoder = self.device.create_command_encoder()
@@ -452,11 +487,11 @@ async def demo():
 
     # Load program image
     print("\nLoading program image...")
-    texture = engine.load_program_image("demo_glyph_simple.png")
-    print("✓ Program loaded as GPU texture")
+    rom_buffer, width, height = engine.load_program_image("demo_glyph_simple.png")
+    print(f"✓ Program loaded as GPU buffer: {width}x{height}")
 
     # Create CPU instances
-    num_cpus = 100
+    num_cpus = 10  # Start small
     cpus_buffer = engine.create_cpu_instances(num_cpus)
     print(f"✓ Created {num_cpus} spatial CPU instances")
 
@@ -466,7 +501,7 @@ async def demo():
 
     # Run
     print("\nExecuting on GPU...")
-    engine.run(texture, cpus_buffer, output_buffer, num_cpus, dispatches=50)
+    engine.run(rom_buffer, width, height, cpus_buffer, output_buffer, num_cpus, dispatches=20)
 
     # Read output
     print("\nReading output...")
@@ -481,5 +516,4 @@ async def demo():
 
 
 if __name__ == '__main__':
-    import asyncio
     asyncio.run(demo())
