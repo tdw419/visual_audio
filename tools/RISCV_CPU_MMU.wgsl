@@ -20,7 +20,7 @@ struct InstructionPixel {
 }
 
 // RISC-V CPU State with MMU support and machine-mode CSR file.
-// Mirrored byte-for-byte by the host (numpy dtype) - keep layouts in sync.
+// Field order must match Python CPU_DTYPE exactly (std430, not sorted).
 struct RiscvCPU {
     pc: vec2<u32>,              // Program counter (64-bit)
     regs: array<vec2<u32>, 32>, // x0-x31 (x0 is hardwired to 0)
@@ -44,6 +44,12 @@ struct RiscvCPU {
     sscratch: vec2<u32>,        // S-mode scratch
     medeleg: vec2<u32>,         // Exception delegation to S-mode
     mideleg: vec2<u32>,         // Interrupt delegation to S-mode
+    virtio_status: u32,         // VirtIO device status
+    plic_pending: u32,          // PLIC pending interrupt bits (IRQ 0-31)
+    plic_enable: u32,           // PLIC enable bits for hart 0
+    plic_claimed: u32,          // Currently claimed IRQ (0 = none)
+    _pad: u32,                  // Padding (std430 adds padding for alignment)
+    _pad2: u32,                 // More padding to reach 432 bytes
 }
 
 // R-type instruction decoding
@@ -356,6 +362,31 @@ const CAUSE_BREAKPOINT: u32 = 3u;
 const CAUSE_ECALL_U: u32 = 8u;
 const CAUSE_ECALL_S: u32 = 9u;
 const CAUSE_ECALL_M: u32 = 11u;
+const CAUSE_INSTR_PAGE_FAULT: u32 = 12u;   // Instruction page fault
+const CAUSE_LOAD_PAGE_FAULT: u32 = 13u;    // Load page fault
+const CAUSE_STORE_PAGE_FAULT: u32 = 15u;   // Store page fault
+
+// Interrupt cause codes (MSB bit 31 set = interrupt)
+const CAUSE_USER_SOFT: u32 = 0x80000000u;   // 0
+const CAUSE_SUPERVISOR_SOFT: u32 = 0x80000001u; // 1
+const CAUSE_MACHINE_SOFT: u32 = 0x80000003u;    // 3
+const CAUSE_USER_TIMER: u32 = 0x80000004u;      // 4
+const CAUSE_SUPERVISOR_TIMER: u32 = 0x80000005u; // 5
+const CAUSE_MACHINE_TIMER: u32 = 0x80000007u;    // 7
+const CAUSE_USER_EXTERNAL: u32 = 0x80000008u;    // 8
+const CAUSE_SUPERVISOR_EXTERNAL: u32 = 0x80000009u; // 9
+const CAUSE_MACHINE_EXTERNAL: u32 = 0x8000000Bu;   // 11
+
+// MIP interrupt bits
+const MIP_USIP: u32 = 1u;
+const MIP_SSIP: u32 = 2u;
+const MIP_MSIP: u32 = 4u;
+const MIP_UTIP: u32 = 8u;
+const MIP_STIP: u32 = 16u;
+const MIP_MTIP: u32 = 32u;
+const MIP_UEIP: u32 = 64u;
+const MIP_SEIP: u32 = 128u;   // S-mode external interrupt
+const MIP_MEIP: u32 = 256u;   // M-mode external interrupt (from PLIC)
 
 // SBI extension IDs (a7) - the WGSL emulator IS the M-mode firmware.
 // S-mode ECALLs are handled inline instead of vectoring to mtvec.
@@ -401,6 +432,21 @@ const UART_BASE: u32 = 0x10000000u;
 const UART_THR: u32 = 0x10000000u;  // Transmit Holding Register
 const UART_LSR: u32 = 0x10000005u;  // Line Status Register
 const UART_LSR_THRE: u32 = 32u;      // Transmit Holding Register Empty
+
+// PLIC (Platform-Level Interrupt Controller)
+const PLIC_BASE: u32 = 0x0c000000u;
+const PLIC_PENDING_BASE: u32 = 0x0c001000u;  // Pending bits (1 bit per IRQ)
+const PLIC_ENABLE_BASE: u32 = 0x0c002000u;   // Enable bits per hart/context
+const PLIC_CONTEXT_BASE: u32 = 0x0c200000u;  // Hart 0 context
+const PLIC_THRESHOLD: u32 = 0x0c200000u;     // Priority threshold
+const PLIC_CLAIM: u32 = 0x0c200004u;          // Claim/Complete register
+
+// VirtIO Block Device
+const VIRTIO_BASE: u32 = 0x10001000u;
+const VIRTIO_QUEUE_NOTIFY: u32 = 0x50u;  // QueueNotify (kick) offset
+
+// VirtIO IRQ numbers (RISC-V standard)
+const VIRTIO_IRQ: u32 = 1u;  // VirtIO block device = IRQ 1
 
 // Physical memory base offset
 // For M-mode systems like xv6, DRAM starts at 0x80000000
@@ -699,12 +745,14 @@ fn write_phys_word(pa: vec2<u32>, val: u32) {
 // Check if SATP indicates MMU is enabled (SV39 mode)
 // RV64 satp layout: mode = bits [63:60], ASID = [59:44], PPN = [43:0]
 fn mmu_enabled(satp: vec2<u32>) -> bool {
+    // Mode [63:60] maps to satp.y [31:28]
     let mode = (satp.y >> 28u) & 0xFu;
     return mode == SATP_MODE_SV39;
 }
 
 // Extract PPN from SATP CSR (bits [43:0])
 fn satp_to_ppn(satp: vec2<u32>) -> vec2<u32> {
+    // PPN[31:0] = satp.x, PPN[43:32] = satp.y[11:0]
     return vec2<u32>(satp.x, satp.y & 0xFFFu);
 }
 
@@ -716,8 +764,10 @@ fn satp_to_ppn(satp: vec2<u32>) -> vec2<u32> {
 // - Offset: bits [11:0]
 
 fn extract_vpn2(va: vec2<u32>) -> u32 {
-    let high_vpn = (va.y & 0x7Fu) << 2u;
-    let low_vpn = va.x >> 30u;
+    // VPN2 is bits [38:30] of VA
+    // VA[38:32] = va.y[6:0], VA[31:30] = va.x[1:0]
+    let high_vpn = (va.y & 0x7Fu) << 2u;  // bits [38:32] -> position [9:2]
+    let low_vpn = va.x >> 30u;            // bits [31:30] -> position [1:0]
     return high_vpn | low_vpn;
 }
 
@@ -744,92 +794,106 @@ fn pte_is_leaf(pte: u32) -> bool {
 }
 
 // Extract PPN from PTE (bits [53:10])
-fn pte_to_ppn(pte: u32) -> vec2<u32> {
-    let ppn = (pte >> 10u) & 0x3FFFFFu;
-    return vec2<u32>(ppn, 0u);
+fn pte_to_ppn(pte: vec2<u32>) -> vec2<u32> {
+    let ppn_low = (pte.x >> 10u) | (pte.y << 22u);
+    let ppn_high = (pte.y >> 10u) & 0xFFFu;
+    return vec2<u32>(ppn_low, ppn_high);
 }
 
 // Calculate physical address from PPN and offset
 fn make_pa(ppn: vec2<u32>, offset: u32) -> vec2<u32> {
     let pa_low = (ppn.x << 12u) | offset;
-    let pa_high = ppn.y;
+    let pa_high = (ppn.y << 12u) | (ppn.x >> 20u);
     return vec2<u32>(pa_low, pa_high);
 }
 
-// SV39 page table walk
-// Returns physical address, or vec2<u32>(0xFFFFFFFF, 0xFFFFFFFF) on fault
-fn translate_va(satp: vec2<u32>, va: vec2<u32>) -> vec2<u32> {
-    // If MMU not enabled, return identity mapping
-    if (!mmu_enabled(satp)) {
+fn translate_va(cpu: ptr<function, RiscvCPU>, va: vec2<u32>) -> vec2<u32> {
+    if (!mmu_enabled((*cpu).satp)) {
         return va;
     }
 
-    // Get root page table address from SATP
-    let root_ppn = satp_to_ppn(satp);
+    let root_ppn = satp_to_ppn((*cpu).satp);
+    
+    // SV39 PTEs are 64 bits (8 bytes) each
     
     // === LEVEL 1 (L1) PAGE TABLE ===
     let l1_vpn = extract_vpn2(va);
-    let l1_pte_pa = add64(vec2<u32>(root_ppn.x << 12u, root_ppn.y), vec2<u32>(l1_vpn * 4u, 0u));
-    let l1_pte = read_phys_word(l1_pte_pa);
+    let l1_pte_pa = add64(vec2<u32>(root_ppn.x << 12u, root_ppn.y), vec2<u32>(l1_vpn * 8u, 0u));
+    let l1_pte_low = read_phys_word(l1_pte_pa);
+    let l1_pte_high = read_phys_word(add64(l1_pte_pa, vec2<u32>(4u, 0u)));
+    let l1_pte = vec2<u32>(l1_pte_low, l1_pte_high);
     
-    if (!pte_valid(l1_pte)) {
-        // Page fault: L1 PTE not valid
-        return vec2<u32>(0xFFFFFFFF, 0xFFFFFFFF);
+    if (!pte_valid(l1_pte.x)) {
+        return vec2<u32>(0xFFFFFFFFu, 0xFFFFFFFFu);
     }
     
-    if (pte_is_leaf(l1_pte)) {
-        // L1 is a megapage (2MB mapping)
+    if (pte_is_leaf(l1_pte.x)) {
+        // L1 is a gigapage (1GB mapping)
         let l1_ppn = pte_to_ppn(l1_pte);
-        let offset = extract_offset(va) | ((va.x >> 12u) & 0x1FFu) << 12u;
+        // Offset = VA[29:0]
+        let offset = va.x & 0x3FFFFFFFu;
         return make_pa(l1_ppn, offset);
     }
     
     // === LEVEL 2 (L2) PAGE TABLE ===
     let l2_vpn = extract_vpn1(va);
     let l2_ppn = pte_to_ppn(l1_pte);
-    let l2_pte_pa = add64(vec2<u32>(l2_ppn.x << 12u, l2_ppn.y), vec2<u32>(l2_vpn * 4u, 0u));
-    let l2_pte = read_phys_word(l2_pte_pa);
+    let l2_pte_pa = add64(vec2<u32>(l2_ppn.x << 12u, l2_ppn.y), vec2<u32>(l2_vpn * 8u, 0u));
+    let l2_pte_low = read_phys_word(l2_pte_pa);
+    let l2_pte_high = read_phys_word(add64(l2_pte_pa, vec2<u32>(4u, 0u)));
+    let l2_pte = vec2<u32>(l2_pte_low, l2_pte_high);
     
-    if (!pte_valid(l2_pte)) {
-        // Page fault: L2 PTE not valid
-        return vec2<u32>(0xFFFFFFFF, 0xFFFFFFFF);
+    if (!pte_valid(l2_pte.x)) {
+        return vec2<u32>(0xFFFFFFFFu, 0xFFFFFFFFu);
     }
     
-    if (pte_is_leaf(l2_pte)) {
-        // L2 is a leaf page (4KB mapping)
+    if (pte_is_leaf(l2_pte.x)) {
+        // L2 is a megapage (2MB mapping)
         let l2_ppn_leaf = pte_to_ppn(l2_pte);
-        let offset = extract_offset(va);
+        // Offset = VA[20:0]
+        let offset = va.x & 0x1FFFFFu;
         return make_pa(l2_ppn_leaf, offset);
     }
     
     // === LEVEL 3 (L3) PAGE TABLE (LEAF) ===
     let l3_vpn = extract_vpn0(va);
     let l3_ppn = pte_to_ppn(l2_pte);
-    let l3_pte_pa = add64(vec2<u32>(l3_ppn.x << 12u, l3_ppn.y), vec2<u32>(l3_vpn * 4u, 0u));
-    let l3_pte = read_phys_word(l3_pte_pa);
+    let l3_pte_pa = add64(vec2<u32>(l3_ppn.x << 12u, l3_ppn.y), vec2<u32>(l3_vpn * 8u, 0u));
+    let l3_pte_low = read_phys_word(l3_pte_pa);
+    let l3_pte_high = read_phys_word(add64(l3_pte_pa, vec2<u32>(4u, 0u)));
+    let l3_pte = vec2<u32>(l3_pte_low, l3_pte_high);
     
-    if (!pte_valid(l3_pte) || !pte_is_leaf(l3_pte)) {
-        // Page fault: L3 PTE not valid or not a leaf
-        return vec2<u32>(0xFFFFFFFF, 0xFFFFFFFF);
+    if (!pte_valid(l3_pte.x) || !pte_is_leaf(l3_pte.x)) {
+        return vec2<u32>(0xFFFFFFFFu, 0xFFFFFFFFu);
     }
     
-    // Final translation
-    let final_ppn = pte_to_ppn(l3_pte);
+    // L3 is a leaf page (4KB mapping)
+    let l3_ppn_leaf = pte_to_ppn(l3_pte);
     let offset = extract_offset(va);
-    return make_pa(final_ppn, offset);
+    return make_pa(l3_ppn_leaf, offset);
 }
 
 // ============================================================================
 // INSTRUCTION FETCH
 // ============================================================================
 
-fn fetch_instruction(satp: vec2<u32>, pc: vec2<u32>) -> u32 {
+// A fetched instruction word (e.g. 0xFFFFFFFF, a syntactically valid, if
+// currently unrecognized, opcode) is a legitimate value that must not be
+// confused with "fetch failed" - hence a struct instead of an overloaded
+// sentinel return, which previously misfired take_trap(PAGE_FAULT) on any
+// real instruction word that happened to equal 0xFFFFFFFF.
+struct FetchResult {
+    instr: u32,
+    faulted: bool,
+}
+
+fn fetch_instruction(cpu: ptr<function, RiscvCPU>, pc: vec2<u32>) -> FetchResult {
     // Translate virtual PC to physical address
-    let pa = translate_va(satp, pc);
+    let pa = translate_va(cpu, pc);
 
     // Check for translation fault
     if (pa.x == 0xFFFFFFFFu) {
-        return 0u;
+        return FetchResult(0u, true);
     }
 
     // Handle physical memory at 0x80000000+ (xv6 M-mode boot)
@@ -838,10 +902,10 @@ fn fetch_instruction(satp: vec2<u32>, pc: vec2<u32>) -> u32 {
     let pixel_idx = pa_offset / 4u;
 
     if (pixel_idx >= arrayLength(&memory)) {
-        return 0u;
+        return FetchResult(0u, true);
     }
     let px = memory[pixel_idx];
-    return pixel_to_instruction(px);
+    return FetchResult(pixel_to_instruction(px), false);
 }
 
 // ============================================================================
@@ -908,6 +972,76 @@ fn uart_write_char(cpu_id: u32, char: u32, uart_ptr: u32) -> u32 {
 // Check if address maps to UART device
 fn is_uart_addr(pa: vec2<u32>) -> bool {
     return pa.x >= UART_BASE && pa.x < (UART_BASE + 8u);
+}
+
+// ============================================================================
+// PLIC (Platform-Level Interrupt Controller)
+// ============================================================================
+
+// Check if address maps to PLIC
+fn is_plic_addr(pa: vec2<u32>) -> bool {
+    return pa.x >= PLIC_BASE && pa.x < (PLIC_BASE + 0x210000u);
+}
+
+// Raise a PLIC interrupt (sets pending bit)
+fn plic_raise_irq(cpu: ptr<function, RiscvCPU>, irq: u32) {
+    if (irq < 32u) {
+        (*cpu).plic_pending = (*cpu).plic_pending | (1u << irq);
+    }
+}
+
+// Check for pending external interrupt (for MIP.MEIP)
+fn check_external_interrupt(cpu: ptr<function, RiscvCPU>) -> bool {
+    // External interrupt pending if PLIC has bits set that are enabled
+    let pending_enabled = (*cpu).plic_pending & (*cpu).plic_enable;
+    return pending_enabled != 0u;
+}
+
+// ============================================================================
+// VIRTIO BLOCK DEVICE EMULATION
+// ============================================================================
+
+// Check if address maps to VirtIO
+fn is_virtio_addr(pa: vec2<u32>) -> bool {
+    return pa.x >= VIRTIO_BASE && pa.x < (VIRTIO_BASE + 0x1000u);
+}
+
+// VirtIO descriptor ring layout (16 bytes per descriptor)
+// struct virtq_desc {
+//   u64 addr;    // Physical address (LE)
+//   u32 len;     // Length (LE)
+//   u16 flags;   // Flags (LE)
+//   u16 next;    // Next descriptor (LE)
+// }
+// Total: 16 bytes
+
+// VirtIO used ring entry (8 bytes per used entry)
+// struct virtq_used_elem {
+//   u32 id;      // Index of descriptor (LE)
+//   u32 len;     // Total written length (LE)
+// }
+
+// VirtIO request header (16 bytes)
+// struct virtio_blk_req {
+//   u32 type;    // 0=read, 1=write
+//   u32 reserved;
+//   u64 sector;  // LBA sector number
+// }
+
+// Process VirtIO block read request (synchronously)
+fn virtio_process_block_read(cpu: ptr<function, RiscvCPU>, queue_addr: vec2<u32>, queue_idx: u32) {
+    // Read queue descriptor address (vring.desc) from queue memory
+    // This is a simplification: xv6 stores queue info in memory, we need to walk it
+
+    // For now: stub - just signal completion via PLIC
+    // Real implementation would:
+    // 1. Read vring.desc array (queue_addr)
+    // 2. Walk descriptors, read data from disk image to guest buffer
+    // 3. Write to vring.used array with length
+    // 4. Update vring.used.idx
+
+    // Minimal stub: raise IRQ to indicate completion
+    plic_raise_irq(cpu, VIRTIO_IRQ);
 }
 
 // ============================================================================
@@ -1590,7 +1724,12 @@ fn take_trap(cpu: ptr<function, RiscvCPU>, cause: vec2<u32>, tval: vec2<u32>) {
         (*cpu).mstatus.x = ms;
 
         (*cpu).priv_mode = PRIV_S;
-        (*cpu).pc = vec2<u32>((*cpu).stvec.x & 0xFFFFFFFCu, (*cpu).stvec.y);
+        let target_pc = vec2<u32>((*cpu).stvec.x & 0xFFFFFFFCu, (*cpu).stvec.y);
+        if (target_pc.x == 0u && target_pc.y == 0u) {
+            (*cpu).running = 0u; // Halt on unhandled S-mode trap
+            return;
+        }
+        (*cpu).pc = target_pc;
     } else {
         (*cpu).mepc = (*cpu).pc;
         (*cpu).mcause = cause;
@@ -1604,7 +1743,12 @@ fn take_trap(cpu: ptr<function, RiscvCPU>, cause: vec2<u32>, tval: vec2<u32>) {
         (*cpu).mstatus.x = ms;
 
         (*cpu).priv_mode = PRIV_M;
-        (*cpu).pc = vec2<u32>((*cpu).mtvec.x & 0xFFFFFFFCu, (*cpu).mtvec.y);
+        let target_pc = vec2<u32>((*cpu).mtvec.x & 0xFFFFFFFCu, (*cpu).mtvec.y);
+        if (target_pc.x == 0u && target_pc.y == 0u) {
+            (*cpu).running = 0u; // Halt on unhandled M-mode trap
+            return;
+        }
+        (*cpu).pc = target_pc;
     }
 }
 
@@ -1706,13 +1850,11 @@ fn execute_load(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32) {
     let va = add64((*cpu).regs[decoded.rs1], sext32_to_64(decoded.imm));
     
     // Translate virtual address
-    let pa = translate_va(satp, va);
+    let pa = translate_va(cpu, va);
     
     // Check for page fault
     if (pa.x == 0xFFFFFFFFu) {
-        // TODO: Trigger page fault exception
-        (*cpu).running = 0u;
-        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        take_trap(cpu, vec2<u32>(CAUSE_LOAD_PAGE_FAULT, 0u), va);
         return;
     }
     
@@ -1733,11 +1875,70 @@ fn execute_load(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32) {
         (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
         return;
     }
+
+    // PLIC register reads
+    if (is_plic_addr(pa)) {
+        let offset = pa.x - PLIC_BASE;
+        var val = 0u;
+
+        // Pending bits (IRQ 0-31)
+        if (offset >= 0x1000u && offset < 0x1004u) {
+            val = (*cpu).plic_pending;
+        }
+        // Enable bits for hart 0, mode S
+        else if (offset >= 0x2080u && offset < 0x2084u) {
+            val = (*cpu).plic_enable;
+        }
+        // Claim/Complete register (hart 0, mode S)
+        else if (offset == 0x200004u) {
+            // Claim: return lowest-priority pending+enabled IRQ
+            let pending_enabled = (*cpu).plic_pending & (*cpu).plic_enable;
+            if (pending_enabled != 0u) {
+                // Find lowest set bit
+                var irq = 0u;
+                for (var i = 0u; i < 32u; i = i + 1u) {
+                    if ((pending_enabled & (1u << i)) != 0u) {
+                        irq = i;
+                        break;
+                    }
+                }
+                val = irq;
+                (*cpu).plic_claimed = irq;
+            } else {
+                val = 0u;
+            }
+        }
+
+        if (decoded.rd != 0u) {
+            (*cpu).regs[decoded.rd] = vec2<u32>(val, 0u);
+        }
+        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        return;
+    }
+
+    // VirtIO MMIO stub
+    if (pa.x >= 0x10001000u && pa.x < 0x10002000u) {
+        let offset = pa.x - 0x10001000u;
+        var val = 0u;
+        if (offset == 0x0u) { val = 0x74726976u; } // Magic
+        else if (offset == 0x4u) { val = 2u; }      // Version
+        else if (offset == 0x8u) { val = 2u; }      // Device ID (Block)
+        else if (offset == 0xcu) { val = 0x554d4551u; } // Vendor (QEMU)
+        else if (offset == 0x10u) { val = 0u; }     // DeviceFeatures
+        else if (offset == 0x34u) { val = 8u; }     // QueueNumMax
+        else if (offset == 0x44u) { val = 0u; }     // QueueReady
+        else if (offset == 0x60u) { val = 0u; }     // InterruptStatus
+        else if (offset == 0x70u) { val = (*cpu).virtio_status; } // Status
+        
+        if (decoded.rd != 0u) {
+            (*cpu).regs[decoded.rd] = vec2<u32>(val, 0u);
+        }
+        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        return;
+    }
     
     let byte_offset = pa.x & 3u;
-    let word_addr = pa.x / 4u;
-    let px = memory[word_addr];
-    let word = pixel_to_instruction(px);
+    let word = read_phys_word(pa);
 
     var value = vec2<u32>(0u, 0u);
     var value32 = 0u;
@@ -1760,11 +1961,7 @@ fn execute_load(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32) {
         // LD (Load Doubleword) - 64-bit load
         value.x = word;
         // Read next word for high 32 bits
-        let word_addr_next = (pa.x + 4u) / 4u;
-        if (word_addr_next < arrayLength(&memory)) {
-            let px_next = memory[word_addr_next];
-            value.y = pixel_to_instruction(px_next);
-        }
+        value.y = read_phys_word(add64(pa, vec2<u32>(4u, 0u)));
     } else if (decoded.funct3 == 4u) {
         // LBU (Load Byte Unsigned)
         value32 = (word >> (byte_offset * 8u)) & 0xFFu;
@@ -1792,13 +1989,11 @@ fn execute_store(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32, cpu_
     let va = add64((*cpu).regs[decoded.rs1], sext32_to_64(decoded.imm));
     
     // Translate virtual address
-    let pa = translate_va(satp, va);
+    let pa = translate_va(cpu, va);
     
     // Check for page fault
     if (pa.x == 0xFFFFFFFFu) {
-        // TODO: Trigger page fault exception
-        (*cpu).running = 0u;
-        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        take_trap(cpu, vec2<u32>(CAUSE_STORE_PAGE_FAULT, 0u), va);
         return;
     }
     
@@ -1813,11 +2008,46 @@ fn execute_store(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32, cpu_
         (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
         return;
     }
+
+    // PLIC register writes
+    if (is_plic_addr(pa)) {
+        let offset = pa.x - PLIC_BASE;
+
+        // Pending bits: ignore writes (read-only)
+        // Enable bits for hart 0, mode S
+        if (offset >= 0x2080u && offset < 0x2084u) {
+            (*cpu).plic_enable = (*cpu).regs[decoded.rs2].x;
+        }
+        // Claim/Complete register (write completes interrupt)
+        else if (offset == 0x200004u) {
+            let completed_irq = (*cpu).regs[decoded.rs2].x;
+            if (completed_irq == (*cpu).plic_claimed) {
+                // Clear the pending bit
+                (*cpu).plic_pending = (*cpu).plic_pending & ~(1u << completed_irq);
+                (*cpu).plic_claimed = 0u;
+            }
+        }
+
+        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        return;
+    }
+
+    // VirtIO MMIO stub
+    if (pa.x >= 0x10001000u && pa.x < 0x10002000u) {
+        let offset = pa.x - 0x10001000u;
+        if (offset == 0x70u) {
+            (*cpu).virtio_status = (*cpu).regs[decoded.rs2].x;
+        } else if (offset == VIRTIO_QUEUE_NOTIFY) {
+            // QueueNotify (kick): synchronously process request
+            // For now: stub that just raises the interrupt
+            plic_raise_irq(cpu, VIRTIO_IRQ);
+        }
+        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        return;
+    }
     
     let byte_offset = pa.x & 3u;
-    let word_addr = pa.x / 4u;
-    let px = memory[word_addr];
-    let old_word = pixel_to_instruction(px);
+    let old_word = read_phys_word(pa);
     let store_val = (*cpu).regs[decoded.rs2];
 
     var new_word = old_word;
@@ -1837,10 +2067,7 @@ fn execute_store(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32, cpu_
         // SD (Store Doubleword)
         new_word = store_val.x;
         // Write high 32 bits to next word
-        let word_addr_next = (pa.x + 4u) / 4u;
-        if (word_addr_next < arrayLength(&memory)) {
-            write_phys_word(add64(pa, vec2<u32>(4u, 0u)), store_val.y);
-        }
+        write_phys_word(add64(pa, vec2<u32>(4u, 0u)), store_val.y);
     }
 
     write_phys_word(pa, new_word);
@@ -1858,15 +2085,13 @@ fn execute_lr(cpu: ptr<function, RiscvCPU>, instr: u32, funct3: u32) {
     let rs1 = (instr >> 15u) & 31u;
     let va = (*cpu).regs[rs1];
 
-    let pa = translate_va((*cpu).satp, va);
+    let pa = translate_va(cpu, va);
     if (pa.x == 0xFFFFFFFFu) {
-        (*cpu).running = 0u;
-        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        take_trap(cpu, vec2<u32>(CAUSE_LOAD_PAGE_FAULT, 0u), va);
         return;
     }
     if (is_uart_addr(pa)) {
-        (*cpu).running = 0u;
-        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        take_trap(cpu, vec2<u32>(CAUSE_LOAD_PAGE_FAULT, 0u), va);
         return;
     }
 
@@ -1895,15 +2120,13 @@ fn execute_sc(cpu: ptr<function, RiscvCPU>, instr: u32, funct3: u32) {
     let va = (*cpu).regs[rs1];
     let store_val = (*cpu).regs[rs2];
 
-    let pa = translate_va((*cpu).satp, va);
+    let pa = translate_va(cpu, va);
     if (pa.x == 0xFFFFFFFFu) {
-        (*cpu).running = 0u;
-        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        take_trap(cpu, vec2<u32>(CAUSE_STORE_PAGE_FAULT, 0u), va);
         return;
     }
     if (is_uart_addr(pa)) {
-        (*cpu).running = 0u;
-        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        take_trap(cpu, vec2<u32>(CAUSE_STORE_PAGE_FAULT, 0u), va);
         return;
     }
 
@@ -1932,15 +2155,13 @@ fn execute_amo(cpu: ptr<function, RiscvCPU>, instr: u32, funct3: u32, funct5: u3
     let rs2 = (instr >> 20u) & 31u;
 
     let va = (*cpu).regs[rs1];
-    let pa = translate_va((*cpu).satp, va);
+    let pa = translate_va(cpu, va);
     if (pa.x == 0xFFFFFFFFu) {
-        (*cpu).running = 0u;
-        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        take_trap(cpu, vec2<u32>(CAUSE_LOAD_PAGE_FAULT, 0u), va);
         return;
     }
     if (is_uart_addr(pa)) {
-        (*cpu).running = 0u;
-        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        take_trap(cpu, vec2<u32>(CAUSE_LOAD_PAGE_FAULT, 0u), va);
         return;
     }
 
@@ -2009,8 +2230,8 @@ fn execute_amo(cpu: ptr<function, RiscvCPU>, instr: u32, funct3: u32, funct5: u3
 }
 
 // ECALL Handling
-fn read_byte_from_memory(satp: vec2<u32>, addr: vec2<u32>) -> u32 {
-    let pa = translate_va(satp, addr);
+fn read_byte_from_memory(cpu: ptr<function, RiscvCPU>, addr: vec2<u32>) -> u32 {
+    let pa = translate_va(cpu, addr);
     if (pa.x == 0xFFFFFFFFu) {
         return 0u;
     }
@@ -2149,7 +2370,7 @@ fn execute_ecall(cpu: ptr<function, RiscvCPU>, cpu_id: u32) {
             let base_out = cpu_id * 256u;
             let byte_idx = (*cpu).output_ptr;
             for (var i = 0u; i < count; i = i + 1u) {
-                let char_val = read_byte_from_memory((*cpu).satp, add64(buf, vec2<u32>(i, 0u)));
+                let char_val = read_byte_from_memory(cpu, add64(buf, vec2<u32>(i, 0u)));
                 let word_idx = (byte_idx + i) / 4u;
                 let byte_in_word = (byte_idx + i) % 4u;
                 let mask = ~(0xFFu << (byte_in_word * 8u));
@@ -2184,19 +2405,62 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     var cpu = cpus[cpu_id];
 
-    if (cpu.running == 0u) {
-        return;
-    }
+    for (var step_iter = 0u; step_iter < max_instructions; step_iter = step_iter + 1u) {
+        if (cpu.running == 0u) {
+            break;
+        }
+        
+        if (cpu.instr_count >= max_instructions) {
+            // Budget for this dispatch exhausted - pause, don't halt.
+            // running stays 1 so the host can resume by dispatching again
+            // with a larger max_instructions; forcing a halt here (plus a
+            // marker write to output[cpu_id*256], which collides with the
+            // UART's own first word) made single-stepping and console
+            // content checks from the host impossible to distinguish from
+            // a real halt/trap. Genuine runaway detection belongs on the
+            // host side (it already tracks PC/instr_count across calls).
+            break;
+        }
 
-    if (cpu.instr_count >= max_instructions) {
-        cpu.running = 0u;
-        output[cpu_id * 256u] = 3735928559u;  // Timeout marker
-        cpus[cpu_id] = cpu;
-        return;
-    }
+        // === INTERRUPT DELIVERY ===
+        // Check for external interrupts from PLIC
+        let has_ext_irq = check_external_interrupt(&cpu);
 
-    // Fetch instruction with MMU translation
-    let instr = fetch_instruction(cpu.satp, cpu.pc);
+        // Update MIP external interrupt bits
+        var new_mip = cpu.mip;
+        if (has_ext_irq) {
+            // Set both MEIP (M-mode) and SEIP (S-mode) external interrupt bits
+            // xv6 runs S-mode, so SEIP is what matters
+            new_mip.x = new_mip.x | MIP_MEIP | MIP_SEIP;
+        } else {
+            new_mip.x = new_mip.x & ~(MIP_MEIP | MIP_SEIP);
+        }
+        cpu.mip = new_mip;
+
+        // Check if we should take an interrupt
+        // S-mode: check if SEIP is set and SIE is enabled (mstatus.sie bit 1)
+        // M-mode: check if MEIP is set and MIE is enabled (mstatus.mie bit 3)
+        let should_trap_s = (cpu.mip.x & MIP_SEIP) != 0u && (cpu.mstatus.x & 2u) != 0u && cpu.priv_mode == PRIV_S;
+        let should_trap_m = (cpu.mip.x & MIP_MEIP) != 0u && (cpu.mstatus.x & 8u) != 0u && cpu.priv_mode == PRIV_M;
+
+        if (should_trap_s) {
+            take_trap(&cpu, vec2<u32>(CAUSE_SUPERVISOR_EXTERNAL, 0u), cpu.pc);
+            continue;
+        } else if (should_trap_m) {
+            take_trap(&cpu, vec2<u32>(CAUSE_MACHINE_EXTERNAL, 0u), cpu.pc);
+            continue;
+        }
+
+        // Fetch instruction with MMU translation
+    let fetch = fetch_instruction(&cpu, cpu.pc);
+
+    // Check for instruction page fault
+    if (fetch.faulted) {
+        take_trap(&cpu, vec2<u32>(CAUSE_INSTR_PAGE_FAULT, 0u), cpu.pc);
+        continue;  // Trap changes pc, re-fetch next iteration
+    }
+    let instr = fetch.instr;
+
     let opcode = instr & 127u;
 
     if (opcode == OP_LUI) {
@@ -2376,7 +2640,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         handle_illegal(&cpu, instr, cpu_id);
     }
 
-    cpu.regs[0] = vec2<u32>(0u, 0u); // Ensure x0 is always 0
-    cpu.instr_count = cpu.instr_count + 1u;
+        cpu.regs[0] = vec2<u32>(0u, 0u); // Ensure x0 is always 0
+        cpu.instr_count = cpu.instr_count + 1u;
+    } // end of step loop
+
     cpus[cpu_id] = cpu;
 }

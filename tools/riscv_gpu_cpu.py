@@ -2,8 +2,7 @@
 Shared host-side mirror of `struct RiscvCPU` in RISCV_CPU_MMU.wgsl.
 
 Every harness must build its CPU state buffer from CPU_DTYPE so there is
-exactly one place to update when the WGSL struct changes. The struct is
-352 bytes; a size assert guards against drift.
+exactly one place to update when the WGSL struct changes.
 """
 
 import numpy as np
@@ -31,8 +30,15 @@ CPU_DTYPE = np.dtype([
     ('sscratch', np.uint32, 2),
     ('medeleg', np.uint32, 2),
     ('mideleg', np.uint32, 2),
+    ('virtio_status', np.uint32),    # 408
+    ('plic_pending', np.uint32),     # 412
+    ('plic_enable', np.uint32),      # 416
+    ('plic_claimed', np.uint32),     # 420
+    ('_pad1', np.uint32),            # 424
+    ('_pad2', np.uint32),            # 428 (pad to align WGSL struct to 432 bytes)
 ])
-assert CPU_DTYPE.itemsize == 408, f"CPU struct layout drifted: {CPU_DTYPE.itemsize}"
+
+assert CPU_DTYPE.itemsize == 432, f"CPU struct layout drifted: {CPU_DTYPE.itemsize}"
 
 SATP_MODE_SV39 = 8
 
@@ -65,7 +71,7 @@ def make_linux_boot_state(entry_point: int, dtb_addr: int):
     delegation programmed as firmware would leave it."""
     cpu = make_cpu_state(entry_point, priv_mode=1)
     cpu[0]['regs'][10] = [0, 0]  # a0 = hart 0
-    cpu[0]['regs'][11] = [dtb_addr & 0xFFFFFFFF, (dtb_addr >> 32) & 0xFFFFFFFF]
+    cpu[0]['regs'][11] = [dtb_addr & 0xFFFFFFFF, (dtb_addr >> 32) & 0xFFFFFFFF]  # a1 = DTB
     cpu[0]['medeleg'] = [MEDELEG_DEFAULT & 0xFFFFFFFF, 0]
     cpu[0]['mideleg'] = [MIDELEG_DEFAULT & 0xFFFFFFFF, 0]
     return cpu
