@@ -240,10 +240,18 @@ def create_gpu_boot_harness(pixels: np.ndarray, entry_point: int) -> dict:
     # Output buffer for UART console
     output_buffer = device.create_buffer(
         size=65536,
-        usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC,
+        usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC | wgpu.BufferUsage.COPY_DST,
     )
 
-    max_instructions = np.array([100000000], dtype=np.uint32)  # 500M instructions for kernel boot
+    # Input buffer for UART (inject keystrokes)
+    input_buffer = device.create_buffer(
+        size=1024,  # 256 * 4 bytes for uint32 array
+        usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST,
+        mapped_at_creation=False,
+    )
+    queue.write_buffer(input_buffer, 0, np.zeros(256, dtype=np.uint32).tobytes())
+
+    max_instructions = np.array([500000000], dtype=np.uint32)  # 500M for usertests
     uniform_buffer = device.create_buffer(
         size=max_instructions.nbytes,
         usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST,
@@ -256,6 +264,7 @@ def create_gpu_boot_harness(pixels: np.ndarray, entry_point: int) -> dict:
         {'binding': 1, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'storage'}},
         {'binding': 2, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'storage'}},
         {'binding': 3, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'uniform'}},
+        {'binding': 4, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'read-only-storage'}},
     ])
 
     bind_group = device.create_bind_group(
@@ -265,6 +274,7 @@ def create_gpu_boot_harness(pixels: np.ndarray, entry_point: int) -> dict:
             {'binding': 1, 'resource': {'buffer': cpu_buffer, 'offset': 0, 'size': cpu_state.nbytes}},
             {'binding': 2, 'resource': {'buffer': output_buffer, 'offset': 0, 'size': 65536}},
             {'binding': 3, 'resource': {'buffer': uniform_buffer, 'offset': 0, 'size': max_instructions.nbytes}},
+            {'binding': 4, 'resource': {'buffer': input_buffer, 'offset': 0, 'size': 1024}},
         ]
     )
 
@@ -283,14 +293,22 @@ def create_gpu_boot_harness(pixels: np.ndarray, entry_point: int) -> dict:
         'bind_group': bind_group,
         'cpu_buffer': cpu_buffer,
         'output_buffer': output_buffer,
+        'input_buffer': input_buffer,
         'cpu_layout': CPU_DTYPE,
     }
 
 
-def boot_xv6_on_gpu(elf_path: str):
-    """Main boot sequence."""
+def boot_xv6_on_gpu(elf_path: str, command: str = None):
+    """Main boot sequence.
+
+    Args:
+        elf_path: Path to xv6 kernel ELF
+        command: Optional command to inject after shell prompt (e.g., "usertests\n")
+    """
     print("=" * 70)
     print("XV6 RISC-V GPU BOOT - Phase 13")
+    if command:
+        print(f"Command to inject: {repr(command)}")
     print("=" * 70)
 
     # Build memory image
@@ -314,6 +332,9 @@ def boot_xv6_on_gpu(elf_path: str):
 
     last_pc = 0
     stale_count = 0
+    command_injected = False
+    last_output_ptr = 0
+    command_scan_start = 0
 
     for iteration in range(100000):
         encoder = device.create_command_encoder()
@@ -353,50 +374,37 @@ def boot_xv6_on_gpu(elf_path: str):
         if iteration % 100 == 0 or running == 0:
             print(f"    Iter {iteration:5d}: PC=0x{pc:016x}, running={running}, instr={instr_count}")
 
+        # Inject command after shell prompt appears
+        if command and not command_injected and running == 1:
+            output_data = np.frombuffer(
+                device.queue.read_buffer(output_buffer),
+                dtype=np.uint8
+            )
+            output_str = ''
+            for i in range(0, 16384, 4):
+                word = struct.unpack_from('<I', output_data[i:i+4])[0]
+                for b in word.to_bytes(4, 'little'):
+                    if b == 0:
+                        break
+                    if 32 <= b < 127 or b == ord('\n') or b == ord('\r'):
+                        output_str += chr(b)
+            if '$ ' in output_str[command_scan_start:]:
+                print(f"\n[!] Shell prompt detected, injecting command: {repr(command)}")
+                # Convert command to bytes and inject into input buffer
+                cmd_bytes = command.encode('utf-8')
+                cmd_array = np.zeros(256, dtype=np.uint32)
+                for i, b in enumerate(cmd_bytes):
+                    cmd_array[i] = b
+                queue.write_buffer(harness['input_buffer'], 0, cmd_array.tobytes())
+                command_injected = True
+                print(f"[!] Command injected, resuming...")
+                # Update scan position to avoid re-detecting
+                command_scan_start = len(output_str)
+
         if running == 0:
             break
-        if instr_count >= 60000005:
-            print(f'\n[!] Instruction limit {60000005} reached.')
-            break
-            print(f"\n    Halted after {instr_count} instructions")
-
-            def f64(name):
-                lo, hi = cpu_readback[name]
-                return (int(hi) << 32) | int(lo)
-
-            mepc, mcause, mtval = f64('mepc'), f64('mcause'), f64('mtval')
-            sepc, scause, stval = f64('sepc'), f64('scause'), f64('stval')
-            priv = int(cpu_readback['priv_mode'])
-            causes = {0: 'instr addr misaligned', 1: 'instr access fault',
-                      2: 'illegal instruction', 3: 'breakpoint',
-                      4: 'load addr misaligned', 5: 'load access fault',
-                      6: 'store addr misaligned', 7: 'store access fault',
-                      8: 'ecall from U', 9: 'ecall from S', 11: 'ecall from M',
-                      12: 'instr page fault', 13: 'load page fault', 15: 'store page fault'}
-            print("\n" + "=" * 70)
-            print("TRAP DUMP")
-            print("=" * 70)
-            print(f"    priv_mode = {priv} (0=U 1=S 3=M)")
-            print(f"    mepc      = 0x{mepc:016x}")
-            print(f"    mcause    = 0x{mcause:016x}  ({causes.get(mcause & 0xF, 'unknown')})")
-            print(f"    mtval     = 0x{mtval:016x}")
-            print(f"    sepc      = 0x{sepc:016x}")
-            print(f"    scause    = 0x{scause:016x}  ({causes.get(scause & 0xF, 'unknown')})")
-            print(f"    stval     = 0x{stval:016x}")
-            # If mtval/stval look like a 32-bit instruction word rather than
-            # an address, decode its opcode/funct3/funct7 for a quick read.
-            for label, val in (('mtval', mtval), ('stval', stval)):
-                if 0 < val <= 0xFFFFFFFF:
-                    op = val & 0x7F
-                    f3 = (val >> 12) & 0x7
-                    f7 = (val >> 25) & 0x7F
-                    print(f"    {label} as instr: opcode=0x{op:02x} funct3=0x{f3:x} funct7=0x{f7:02x}")
-            print(f"    MMU Fault Level: {cpu_readback['mmu_debug_fault_level']}")
-            print(f"    MMU L1 PTE: 0x{cpu_readback['mmu_debug_l1_pte'][1]:08x}_{cpu_readback['mmu_debug_l1_pte'][0]:08x}")
-            print(f"    MMU L2 PTE: 0x{cpu_readback['mmu_debug_l2_pte'][1]:08x}_{cpu_readback['mmu_debug_l2_pte'][0]:08x}")
-            print(f"    MMU L3 PTE: 0x{cpu_readback['mmu_debug_l3_pte'][1]:08x}_{cpu_readback['mmu_debug_l3_pte'][0]:08x}")
-            print(f"    MMU Fault VA: 0x{cpu_readback['mmu_debug_va'][1]:08x}_{cpu_readback['mmu_debug_va'][0]:08x}")
-            print("=" * 70)
+        if instr_count >= 500000000:
+            print(f'\n[!] Instruction limit 500000000 reached.')
             break
 
     # Read output (UART console)
@@ -433,18 +441,15 @@ def boot_xv6_on_gpu(elf_path: str):
     print(f"CPU running: {running}")
     print("=" * 70)
 
-
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print("Usage: python3 boot_xv6_gpu.py <xv6-kernel.elf>")
-        print("\nExample:")
-        print("  python3 boot_xv6_gpu.py /tmp/xv6-riscv/kernel/kernel")
+    import argparse
+    parser = argparse.ArgumentParser(description='Boot xv6-riscv on GPU RISC-V Emulator')
+    parser.add_argument('kernel', help='Path to xv6 kernel ELF')
+    parser.add_argument('--command', '-c', help='Command to inject after shell prompt')
+    args = parser.parse_args()
+
+    if not Path(args.kernel).exists():
+        print(f"Error: File not found: {args.kernel}")
         sys.exit(1)
 
-    elf_path = sys.argv[1]
-
-    if not Path(elf_path).exists():
-        print(f"Error: File not found: {elf_path}")
-        sys.exit(1)
-
-    boot_xv6_on_gpu(elf_path)
+    boot_xv6_on_gpu(args.kernel, args.command)

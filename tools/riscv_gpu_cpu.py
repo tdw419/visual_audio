@@ -41,7 +41,7 @@ CPU_DTYPE = np.dtype([
     ('plic_pending', np.uint32),
     ('plic_enable', np.uint32),
     ('plic_claimed', np.uint32),
-    ('_pad1', np.uint32),
+    ('uart_irq_delay', np.uint32),
 ])
 
 assert CPU_DTYPE.itemsize == 456, f"CPU struct layout drifted: {CPU_DTYPE.itemsize}"

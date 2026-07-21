@@ -435,9 +435,11 @@ const SATP_MODE_SV48: u32 = 9u;
 
 // UART Device (16550-compatible at 0x10000000)
 const UART_BASE: u32 = 0x10000000u;
-const UART_THR: u32 = 0x10000000u;  // Transmit Holding Register
+const UART_THR: u32 = 0x10000000u;  // Transmit Holding Register (write)
+const UART_RHR: u32 = 0x10000000u;  // Receive Holding Register (read)
 const UART_LSR: u32 = 0x10000005u;  // Line Status Register
 const UART_LSR_THRE: u32 = 32u;      // Transmit Holding Register Empty
+const UART_LSR_DR: u32 = 1u;         // Data Ready (input available)
 
 // PLIC (Platform-Level Interrupt Controller)
 const PLIC_BASE: u32 = 0x0c000000u;
@@ -467,6 +469,9 @@ const PHYS_BASE: u32 = 0x80000000u;
 @group(0) @binding(1) var<storage, read_write> cpus: array<RiscvCPU>;    // CPU states
 @group(0) @binding(2) var<storage, read_write> output: array<u32>;      // Output buffer
 @group(0) @binding(3) var<uniform> max_instructions: u32;               // Execution limit
+@group(0) @binding(4) var<storage, read> uart_input: array<u32>;        // UART input buffer
+
+var<private> uart_input_pos: u32 = 0u;  // Global input position
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -1937,14 +1942,26 @@ fn execute_load(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32) {
     
     // Check if this is a UART read
     if (is_uart_addr(pa)) {
-        // UART LSR (Line Status Register) - always ready
-        if (pa.x == UART_LSR) {
+        // UART RHR (Receive Holding Register) - read from input buffer
+        if (pa.x == UART_RHR) {
             if (decoded.rd != 0u) {
-                (*cpu).regs[decoded.rd] = vec2<u32>(UART_LSR_THRE, 0u);
+                if (uart_input_pos < 256u) {
+                    (*cpu).regs[decoded.rd] = vec2<u32>(uart_input[uart_input_pos], 0u);
+                    uart_input_pos = uart_input_pos + 1u;
+                } else {
+                    (*cpu).regs[decoded.rd] = vec2<u32>(0xFFFFFFFFu, 0u);  // No data
+                }
             }
         }
-        // UART THR reads as 0
+        // UART LSR (Line Status Register) - THRE always ready, DR if data available
+        else if (pa.x == UART_LSR) {
+            if (decoded.rd != 0u) {
+                let dr = select(0u, UART_LSR_DR, uart_input_pos < 256u && uart_input[uart_input_pos] != 0u);
+                (*cpu).regs[decoded.rd] = vec2<u32>(UART_LSR_THRE | dr, 0u);
+            }
+        }
         else {
+            // Other UART registers read as 0
             if (decoded.rd != 0u) {
                 (*cpu).regs[decoded.rd] = vec2<u32>(0u, 0u);
             }
