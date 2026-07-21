@@ -1,0 +1,13 @@
+# Remove C extension (compressed instructions) from kernel build
+# GPU emulator WGSL only supports RV64IMA, not RV64C
+--- a/Makefile
++++ b/Makefile
+@@ -92,7 +92,7 @@ QEMUOPTS = -machine virt -bios none -kernel kernel/kernel -m 128M \
+ 		-smp $(CPUS) -nographic -drive file=fs.img,if=none,format=raw,id=x0 \
+ 		-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
+
+-	$(CC) -march=rv64gc -mabi=lp64 -g -c -o $@ $<
++	$(CC) -march=rv64ima_zicsr_zifencei -mabi=lp64 -g -c -o $@ $<
+
+ # Include user makefile
+ include $U/Makefile
