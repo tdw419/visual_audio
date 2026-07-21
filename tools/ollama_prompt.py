@@ -24,6 +24,7 @@ The audit loop runs autonomously:
 """
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -519,6 +520,233 @@ def run_audit(project_root: str, output_path: str, model: str = "qwen2.5-coder:1
     return report
 
 
+class ContextualOllamaPrompter:
+    """
+    Context-aware Ollama prompter with container-specific memory.
+    
+    This class provides container self-awareness by maintaining separate
+    conversation histories for each container. It enables context persistence
+    across queries and sessions, allowing containers to remember their
+    previous interactions and maintain awareness of their own state.
+    
+    Key features:
+    - Container-isolated conversation histories
+    - Automatic context persistence to disk
+    - Context formatting for Ollama prompts
+    - Configurable history limits and auto-persistence
+    - Metadata tracking (container_id, timestamps)
+    
+    Example usage:
+        prompter = ContextualOllamaPrompter(container_id="my_container")
+        prompter.track_context("user", "What is the capital of France?")
+        response = prompter.query_ollama("Please answer.")
+        # Context persists automatically
+        followup = prompter.query_ollama("And what about Germany?")
+    """
+    
+    def __init__(
+        self,
+        container_id: str,
+        context_dir: Optional[str] = None,
+        auto_persist: bool = True,
+        max_history: Optional[int] = None,
+        max_tokens: int = 4096
+    ):
+        """
+        Initialize contextual prompter for a specific container.
+        
+        Args:
+            container_id: Unique identifier for this container
+            context_dir: Directory to store context files (default: ~/.hermes/container_context/)
+            auto_persist: Whether to automatically save context after each update
+            max_history: Maximum number of messages to keep (None = no limit)
+            max_tokens: Maximum tokens to keep in context (default: 4096)
+        """
+        self.container_id = container_id or "default"
+        
+        # Set up context directory
+        if context_dir is None:
+            context_dir = os.path.expanduser("~/.hermes/container_context")
+        self.context_dir = Path(context_dir)
+        self.context_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Configuration
+        self.auto_persist = auto_persist
+        self.max_history = max_history
+        
+        # Initialize conversation memory with container metadata
+        metadata = {
+            'container_id': self.container_id,
+            'created_at': datetime.now().isoformat()
+        }
+        self.memory = ConversationMemory(max_tokens=max_tokens, metadata=metadata)
+        
+        # Try to load existing context
+        self.load_context()
+    
+    def track_context(self, role: str, content: str):
+        """
+        Track a message in the conversation history.
+        
+        Args:
+            role: Message role (user, assistant, system)
+            content: Message content
+        """
+        # Add to memory
+        self.memory.add_message(role, content)
+        
+        # Enforce max_history limit if set
+        if self.max_history is not None:
+            history = self.memory.get_conversation_history()
+            if len(history) > self.max_history:
+                # Keep only the last max_history messages
+                # Rebuild memory with only recent messages
+                recent = history[-self.max_history:]
+                self.memory.clear()
+                for msg in recent:
+                    self.memory.add_message(msg['role'], msg['content'])
+        
+        # Auto-persist if enabled
+        if self.auto_persist:
+            self.save_context()
+    
+    def get_conversation_history(self) -> List[Dict]:
+        """
+        Get the full conversation history for this container.
+        
+        Returns:
+            List of message dicts with role, content, timestamp
+        """
+        return self.memory.get_conversation_history()
+    
+    def clear_context(self):
+        """Clear the conversation history for this container."""
+        self.memory.clear()
+        if self.auto_persist:
+            self.save_context()
+    
+    def history_to_prompt_string(self, max_messages: int = 20) -> str:
+        """
+        Convert conversation history to a readable prompt string.
+        
+        Args:
+            max_messages: Maximum number of messages to include
+            
+        Returns:
+            Formatted conversation as string
+        """
+        history = self.memory.get_last_n_messages(max_messages)
+        
+        lines = []
+        for msg in history:
+            role = msg['role'].upper()
+            content = msg['content']
+            lines.append(f"{role}: {content}")
+        
+        return "\n".join(lines)
+    
+    def get_context_for_ollama(self, max_messages: int = 20) -> List[Dict]:
+        """
+        Get conversation history formatted for Ollama API.
+        
+        Args:
+            max_messages: Maximum number of messages to include
+            
+        Returns:
+            List of message dicts with role and content
+        """
+        history = self.memory.get_last_n_messages(max_messages)
+        
+        # Format for Ollama: [{'role': 'user', 'content': '...'}, ...]
+        ollama_messages = []
+        for msg in history:
+            ollama_messages.append({
+                'role': msg['role'],
+                'content': msg['content']
+            })
+        
+        return ollama_messages
+    
+    def save_context(self) -> bool:
+        """
+        Save conversation history to disk.
+        
+        Returns:
+            True if save succeeded, False otherwise
+        """
+        try:
+            context_path = self.context_dir / f"{self.container_id}.json"
+            self.memory.save(str(context_path))
+            return True
+        except Exception:
+            return False
+    
+    def load_context(self) -> bool:
+        """
+        Load conversation history from disk.
+        
+        Returns:
+            True if load succeeded, False otherwise
+        """
+        try:
+            context_path = self.context_dir / f"{self.container_id}.json"
+            if context_path.exists():
+                self.memory.load(str(context_path))
+                return True
+        except Exception:
+            pass
+        return False
+    
+    def query_ollama(
+        self,
+        prompt: str,
+        model: str = "qwen2.5-coder:14b",
+        system_prompt: Optional[str] = None
+    ) -> str:
+        """
+        Query Ollama with full conversation context.
+        
+        This method automatically:
+        1. Formats the current prompt with conversation history
+        2. Sends to Ollama
+        3. Tracks the query and response in memory
+        
+        Args:
+            prompt: The current query
+            model: Ollama model to use
+            system_prompt: Optional system prompt
+            
+        Returns:
+            Ollama's response
+        """
+        # Track the user query
+        self.track_context("user", prompt)
+        
+        # Get response with context
+        response = prompt_ollama_with_context(
+            prompt,
+            memory=self.memory,
+            model=model,
+            system_prompt=system_prompt
+        )
+        
+        # Response is already tracked by prompt_ollama_with_context
+        return response
+    
+    def get_container_id(self) -> str:
+        """Get this prompter's container ID."""
+        return self.container_id
+    
+    def get_metadata(self) -> Dict:
+        """
+        Get conversation metadata.
+        
+        Returns:
+            Metadata dictionary including container_id, timestamps, etc.
+        """
+        return self.memory.get_metadata()
+
+
 class ConversationMemory:
     """
     Manages conversation history and context for Ollama queries.
@@ -626,7 +854,7 @@ class ConversationMemory:
     def save(self, path: str):
         """
         Save conversation history to disk.
-        
+
         Args:
             path: Path to save conversation JSON
         """
@@ -635,9 +863,10 @@ class ConversationMemory:
             'messages': self.messages,
             'token_count': self._token_count,
             'max_tokens': self.max_tokens,
-            'saved_at': datetime.now().isoformat()
+            'saved_at': datetime.now().isoformat(),
+            'history': self.messages  # For backward compatibility with tests
         }
-        
+
         with open(path, 'w') as f:
             json.dump(data, f, indent=2)
     

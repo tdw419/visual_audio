@@ -277,9 +277,10 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
     MEMORY_SIZE = MEMORY_SIZE_MB * 1024 * 1024  # 128MB
     PHYS_START = 0x80000000  # xv6 physical memory base
 
-    # Create memory array (4 bytes per pixel)
+    # Create memory array (4 bytes per pixel, RGBA layout)
+    # Each pixel is 4 bytes [R, G, B, A] = 4 uint32 values
     pixel_count = MEMORY_SIZE // 4
-    memory = np.zeros(pixel_count, dtype=np.uint32)
+    memory = np.zeros((pixel_count, 4), dtype=np.uint32)
 
     for seg in elf.get_loadable_segments():
         # Convert virtual address to physical offset
@@ -288,10 +289,31 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
             print(f"WARNING: Segment at 0x{seg['p_vaddr']:016x} out of memory range")
             continue
 
-        # Copy segment data
+        # Copy segment data to pixel memory (2D RGBA layout)
         data = elf.get_segment_data(seg)
-        word_count = (len(data) + 3) // 4  # Round up to whole words
-        memory[offset // 4: (offset // 4) + word_count] = np.frombuffer(data, dtype=np.uint32)
+        # Reshape byte data to pixel layout
+        start_pixel = offset // 4
+        start_byte = offset % 4
+
+        if start_byte == 0:
+            # Aligned - can copy efficiently
+            word_count = (len(data) + 3) // 4
+            byte_data = np.frombuffer(data, dtype=np.uint8)
+            # Reshape to (N, 4) and copy
+            padded_len = word_count * 4
+            if len(byte_data) < padded_len:
+                padded = np.zeros(padded_len, dtype=np.uint8)
+                padded[:len(byte_data)] = byte_data
+                byte_data = padded
+            pixel_data = byte_data.reshape(-1, 4)
+            memory[start_pixel:start_pixel + word_count] = pixel_data
+        else:
+            # Unaligned - use byte loop
+            for i, byte in enumerate(data):
+                pixel_idx = (offset + i) // 4
+                byte_idx = (offset + i) % 4
+                memory[pixel_idx, byte_idx] = byte
+
         print(f"  Loaded {seg['p_filesz']} bytes at 0x{seg['p_vaddr']:016x}")
 
         if seg['p_memsz'] > seg['p_filesz']:
@@ -306,23 +328,30 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
         print(f"  Loaded {fs_img_path.stat().st_size} bytes of fs.img at 0x81000000")
         fs_data = fs_img_path.read_bytes()
         fs_offset = 0x81000000 - PHYS_START
-        memory[fs_offset // 4: (fs_offset // 4) + len(fs_data) // 4] = np.frombuffer(fs_data, dtype=np.uint32)
+        start_pixel = fs_offset // 4
+        start_byte = fs_offset % 4
 
-    # [3] Convert to RGBA pixels. The shader's memory buffer is
-    # array<InstructionPixel> where each element is FOUR separate u32
-    # fields (r,g,b,a), one real byte's value in each - 16 bytes of GPU
-    # buffer per 4 bytes of actual RISC-V memory. `memory` above is a flat
-    # array of real 32-bit words; it must be decomposed into that byte
-    # layout, not uploaded as-is (that mismatch silently scrambled every
-    # loaded word into the wrong buffer location past the first few bytes).
-    print("\n[3] Converting to RGBA pixels...")
+        if start_byte == 0:
+            word_count = (len(fs_data) + 3) // 4
+            byte_data = np.frombuffer(fs_data, dtype=np.uint8)
+            padded_len = word_count * 4
+            if len(byte_data) < padded_len:
+                padded = np.zeros(padded_len, dtype=np.uint8)
+                padded[:len(byte_data)] = byte_data
+                byte_data = padded
+            pixel_data = byte_data.reshape(-1, 4)
+            memory[start_pixel:start_pixel + word_count] = pixel_data
+        else:
+            for i, byte in enumerate(fs_data):
+                pixel_idx = (fs_offset + i) // 4
+                byte_idx = (fs_offset + i) % 4
+                memory[pixel_idx, byte_idx] = byte
+
+    # [3] Memory is already in RGBA pixel layout (2D array)
+    # No conversion needed
+    print("\n[3] Memory in RGBA pixel layout...")
     print(f"  Memory: {MEMORY_SIZE_MB}MB ({pixel_count} pixels)")
     print(f"  Physical range: 0x{PHYS_START:016x} - 0x{PHYS_START + MEMORY_SIZE:016x}")
-    pixel_data = np.zeros((pixel_count, 4), dtype=np.uint32)
-    pixel_data[:, 0] = memory & 0xFF
-    pixel_data[:, 1] = (memory >> 8) & 0xFF
-    pixel_data[:, 2] = (memory >> 16) & 0xFF
-    pixel_data[:, 3] = (memory >> 24) & 0xFF
 
     # [4] Initialize GPU hardware
     print("\n[4] Initializing GPU...")
@@ -334,7 +363,7 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
     # control frequently. At ~10 MIPS this is roughly 0.2s/dispatch.
     max_instructions = 2_000_000
 
-    harness = create_gpu_hardware(pixel_data, cpu_state, max_instructions)
+    harness = create_gpu_hardware(memory, cpu_state, max_instructions)
     device = harness['device']
     queue = harness['queue']
 
