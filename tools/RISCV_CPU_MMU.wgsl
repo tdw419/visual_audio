@@ -56,6 +56,12 @@ struct RiscvCPU {
     plic_enable: u32,           // PLIC enable bits for hart 0
     plic_claimed: u32,          // Currently claimed IRQ (0 = none)
     uart_irq_delay: u32,       // Delay before UART IRQ
+    uart_input_ptr: u32,        // Bytes consumed from uart_input so far - guest-owned,
+                                 // must persist across dispatches (was a WGSL `private`
+                                 // var before, which reset to 0 every dispatch and made
+                                 // input unreadable past whatever fit in one batch)
+    uart_input_len: u32,        // Bytes currently available in uart_input - host-owned,
+                                 // the shader only ever reads this
 }
 
 // R-type instruction decoding
@@ -470,8 +476,6 @@ const PHYS_BASE: u32 = 0x80000000u;
 @group(0) @binding(2) var<storage, read_write> output: array<u32>;      // Output buffer
 @group(0) @binding(3) var<uniform> max_instructions: u32;               // Execution limit
 @group(0) @binding(4) var<storage, read> uart_input: array<u32>;        // UART input buffer
-
-var<private> uart_input_pos: u32 = 0u;  // Global input position
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -1939,15 +1943,16 @@ fn execute_load(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32) {
         take_trap(cpu, vec2<u32>(CAUSE_LOAD_PAGE_FAULT, 0u), va);
         return;
     }
-    
     // Check if this is a UART read
     if (is_uart_addr(pa)) {
         // UART RHR (Receive Holding Register) - read from input buffer
         if (pa.x == UART_RHR) {
             if (decoded.rd != 0u) {
-                if (uart_input_pos < 256u) {
-                    (*cpu).regs[decoded.rd] = vec2<u32>(uart_input[uart_input_pos], 0u);
-                    uart_input_pos = uart_input_pos + 1u;
+                let in_pos = (*cpu).uart_input_ptr;
+                let in_len = (*cpu).uart_input_len;
+                if (in_pos < in_len) {
+                    (*cpu).regs[decoded.rd] = vec2<u32>(uart_input[in_pos], 0u);
+                    (*cpu).uart_input_ptr = in_pos + 1u;
                 } else {
                     (*cpu).regs[decoded.rd] = vec2<u32>(0xFFFFFFFFu, 0u);  // No data
                 }
@@ -1956,7 +1961,9 @@ fn execute_load(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32) {
         // UART LSR (Line Status Register) - THRE always ready, DR if data available
         else if (pa.x == UART_LSR) {
             if (decoded.rd != 0u) {
-                let dr = select(0u, UART_LSR_DR, uart_input_pos < 256u && uart_input[uart_input_pos] != 0u);
+                let in_pos = (*cpu).uart_input_ptr;
+                let in_len = (*cpu).uart_input_len;
+                let dr = select(0u, UART_LSR_DR, in_pos < in_len);
                 (*cpu).regs[decoded.rd] = vec2<u32>(UART_LSR_THRE | dr, 0u);
             }
         }
@@ -2523,18 +2530,25 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
                 plic_raise_irq(&cpu, 10u);
             }
         }
-        
-        if (cpu.instr_count >= max_instructions) {
-            // Budget for this dispatch exhausted - pause, don't halt.
-            // running stays 1 so the host can resume by dispatching again
-            // with a larger max_instructions; forcing a halt here (plus a
-            // marker write to output[cpu_id*256], which collides with the
-            // UART's own first word) made single-stepping and console
-            // content checks from the host impossible to distinguish from
-            // a real halt/trap. Genuine runaway detection belongs on the
-            // host side (it already tracks PC/instr_count across calls).
-            break;
+
+        // RX-ready is level-triggered, same IRQ line as TX-complete (matches
+        // real 16550 behavior - the guest ISR reads LSR to tell them apart).
+        // plic_raise_irq is a pure OR onto plic_pending, so it's safe/cheap
+        // to call every instruction while there's unread input; it stays
+        // asserted until the guest actually drains uart_input via RHR reads.
+        if (cpu.uart_input_ptr < cpu.uart_input_len) {
+            plic_raise_irq(&cpu, 10u);
         }
+
+        // Per-dispatch budget is enforced purely by the `for` loop bound
+        // above (step_iter < max_instructions), not by comparing the
+        // lifetime cpu.instr_count against max_instructions - that was a
+        // stale leftover from before the loop bound became per-dispatch,
+        // and it silently turned max_instructions into a one-shot lifetime
+        // ceiling: once total instructions ever executed reached it, every
+        // later dispatch fell straight through with zero work done, no
+        // matter how much fresh budget the host thought it was granting.
+        // cpu.instr_count is now purely a diagnostic counter.
 
         // === INTERRUPT DELIVERY ===
         // Check for external interrupts from PLIC

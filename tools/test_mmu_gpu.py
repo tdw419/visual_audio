@@ -74,10 +74,13 @@ def main():
     output_buf = np.zeros(1024, dtype=np.uint32)
     max_inst = np.array([100], dtype=np.uint32)
 
+    input_words = np.zeros(256, dtype=np.uint32)
+
     buf_mem = device.create_buffer_with_data(data=mem_bytes, usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC)
     buf_cpu = device.create_buffer_with_data(data=cpu_state, usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC | wgpu.BufferUsage.COPY_DST)
     buf_out = device.create_buffer_with_data(data=output_buf, usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC)
     buf_uni = device.create_buffer_with_data(data=max_inst, usage=wgpu.BufferUsage.UNIFORM)
+    buf_input = device.create_buffer_with_data(data=input_words, usage=wgpu.BufferUsage.STORAGE)
 
     cshader = device.create_shader_module(code=shader_code)
     pipeline = device.create_compute_pipeline(
@@ -91,6 +94,7 @@ def main():
             {"binding": 1, "resource": {"buffer": buf_cpu, "offset": 0, "size": buf_cpu.size}},
             {"binding": 2, "resource": {"buffer": buf_out, "offset": 0, "size": buf_out.size}},
             {"binding": 3, "resource": {"buffer": buf_uni, "offset": 0, "size": buf_uni.size}},
+            {"binding": 4, "resource": {"buffer": buf_input, "offset": 0, "size": buf_input.size}},
         ]
     )
 

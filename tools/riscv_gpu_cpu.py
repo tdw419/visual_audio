@@ -42,9 +42,11 @@ CPU_DTYPE = np.dtype([
     ('plic_enable', np.uint32),
     ('plic_claimed', np.uint32),
     ('uart_irq_delay', np.uint32),
+    ('uart_input_ptr', np.uint32),  # guest-owned, persists across dispatches
+    ('uart_input_len', np.uint32),  # host-owned; shader only reads it
 ])
 
-assert CPU_DTYPE.itemsize == 456, f"CPU struct layout drifted: {CPU_DTYPE.itemsize}"
+assert CPU_DTYPE.itemsize == 464, f"CPU struct layout drifted: {CPU_DTYPE.itemsize}"
 
 SATP_MODE_SV39 = 8
 

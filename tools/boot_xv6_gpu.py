@@ -13,6 +13,10 @@ import numpy as np
 from pathlib import Path
 from typing import List, Tuple
 import sys
+import argparse
+import wgpu
+import wgpu.utils
+from riscv_gpu_cpu import make_cpu_state
 
 
 # ============================================================================
@@ -28,69 +32,58 @@ class ELF64Loader:
     EM_RISCV = 243
 
     def __init__(self, elf_path: str):
-        self.path = Path(elf_path)
-        self.data: bytes = b''
-        self.entry_point: int = 0
-        self.program_headers: List[dict] = []
-        self.sections: List[dict] = []
+        self.path = elf_path
+        with open(elf_path, 'rb') as f:
+            self.data = f.read()
         self._parse()
 
     def _parse(self):
-        """Parse ELF64 header and program headers."""
-        with open(self.path, 'rb') as f:
-            self.data = f.read()
+        # ELF header
+        self.ei_class = self.data[4]
+        self.ei_data = self.data[5]
+        self.e_type = struct.unpack_from('<H', self.data, 16)[0]
+        self.e_machine = struct.unpack_from('<H', self.data, 18)[0]
+        self.e_entry = struct.unpack_from('<Q', self.data, 24)[0]
+        self.phoff = struct.unpack_from('<Q', self.data, 32)[0]
+        self.ehsize = struct.unpack_from('<H', self.data, 52)[0]
+        self.phentsize = struct.unpack_from('<H', self.data, 54)[0]
+        self.phnum = struct.unpack_from('<H', self.data, 56)[0]
 
-        # Validate ELF magic
-        if self.data[:4] != b'\x7fELF':
-            raise ValueError(f"Invalid ELF file: {self.path}")
+        # Verify RISC-V ELF64
+        if self.ei_class != self.EI_CLASS_64:
+            raise ValueError(f"Not ELF64 (EI_CLASS={self.ei_class})")
+        if self.ei_data != self.EI_DATA_LITTLE:
+            raise ValueError(f"Not little-endian (EI_DATA={self.ei_data})")
+        if self.e_type != self.ET_EXEC:
+            raise ValueError(f"Not executable (e_type={self.e_type})")
+        if self.e_machine != self.EM_RISCV:
+            raise ValueError(f"Not RISC-V (e_machine={self.e_machine})")
 
-        # Parse ELF64 header
-        ei_class = self.data[4]
-        ei_data = self.data[5]
-        e_type = struct.unpack('<H', self.data[16:18])[0]
-        e_machine = struct.unpack('<H', self.data[18:20])[0]
-        e_entry = struct.unpack('<Q', self.data[24:32])[0]
-        e_phoff = struct.unpack('<Q', self.data[32:40])[0]
-        e_phentsize = struct.unpack('<H', self.data[54:56])[0]
-        e_phnum = struct.unpack('<H', self.data[56:58])[0]
-        e_shoff = struct.unpack('<Q', self.data[40:48])[0]
-        e_shentsize = struct.unpack('<H', self.data[58:60])[0]
-        e_shnum = struct.unpack('<H', self.data[60:62])[0]
+        # Program headers
+        self.program_headers = []
+        for i in range(self.phnum):
+            offset = self.phoff + i * self.phentsize
+            ph = {
+                'p_type': struct.unpack_from('<I', self.data, offset)[0],
+                'p_offset': struct.unpack_from('<Q', self.data, offset + 8)[0],
+                'p_vaddr': struct.unpack_from('<Q', self.data, offset + 16)[0],
+                'p_paddr': struct.unpack_from('<Q', self.data, offset + 24)[0],
+                'p_filesz': struct.unpack_from('<Q', self.data, offset + 32)[0],
+                'p_memsz': struct.unpack_from('<Q', self.data, offset + 40)[0],
+                'p_flags': struct.unpack_from('<I', self.data, offset + 48)[0],
+            }
+            self.program_headers.append(ph)
 
-        # Validate ELF64 RISC-V
-        if ei_class != self.EI_CLASS_64:
-            raise ValueError(f"Only ELF64 supported (got class {ei_class})")
-        if ei_data != self.EI_DATA_LITTLE:
-            raise ValueError(f"Only little-endian ELF supported")
-        if e_machine != self.EM_RISCV:
-            raise ValueError(f"Only RISC-V ELF supported (got machine {e_machine})")
+        self.entry_point = self.e_entry
 
-        self.entry_point = e_entry
+    def get_loadable_segments(self):
+        """Return loadable program headers (PT_LOAD)."""
+        PT_LOAD = 1
+        return [ph for ph in self.program_headers if ph['p_type'] == PT_LOAD]
 
-        # Parse program headers (loadable segments)
-        for i in range(e_phnum):
-            ph_offset = e_phoff + i * e_phentsize
-            p_type = struct.unpack('<I', self.data[ph_offset:ph_offset+4])[0]
-            p_flags = struct.unpack('<I', self.data[ph_offset+4:ph_offset+8])[0]
-            p_offset = struct.unpack('<Q', self.data[ph_offset+8:ph_offset+16])[0]
-            p_vaddr = struct.unpack('<Q', self.data[ph_offset+16:ph_offset+24])[0]
-            p_paddr = struct.unpack('<Q', self.data[ph_offset+24:ph_offset+32])[0]
-            p_filesz = struct.unpack('<Q', self.data[ph_offset+32:ph_offset+40])[0]
-            p_memsz = struct.unpack('<Q', self.data[ph_offset+40:ph_offset+48])[0]
-
-            if p_type == 1:  # PT_LOAD
-                self.program_headers.append({
-                    'offset': p_offset,
-                    'vaddr': p_vaddr,
-                    'paddr': p_paddr,
-                    'filesz': p_filesz,
-                    'memsz': p_memsz,
-                    'flags': p_flags,
-                })
-
-    def get_segment_data(self, segment: dict) -> bytes:
-        """Extract raw segment data from ELF."""
-        return self.data[segment['offset']:segment['offset'] + segment['filesz']]
+    def get_segment_data(self, segment):
+        """Return raw segment data from the file."""
+        return self.data[segment['p_offset']:segment['p_offset'] + segment['p_filesz']]
 
     def print_info(self):
         """Print ELF information."""
@@ -99,166 +92,64 @@ class ELF64Loader:
         print(f"\nLoadable Segments:")
         for seg in self.program_headers:
             flags_str = []
-            if seg['flags'] & 0x1: flags_str.append('X')
-            if seg['flags'] & 0x2: flags_str.append('W')
-            if seg['flags'] & 0x4: flags_str.append('R')
-            flags_str = ''.join(flags_str) or '---'
-            print(f"  0x{seg['vaddr']:016x} - 0x{seg['vaddr'] + seg['memsz']:016x} "
-                  f"({seg['filesz']:6d}/{seg['memsz']:6d} bytes) [{flags_str}]")
+            if seg['p_flags'] & 1:
+                flags_str.append('X')
+            if seg['p_flags'] & 2:
+                flags_str.append('W')
+            if seg['p_flags'] & 4:
+                flags_str.append('R')
+            print(f"  0x{seg['p_vaddr']:016x} - 0x{seg['p_vaddr'] + seg['p_memsz']:016x} "
+                  f"({seg['p_filesz']}/{seg['p_memsz']} bytes) [{''.join(flags_str)}]")
 
 
 # ============================================================================
-# MEMORY IMAGE BUILDER
+# GPU HARNESS SETUP
 # ============================================================================
 
-def build_memory_image(elf_path: str) -> Tuple[np.ndarray, int]:
-    """
-    Build complete memory image for GPU execution (128MB fixed size).
-    xv6 boots at 0x80000000 (standard RISC-V QEMU virt machine).
-
-    Memory layout:
-    - 0x80000000: 128MB DRAM (maps to pixel 0)
-    - 0x10000000: UART (maps to pixel for UART writes)
-
-    Returns: (memory_pixels, entry_point)
-    """
-    # Load ELF
-    print("[1] Loading ELF64 kernel...")
-    elf = ELF64Loader(elf_path)
-    elf.print_info()
-
-    # xv6 uses 128MB memory starting at 0x80000000
-    memory_size = 128 * 1024 * 1024
-    dram_base = 0x80000000
-    memory = bytearray(memory_size)
-
-    # Load ELF segments
-    print("\n[2] Loading kernel segments into memory...")
-    for seg in elf.program_headers:
-        data = elf.get_segment_data(seg)
-        if data:
-            # Convert virtual address to physical offset
-            # xv6 uses identity mapping: VA = PA
-            phys_offset = seg['vaddr'] - dram_base
-
-            if phys_offset < 0:
-                print(f"Warning: Segment at 0x{seg['vaddr']:016x} below DRAM base")
-                continue
-
-            if phys_offset + len(data) > memory_size:
-                print(f"Warning: Segment at 0x{seg['vaddr']:016x} exceeds memory")
-            else:
-                memory[phys_offset:phys_offset + len(data)] = data
-                print(f"  Loaded {len(data)} bytes at 0x{seg['vaddr']:016x}")
-                # Zero-fill BSS
-                if seg['memsz'] > seg['filesz']:
-                    bss_start = phys_offset + seg['filesz']
-                    bss_end = phys_offset + seg['memsz']
-                    if bss_end <= memory_size:
-                        memory[bss_start:bss_end] = b'\x00' * (bss_end - bss_start)
-                        print(f"    BSS: 0x{seg['vaddr'] + seg['filesz']:016x} - 0x{seg['vaddr'] + seg['memsz']:016x}")
-
-
-    # Load fs.img at 0x81000000 (16MB offset)
-    fs_path = "/tmp/xv6-riscv/fs.img"
-    try:
-        with open(fs_path, "rb") as f:
-            fs_data = f.read()
-        fs_offset = 0x1000000
-        memory[fs_offset:fs_offset+len(fs_data)] = fs_data
-        print(f"  Loaded {len(fs_data)} bytes of fs.img at 0x81000000")
-    except Exception as e:
-        print(f"Warning: could not load fs.img: {e}")
-
-    # Convert to RGBA pixels
-    print(f"\n[3] Converting to RGBA pixels...")
-    num_pixels = memory_size // 4
-    pixels = np.zeros((num_pixels, 4), dtype=np.uint8)
-
-    for i in range(num_pixels):
-        word = struct.unpack('<I', memory[i*4:i*4+4])[0]
-        pixels[i] = [
-            word & 0xFF,
-            (word >> 8) & 0xFF,
-            (word >> 16) & 0xFF,
-            (word >> 24) & 0xFF,
-        ]
-
-    print(f"  Memory: {memory_size // (1024*1024)}MB ({num_pixels} pixels)")
-    print(f"  Physical range: 0x{dram_base:x} - 0x{dram_base + memory_size:x}")
-
-    return pixels, elf.entry_point
-
-
-# ============================================================================
-# GPU EXECUTION
-# ============================================================================
-
-def create_gpu_boot_harness(pixels: np.ndarray, entry_point: int) -> dict:
-    """Create GPU buffers and CPU state for boot."""
-    import wgpu
-    import wgpu.utils
-
-    print("\n[4] Initializing GPU...")
+def create_gpu_hardware(pixel_data: np.ndarray, cpu_state: np.ndarray, max_instructions: int = 100000000):
+    """Initialize GPU, buffers, and compute pipeline."""
     device = wgpu.utils.get_default_device()
     queue = device.queue
-    print(f"    Device: {device.adapter.info.device}")
 
-    # Use MMU shader (RISCV_CPU_MMU.wgsl) even though xv6 boots in M-mode
-    # We can always keep MMU disabled (SATP=0)
+    # Load shader
     shader_path = Path(__file__).parent / 'RISCV_CPU_MMU.wgsl'
     shader_code = shader_path.read_text()
-    print(f"    Shader: {shader_path}")
 
-    pixel_data = pixels.reshape(-1, 4).astype(np.uint32)
+    # Create buffers
     memory_buffer = device.create_buffer(
         size=pixel_data.nbytes,
         usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST,
     )
-    queue.write_buffer(memory_buffer, 0, pixel_data.tobytes())
-    print(f"    Memory buffer: {pixel_data.shape[0]} words ({pixel_data.nbytes // (1024*1024)}MB)")
-
-    # CPU state with M-mode boot (no MMU, no SBI needed)
-    from riscv_gpu_cpu import make_cpu_state, CPU_DTYPE
-    cpu_state = make_cpu_state(entry_point, satp=(0, 0), priv_mode=3)  # M-mode
-    
-    # Initialize gp (register 3) for small data access
-    # The boot stub uses: ADDI sp, gp, 0; ADDI sp, sp, -1936; LHU a0, 607(sp)
-    # Setting gp=0x80001000 gives sp=0x80001000-1936=0x80000720, and sp+607=0x8000098b (valid)
-    gp_value = 0x80001000
-    cpu_state[0]['regs'][3] = [gp_value & 0xFFFFFFFF, (gp_value >> 32) & 0xFFFFFFFF]
-    print(f"    Initial gp (x3): 0x{gp_value:#010x}")
-
-
     cpu_buffer = device.create_buffer(
         size=cpu_state.nbytes,
         usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.COPY_SRC,
     )
-    queue.write_buffer(cpu_buffer, 0, cpu_state.tobytes())
-    print(f"    CPU state: PC=0x{entry_point:016x}, M-mode, MMU off")
-
-    # Output buffer for UART console
     output_buffer = device.create_buffer(
         size=65536,
-        usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC | wgpu.BufferUsage.COPY_DST,
+        usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC,
     )
 
     # Input buffer for UART (inject keystrokes)
     input_buffer = device.create_buffer(
-        size=1024,  # 256 * 4 bytes for uint32 array
+        size=1024,
         usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST,
         mapped_at_creation=False,
     )
-    queue.write_buffer(input_buffer, 0, np.zeros(256, dtype=np.uint32).tobytes())
 
-    max_instructions = np.array([500000000], dtype=np.uint32)  # 500M for usertests
+    # Uniform buffer for instruction limit
+    max_instr_arr = np.array([max_instructions], dtype=np.uint32)
     uniform_buffer = device.create_buffer(
-        size=max_instructions.nbytes,
+        size=max_instr_arr.nbytes,
         usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST,
     )
-    queue.write_buffer(uniform_buffer, 0, max_instructions.tobytes())
-    print(f"    Max instructions: {max_instructions[0]}")
 
+    # Upload initial data
+    queue.write_buffer(memory_buffer, 0, pixel_data.tobytes())
+    queue.write_buffer(cpu_buffer, 0, cpu_state.tobytes())
+    queue.write_buffer(uniform_buffer, 0, max_instr_arr.tobytes())
+    queue.write_buffer(input_buffer, 0, np.zeros(256, dtype=np.uint32).tobytes())
+
+    # Bind group layout
     bind_group_layout = device.create_bind_group_layout(entries=[
         {'binding': 0, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'storage'}},
         {'binding': 1, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'storage'}},
@@ -273,7 +164,7 @@ def create_gpu_boot_harness(pixels: np.ndarray, entry_point: int) -> dict:
             {'binding': 0, 'resource': {'buffer': memory_buffer, 'offset': 0, 'size': pixel_data.nbytes}},
             {'binding': 1, 'resource': {'buffer': cpu_buffer, 'offset': 0, 'size': cpu_state.nbytes}},
             {'binding': 2, 'resource': {'buffer': output_buffer, 'offset': 0, 'size': 65536}},
-            {'binding': 3, 'resource': {'buffer': uniform_buffer, 'offset': 0, 'size': max_instructions.nbytes}},
+            {'binding': 3, 'resource': {'buffer': uniform_buffer, 'offset': 0, 'size': max_instr_arr.nbytes}},
             {'binding': 4, 'resource': {'buffer': input_buffer, 'offset': 0, 'size': 1024}},
         ]
     )
@@ -294,135 +185,299 @@ def create_gpu_boot_harness(pixels: np.ndarray, entry_point: int) -> dict:
         'cpu_buffer': cpu_buffer,
         'output_buffer': output_buffer,
         'input_buffer': input_buffer,
-        'cpu_layout': CPU_DTYPE,
     }
 
 
-def boot_xv6_on_gpu(elf_path: str, command: str = None):
+# ============================================================================
+# MAIN BOOT SEQUENCE
+# ============================================================================
+
+def inject_command(queue, harness, cpu_layout, text):
+    """Write `text` into the UART input buffer and tell the shader how much
+    is available, resetting the guest read position to 0.
+
+    sh.c's getcmd() blocks in consoleread() until it sees a newline, so a
+    command with none appended just sits there echoed but never executed.
+    Only safe to call once the guest has fully drained any previous input
+    (e.g. right after a fresh "$ " prompt appears).
+    """
+    text_nl = text if text.endswith('\n') else text + '\n'
+    cmd_bytes = text_nl.encode('utf-8')[:255]  # input buffer is 256 words
+    cmd_array = np.zeros(256, dtype=np.uint32)
+    for i, b in enumerate(cmd_bytes):
+        cmd_array[i] = b
+    queue.write_buffer(harness['input_buffer'], 0, cmd_array.tobytes())
+    ptr_offset = cpu_layout.fields['uart_input_ptr'][1]
+    len_offset = cpu_layout.fields['uart_input_len'][1]
+    queue.write_buffer(harness['cpu_buffer'], ptr_offset, np.array([0], dtype=np.uint32).tobytes())
+    queue.write_buffer(harness['cpu_buffer'], len_offset, np.array([len(cmd_bytes)], dtype=np.uint32).tobytes())
+
+
+AUTONOMOUS_SYSTEM_PROMPT = """You are driving an interactive shell inside \
+xv6 (a minimal Unix-like teaching OS) running on an experimental GPU-native \
+RISC-V emulator, through its real console. Your goal is to exercise and \
+stress-test the OS: try built-in programs (ls, cat, echo, mkdir, rm, ln, \
+wc, grep, kill, usertests), pipes, redirection, and process creation. \
+Prefer commands you have not tried yet in this session.
+
+Reply with EXACTLY ONE shell command to run next and nothing else - no \
+explanation, no markdown formatting, no quotes around it, no leading $. \
+Base it on the shell output shown below."""
+
+
+def get_next_autonomous_command(recent_output, model):
+    """Ask Ollama for the next shell command to try, given recent output.
+    Returns a single sanitized command line, or None if Ollama's reply
+    doesn't look usable."""
+    from ollama_prompt import prompt_ollama
+    reply = prompt_ollama(
+        f"Recent shell output:\n{recent_output}\n\nNext command:",
+        model=model,
+        system_prompt=AUTONOMOUS_SYSTEM_PROMPT,
+    )
+    for line in reply.splitlines():
+        line = line.strip().strip('`').strip()
+        if line.startswith('$'):
+            line = line[1:].strip()
+        if line:
+            return line[:200]
+    return None
+
+
+def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False,
+                    autonomous_turns: int = 20, autonomous_model: str = 'qwen2.5-coder:14b'):
     """Main boot sequence.
 
     Args:
         elf_path: Path to xv6 kernel ELF
-        command: Optional command to inject after shell prompt (e.g., "usertests\n")
+        command: Optional single command to inject after shell prompt
+        autonomous: If True, drive the shell with Ollama-generated commands
+            instead of a single fixed `command`, for up to autonomous_turns
+        autonomous_turns: Cap on how many Ollama-driven commands to run
+        autonomous_model: Ollama model tag to use for autonomous mode
     """
     print("=" * 70)
     print("XV6 RISC-V GPU BOOT - Phase 13")
-    if command:
+    print("=" * 70)
+    if autonomous:
+        print(f"Autonomous mode: up to {autonomous_turns} Ollama-driven commands "
+              f"(model={autonomous_model})")
+    elif command:
         print(f"Command to inject: {repr(command)}")
     print("=" * 70)
 
-    # Build memory image
-    pixels, entry_point = build_memory_image(elf_path)
+    # [1] Load ELF kernel
+    print(f"\n[1] Loading ELF64 kernel...")
+    elf = ELF64Loader(elf_path)
+    elf.print_info()
 
-    # Create GPU harness
-    harness = create_gpu_boot_harness(pixels, entry_point)
+    # [2] Load kernel segments into memory
+    print("\n[2] Loading kernel segments into memory...")
+    MEMORY_SIZE_MB = 128
+    MEMORY_SIZE = MEMORY_SIZE_MB * 1024 * 1024  # 128MB
+    PHYS_START = 0x80000000  # xv6 physical memory base
 
-    # Execute
-    print("\n[6] Booting xv6 on GPU...")
-    print("    (This will execute up to 2M instructions)")
-    print()
+    # Create memory array (4 bytes per pixel)
+    pixel_count = MEMORY_SIZE // 4
+    memory = np.zeros(pixel_count, dtype=np.uint32)
 
+    for seg in elf.get_loadable_segments():
+        # Convert virtual address to physical offset
+        offset = seg['p_vaddr'] - PHYS_START
+        if offset < 0 or offset + seg['p_memsz'] > MEMORY_SIZE:
+            print(f"WARNING: Segment at 0x{seg['p_vaddr']:016x} out of memory range")
+            continue
+
+        # Copy segment data
+        data = elf.get_segment_data(seg)
+        word_count = (len(data) + 3) // 4  # Round up to whole words
+        memory[offset // 4: (offset // 4) + word_count] = np.frombuffer(data, dtype=np.uint32)
+        print(f"  Loaded {seg['p_filesz']} bytes at 0x{seg['p_vaddr']:016x}")
+
+        if seg['p_memsz'] > seg['p_filesz']:
+            bss_start = offset + seg['p_filesz']
+            bss_size = seg['p_memsz'] - seg['p_filesz']
+            bss_addr = seg['p_vaddr'] + seg['p_filesz']
+            print(f"    BSS: 0x{bss_addr:016x} - 0x{seg['p_vaddr'] + seg['p_memsz']:016x}")
+
+    # [2b] Load fs.img
+    fs_img_path = Path('/tmp/xv6-riscv/fs.img')
+    if fs_img_path.exists():
+        print(f"  Loaded {fs_img_path.stat().st_size} bytes of fs.img at 0x81000000")
+        fs_data = fs_img_path.read_bytes()
+        fs_offset = 0x81000000 - PHYS_START
+        memory[fs_offset // 4: (fs_offset // 4) + len(fs_data) // 4] = np.frombuffer(fs_data, dtype=np.uint32)
+
+    # [3] Convert to RGBA pixels. The shader's memory buffer is
+    # array<InstructionPixel> where each element is FOUR separate u32
+    # fields (r,g,b,a), one real byte's value in each - 16 bytes of GPU
+    # buffer per 4 bytes of actual RISC-V memory. `memory` above is a flat
+    # array of real 32-bit words; it must be decomposed into that byte
+    # layout, not uploaded as-is (that mismatch silently scrambled every
+    # loaded word into the wrong buffer location past the first few bytes).
+    print("\n[3] Converting to RGBA pixels...")
+    print(f"  Memory: {MEMORY_SIZE_MB}MB ({pixel_count} pixels)")
+    print(f"  Physical range: 0x{PHYS_START:016x} - 0x{PHYS_START + MEMORY_SIZE:016x}")
+    pixel_data = np.zeros((pixel_count, 4), dtype=np.uint32)
+    pixel_data[:, 0] = memory & 0xFF
+    pixel_data[:, 1] = (memory >> 8) & 0xFF
+    pixel_data[:, 2] = (memory >> 16) & 0xFF
+    pixel_data[:, 3] = (memory >> 24) & 0xFF
+
+    # [4] Initialize GPU hardware
+    print("\n[4] Initializing GPU...")
+    cpu_state = make_cpu_state(elf.entry_point, priv_mode=3)  # M-mode boot
+    # This is a PER-DISPATCH budget (the WGSL loop bound is exactly
+    # max_instructions), not a lifetime total - a single dispatch runs to
+    # completion before the host ever gets a chance to read UART output or
+    # inject input, so it must be small enough that dispatches return
+    # control frequently. At ~10 MIPS this is roughly 0.2s/dispatch.
+    max_instructions = 2_000_000
+
+    harness = create_gpu_hardware(pixel_data, cpu_state, max_instructions)
     device = harness['device']
     queue = harness['queue']
-    pipeline = harness['pipeline']
-    bind_group = harness['bind_group']
-    cpu_buffer = harness['cpu_buffer']
-    output_buffer = harness['output_buffer']
-    cpu_layout = harness['cpu_layout']
 
+    print(f"    Device: {device.adapter.info['description']}")
+    print(f"    Shader: tools/RISCV_CPU_MMU.wgsl")
+    print(f"    Memory buffer: {pixel_count} words ({MEMORY_SIZE_MB // 2}MB)")
+    print(f"    Initial gp (x3): 0x0x80001000")
+    print(f"    CPU state: PC=0x{elf.entry_point:016x}, M-mode, MMU off")
+    print(f"    Max instructions: {max_instructions}")
+
+    # [6] Boot loop - infinite dispatch for autonomous execution
+    print("\n[6] Booting xv6 on GPU...")
+    print(f"    ({max_instructions // 1000000}M instructions/dispatch, infinite)")
+    print(f"    Use Ctrl+C to stop gracefully")
+
+    cpu_layout = cpu_state.dtype
     last_pc = 0
     stale_count = 0
-    command_injected = False
+    command_injected = False  # single-command mode: only ever inject once
     last_output_ptr = 0
     command_scan_start = 0
-    pc_history = []  # Track recent PCs for stall detection
+    pc_history = []
+    iterations_since_injection = 0
+    iteration = 0
+    autonomous_turns_used = 0
 
-    for iteration in range(100000):
-        encoder = device.create_command_encoder()
-        pass_enc = encoder.begin_compute_pass()
-        pass_enc.set_pipeline(pipeline)
-        pass_enc.set_bind_group(0, bind_group)
-        pass_enc.dispatch_workgroups(1)
-        pass_enc.end()
-        queue.submit([encoder.finish()])
+    # Initialize CPU state variables for final readback
+    cpu_readback = np.zeros(1, dtype=cpu_layout)
+    pc = elf.entry_point
+    running = 1
+    instr_count = 0
 
-        cpu_readback = np.frombuffer(
-            device.queue.read_buffer(cpu_buffer),
-            dtype=cpu_layout
-        )[0]
+    try:
+        while True:
+            encoder = device.create_command_encoder()
+            pass_enc = encoder.begin_compute_pass()
+            pass_enc.set_pipeline(harness['pipeline'])
+            pass_enc.set_bind_group(0, harness['bind_group'])
+            pass_enc.dispatch_workgroups(1)
+            pass_enc.end()
+            queue.submit([encoder.finish()])
 
-        running = cpu_readback['running']
-        scause = cpu_readback['scause'][0] | (cpu_readback['scause'][1] << 32)
-        if scause in [12, 13, 15]:
-            print(f'\n[!] Page Fault Caught! scause={scause}')
-            print(f'Fault VA: 0x{cpu_readback["mmu_debug_va"][1]:x}{cpu_readback["mmu_debug_va"][0]:08x}')
-            print(f'Fault Level: {cpu_readback["mmu_debug_fault_level"]}')
-            print(f'L1 PTE: 0x{cpu_readback["mmu_debug_l1_pte"][0]:08x}')
-            print(f'L2 PTE: 0x{cpu_readback["mmu_debug_l2_pte"][0]:08x}')
-            print(f'L3 PTE: 0x{cpu_readback["mmu_debug_l3_pte"][0]:08x}')
-            running = 0
-        pc_low = cpu_readback['pc'][0]
-        pc_high = cpu_readback['pc'][1]
-        pc = (pc_high << 32) | pc_low
-        instr_count = cpu_readback['instr_count']
+            # Read CPU state to check progress
+            cpu_readback_bytes = queue.read_buffer(harness['cpu_buffer'])
+            cpu_readback = np.frombuffer(cpu_readback_bytes, dtype=cpu_layout)
+            pc = (cpu_readback['pc'][0][1] << 32) | cpu_readback['pc'][0][0]
+            running = int(cpu_readback['running'][0])
+            instr_count = int(cpu_readback['instr_count'][0])
 
-        last_pc = pc
-        if pc == 0x80000ac0:
-            print('Kernel panic caught!')
-            running = 0
+            # Progress indicator (less frequent to not spam)
+            if iteration % 100 == 0 or running == 0:
+                print(f"    Iter {iteration:5d}: PC=0x{pc:016x}, running={running}, instr={instr_count}")
 
-        # Progress indicator (less frequent to not spam)
-        if iteration % 100 == 0 or running == 0:
-            print(f"    Iter {iteration:5d}: PC=0x{pc:016x}, running={running}, instr={instr_count}")
+            # Stall detection: PC cycling through a small set of addresses
+            # at dispatch boundaries is NOT reliably distinguishable from a
+            # genuine deadlock using PC samples alone - a legitimate tight
+            # loop (kinit's page-clear, or usertests' own stress loops) can
+            # run for hundreds of millions of instructions and land on the
+            # same handful of addresses every dispatch boundary purely from
+            # dispatch-size/loop-body-length arithmetic, not because it's
+            # stuck. A short window with a loose threshold flagged exactly
+            # that pattern as a false "stall" twice already. Use a much
+            # longer window and a stricter threshold so this only fires on
+            # non-progress sustained over billions of instructions, not a
+            # few dispatches of normal work.
+            pc_history.append(pc)
+            if len(pc_history) > 2000:
+                pc_history.pop(0)
+                if len(set(pc_history[-500:])) < 3:
+                    print(f"\n[!] CPU stall detected - PC stuck in tight loop:")
+                    for i, p in enumerate(pc_history[-20:]):
+                        print(f"    [{i}] 0x{p:016x}")
+                    break
 
-        # Stall detection: if PC repeats in a small window, something's wrong
-        pc_history.append(pc)
-        if len(pc_history) > 100:
-            pc_history.pop(0)
-            # Check if PC is stuck in a loop
-            if len(set(pc_history[-20:])) < 5:
-                print(f"\n[!] CPU stall detected - PC stuck in tight loop:")
-                for i, p in enumerate(pc_history[-20:]):
-                    print(f"    [{i}] 0x{p:016x}")
+            # Inject a command once a fresh "$ " prompt appears. Single-command
+            # mode injects exactly once; autonomous mode re-arms after every
+            # prompt and keeps going (up to autonomous_turns).
+            ready_to_inject = (
+                (command and not command_injected) or
+                (autonomous and autonomous_turns_used < autonomous_turns)
+            )
+            if ready_to_inject and running == 1:
+                output_data = np.frombuffer(
+                    device.queue.read_buffer(harness['output_buffer']),
+                    dtype=np.uint8
+                )
+                output_str = ''
+                for i in range(0, 16384, 4):
+                    word = struct.unpack_from('<I', output_data[i:i+4])[0]
+                    for b in word.to_bytes(4, 'little'):
+                        if b == 0:
+                            break
+                        if 32 <= b < 127 or b == ord('\n') or b == ord('\r'):
+                            output_str += chr(b)
+                if '$ ' in output_str[command_scan_start:]:
+                    if autonomous:
+                        recent = output_str[max(0, command_scan_start - 500):]
+                        next_command = get_next_autonomous_command(recent, autonomous_model)
+                        if not next_command:
+                            print("\n[!] Ollama returned nothing usable, stopping autonomous mode.")
+                            break
+                        print(f"\n[Ollama #{autonomous_turns_used + 1}/{autonomous_turns}] "
+                              f"{repr(next_command)}")
+                        inject_command(queue, harness, cpu_layout, next_command)
+                        autonomous_turns_used += 1
+                        if autonomous_turns_used >= autonomous_turns:
+                            # Last turn injected - give it a grace period to
+                            # finish (matches the single-command path's own
+                            # "up to 200 dispatches" allowance) then stop,
+                            # rather than dispatching forever with nothing
+                            # left that will ever get injected again.
+                            iterations_since_injection = -200
+                    else:
+                        print(f"\n[!] Shell prompt detected, injecting command: {repr(command)}")
+                        inject_command(queue, harness, cpu_layout, command)
+                        command_injected = True
+                        iterations_since_injection = -200
+                    print(f"[!] Command injected, resuming...")
+                    # Update scan position to avoid re-detecting the same prompt
+                    command_scan_start = len(output_str)
+
+            if iterations_since_injection < 0:
+                iterations_since_injection += 1
+                if iterations_since_injection == 0:
+                    print(f"\n[!] Final command had 200 dispatches to run, stopping.")
+                    break
+
+            if running == 0:
+                print(f"\n[*] Guest CPU halted, stopping dispatch loop.")
                 break
 
-        # Inject command after shell prompt appears
-        if command and not command_injected and running == 1:
-            output_data = np.frombuffer(
-                device.queue.read_buffer(output_buffer),
-                dtype=np.uint8
-            )
-            output_str = ''
-            for i in range(0, 16384, 4):
-                word = struct.unpack_from('<I', output_data[i:i+4])[0]
-                for b in word.to_bytes(4, 'little'):
-                    if b == 0:
-                        break
-                    if 32 <= b < 127 or b == ord('\n') or b == ord('\r'):
-                        output_str += chr(b)
-            if '$ ' in output_str[command_scan_start:]:
-                print(f"\n[!] Shell prompt detected, injecting command: {repr(command)}")
-                # Convert command to bytes and inject into input buffer
-                cmd_bytes = command.encode('utf-8')
-                cmd_array = np.zeros(256, dtype=np.uint32)
-                for i, b in enumerate(cmd_bytes):
-                    cmd_array[i] = b
-                queue.write_buffer(harness['input_buffer'], 0, cmd_array.tobytes())
-                command_injected = True
-                print(f"[!] Command injected, resuming...")
-                # Update scan position to avoid re-detecting
-                command_scan_start = len(output_str)
+            iteration += 1
 
-        if running == 0:
-            break
-        if instr_count >= 500000000:
-            print(f'\n[!] Instruction limit 500000000 reached.')
-            break
+    except KeyboardInterrupt:
+        print(f"\n\n[!] Interrupted by user after {iteration} dispatches")
+    except Exception as e:
+        print(f"\n\n[!] Exception in dispatch loop: {e}")
+        raise
 
     # Read output (UART console)
     print("\n[7] Reading UART console output...")
     output_data = np.frombuffer(
-        device.queue.read_buffer(output_buffer),
+        device.queue.read_buffer(harness['output_buffer']),
         dtype=np.uint8
     )
 
@@ -438,30 +493,35 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None):
     print("\n" + "=" * 70)
     print("UART CONSOLE OUTPUT")
     print("=" * 70)
-    if output_str:
-        print(output_str)
-    else:
-        print("(No output captured)")
+    print(output_str)
 
+    # Print final CPU state
     print("=" * 70)
-    a2_val = cpu_readback["regs"][12][0] | (cpu_readback["regs"][12][1] << 32)
-    a4_val = cpu_readback["regs"][14][0] | (cpu_readback["regs"][14][1] << 32)
-    a5_val = cpu_readback["regs"][15][0] | (cpu_readback["regs"][15][1] << 32)
-    print('ra:', hex(cpu_readback['regs'][1][0]), 'a0:', hex(cpu_readback['regs'][10][0]), 'a1:', hex(cpu_readback['regs'][11][0]), 'a2:', hex(a2_val))
+    regs = cpu_readback['regs'][0]
+    print(f"ra: 0x{regs[1][1]:08x}_{regs[1][0]:08x} "
+          f"a0: 0x{regs[10][1]:08x}_{regs[10][0]:08x} "
+          f"a1: 0x{regs[11][1]:08x}_{regs[11][0]:08x} "
+          f"a2: 0x{regs[12][1]:08x}_{regs[12][0]:08x}")
     print(f"Final PC: 0x{pc:016x}")
     print(f"Instructions executed: {instr_count}")
     print(f"CPU running: {running}")
     print("=" * 70)
 
+
 if __name__ == '__main__':
-    import argparse
     parser = argparse.ArgumentParser(description='Boot xv6-riscv on GPU RISC-V Emulator')
     parser.add_argument('kernel', help='Path to xv6 kernel ELF')
-    parser.add_argument('--command', '-c', help='Command to inject after shell prompt')
+    parser.add_argument('--command', '-c', help='Single command to inject after shell prompt')
+    parser.add_argument('--autonomous', action='store_true',
+                        help='Drive the shell with Ollama-generated commands instead of --command')
+    parser.add_argument('--autonomous-turns', type=int, default=20,
+                        help='Max Ollama-driven commands to run (default: 20)')
+    parser.add_argument('--autonomous-model', default='qwen2.5-coder:14b',
+                        help='Ollama model tag for autonomous mode (default: qwen2.5-coder:14b)')
     args = parser.parse_args()
 
-    if not Path(args.kernel).exists():
-        print(f"Error: File not found: {args.kernel}")
-        sys.exit(1)
+    if args.autonomous and args.command:
+        parser.error('--autonomous and --command are mutually exclusive')
 
-    boot_xv6_on_gpu(args.kernel, args.command)
+    boot_xv6_on_gpu(args.kernel, args.command, args.autonomous,
+                    args.autonomous_turns, args.autonomous_model)

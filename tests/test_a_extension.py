@@ -74,9 +74,11 @@ class GpuCpu:
         shader_path = Path(__file__).parent.parent / 'tools' / 'RISCV_CPU_MMU.wgsl'
         self.module = self.device.create_shader_module(code=shader_path.read_text())
         self.layout = self.device.create_bind_group_layout(entries=[
-            {'binding': i, 'visibility': wgpu.ShaderStage.COMPUTE,
-             'buffer': {'type': 'storage' if i < 3 else 'uniform'}}
-            for i in range(4)
+            {'binding': 0, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'storage'}},
+            {'binding': 1, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'storage'}},
+            {'binding': 2, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'storage'}},
+            {'binding': 3, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'uniform'}},
+            {'binding': 4, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'read-only-storage'}},
         ])
         self.pipeline = self.device.create_compute_pipeline(
             layout=self.device.create_pipeline_layout(bind_group_layouts=[self.layout]),
@@ -135,11 +137,17 @@ class GpuCpu:
                                     usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
         queue.write_buffer(uni_buf, 0, uni.tobytes())
 
+        input_words = np.zeros(256, dtype=np.uint32)
+        input_buf = dev.create_buffer(size=input_words.nbytes,
+                                      usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST)
+        queue.write_buffer(input_buf, 0, input_words.tobytes())
+
         bind_group = dev.create_bind_group(layout=self.layout, entries=[
             {'binding': 0, 'resource': {'buffer': mem_buf, 'offset': 0, 'size': mem_words.nbytes}},
             {'binding': 1, 'resource': {'buffer': cpu_buf, 'offset': 0, 'size': cpu.nbytes}},
             {'binding': 2, 'resource': {'buffer': out_buf, 'offset': 0, 'size': 65536}},
             {'binding': 3, 'resource': {'buffer': uni_buf, 'offset': 0, 'size': uni.nbytes}},
+            {'binding': 4, 'resource': {'buffer': input_buf, 'offset': 0, 'size': input_words.nbytes}},
         ])
 
         encoder = dev.create_command_encoder()

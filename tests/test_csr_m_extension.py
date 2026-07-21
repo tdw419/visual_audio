@@ -86,19 +86,25 @@ class GpuCpu:
         shader_path = Path(__file__).parent.parent / 'tools' / 'RISCV_CPU_MMU.wgsl'
         self.module = self.device.create_shader_module(code=shader_path.read_text())
         self.layout = self.device.create_bind_group_layout(entries=[
-            {'binding': i, 'visibility': wgpu.ShaderStage.COMPUTE,
-             'buffer': {'type': 'storage' if i < 3 else 'uniform'}}
-            for i in range(4)
+            {'binding': 0, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'storage'}},
+            {'binding': 1, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'storage'}},
+            {'binding': 2, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'storage'}},
+            {'binding': 3, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'uniform'}},
+            {'binding': 4, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'read-only-storage'}},
         ])
         self.pipeline = self.device.create_compute_pipeline(
             layout=self.device.create_pipeline_layout(bind_group_layouts=[self.layout]),
             compute={'module': self.module, 'entry_point': 'main'},
         )
 
-    def run(self, program, steps, regs=None, csrs=None, priv=3, data=None):
+    def run(self, program, steps, regs=None, csrs=None, priv=3, data=None,
+            uart_input=b'', uart_input_ptr=0):
         """Load program at address 0, execute `steps` instructions, return CPU state.
 
         `data`: optional {byte_addr: bytes} to place in memory.
+        `uart_input`: optional bytes made available to the guest via UART RHR.
+        `uart_input_ptr`: starting read position - lets a test simulate
+        resuming a dispatch that already consumed some input.
         After the run, self.last_output holds the raw UART output buffer bytes.
         """
         dev, queue = self.device, self.device.queue
@@ -114,6 +120,8 @@ class GpuCpu:
         cpu = np.zeros(1, dtype=CPU_DTYPE)
         cpu[0]['running'] = 1
         cpu[0]['priv_mode'] = priv
+        cpu[0]['uart_input_len'] = len(uart_input)
+        cpu[0]['uart_input_ptr'] = uart_input_ptr
         for reg, val in (regs or {}).items():
             cpu[0]['regs'][reg] = [val & 0xFFFFFFFF, (val >> 32) & 0xFFFFFFFF]
         for name, val in (csrs or {}).items():
@@ -137,11 +145,19 @@ class GpuCpu:
                                     usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
         queue.write_buffer(uni_buf, 0, uni.tobytes())
 
+        input_words = np.zeros(256, dtype=np.uint32)
+        for i, b in enumerate(uart_input):
+            input_words[i] = b
+        input_buf = dev.create_buffer(size=input_words.nbytes,
+                                      usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST)
+        queue.write_buffer(input_buf, 0, input_words.tobytes())
+
         bind_group = dev.create_bind_group(layout=self.layout, entries=[
             {'binding': 0, 'resource': {'buffer': mem_buf, 'offset': 0, 'size': mem_words.nbytes}},
             {'binding': 1, 'resource': {'buffer': cpu_buf, 'offset': 0, 'size': cpu.nbytes}},
             {'binding': 2, 'resource': {'buffer': out_buf, 'offset': 0, 'size': 65536}},
             {'binding': 3, 'resource': {'buffer': uni_buf, 'offset': 0, 'size': uni.nbytes}},
+            {'binding': 4, 'resource': {'buffer': input_buf, 'offset': 0, 'size': input_words.nbytes}},
         ])
 
         encoder = dev.create_command_encoder()
@@ -335,6 +351,30 @@ def main():
     prog[16] = CSRRS(6, MCAUSE, 0)
     st = gpu.run(prog, 4)
     check('0xFFFFFFFF word is illegal-instr, not page-fault', reg64(st, 6), 2)
+
+    # Regression: uart_input_ptr was a WGSL `private` var, reset to 0 on
+    # every dispatch, so input never advanced past whatever a single
+    # 60000-instruction batch consumed. It must now live on the CPU struct
+    # and be honored as a starting position, simulating a dispatch that
+    # resumes after a previous one already consumed some input.
+    print('UART RX input (persists across dispatch boundaries):')
+    LB = lambda rd, rs1, imm: i_type(0x03, rd, 0, rs1, imm)
+    LUI = lambda rd, imm20: ((imm20 & 0xFFFFF) << 12) | (rd << 7) | 0x37
+    prog = [LUI(1, 0x10000), LB(5, 1, 0)]  # x1 = 0x10000000 (UART_RHR), x5 = *x1
+    st = gpu.run(prog, 2, uart_input=b'Hi')
+    check('first byte read from fresh input', reg64(st, 5), ord('H'))
+    check('uart_input_ptr advanced to 1', int(st['uart_input_ptr']), 1)
+
+    st = gpu.run(prog, 2, uart_input=b'Hi', uart_input_ptr=1)
+    check('second byte read when resuming at ptr=1 (not reset to 0)', reg64(st, 5), ord('i'))
+    check('uart_input_ptr advanced to 2', int(st['uart_input_ptr']), 2)
+
+    # Unread input must assert PLIC IRQ 10 (level-triggered, shared with the
+    # TX-complete IRQ) so a sleeping consoleread() actually gets woken.
+    st = gpu.run([WFI], 1, uart_input=b'x')
+    check('unread input raises PLIC IRQ 10', int(st['plic_pending']) & (1 << 10), 1 << 10)
+    st = gpu.run([WFI], 1, uart_input=b'x', uart_input_ptr=1)
+    check('fully-drained input does not raise IRQ 10', int(st['plic_pending']) & (1 << 10), 0)
 
     print()
     if failures:
