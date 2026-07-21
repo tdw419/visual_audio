@@ -44,9 +44,13 @@ CPU_DTYPE = np.dtype([
     ('uart_irq_delay', np.uint32),
     ('uart_input_ptr', np.uint32),  # guest-owned, persists across dispatches
     ('uart_input_len', np.uint32),  # host-owned; shader only reads it
+    ('mtime_low', np.uint32),       # CLINT mtime (low 32 bits)
+    ('mtime_high', np.uint32),      # CLINT mtime (high 32 bits)
+    ('mtimecmp_low', np.uint32),    # CLINT mtimecmp (low 32 bits)
+    ('mtimecmp_high', np.uint32),   # CLINT mtimecmp (high 32 bits)
 ])
 
-assert CPU_DTYPE.itemsize == 464, f"CPU struct layout drifted: {CPU_DTYPE.itemsize}"
+assert CPU_DTYPE.itemsize == 480, f"CPU struct layout drifted: {CPU_DTYPE.itemsize}"
 
 SATP_MODE_SV39 = 8
 

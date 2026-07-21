@@ -62,6 +62,10 @@ struct RiscvCPU {
                                  // input unreadable past whatever fit in one batch)
     uart_input_len: u32,        // Bytes currently available in uart_input - host-owned,
                                  // the shader only ever reads this
+    mtime_low: u32,             // CLINT mtime (low 32 bits)
+    mtime_high: u32,            // CLINT mtime (high 32 bits)
+    mtimecmp_low: u32,          // CLINT mtimecmp (low 32 bits)
+    mtimecmp_high: u32,         // CLINT mtimecmp (high 32 bits)
 }
 
 // R-type instruction decoding
@@ -186,6 +190,9 @@ const CSR_MVENDORID: u32 = 0xF11u;
 const CSR_MARCHID: u32 = 0xF12u;
 const CSR_MIMPID: u32 = 0xF13u;
 const CSR_MHARTID: u32 = 0xF14u;
+const CSR_STIMECMP: u32 = 0x14Du;    // Supervisor timer compare (SSTC extension)
+const CSR_MENVCFG: u32 = 0x30Au;     // Machine environment configuration
+const CSR_MCOUNTEREN: u32 = 0x306u;  // Machine counter enable
 
 // Zicsr CSR access functions
 fn read_csr(cpu: ptr<function, RiscvCPU>, csr_addr: u32) -> vec2<u32> {
@@ -262,6 +269,19 @@ fn read_csr(cpu: ptr<function, RiscvCPU>, csr_addr: u32) -> vec2<u32> {
         let sip_x = (*cpu).mip.x & (*cpu).mideleg.x;
         let sip_y = (*cpu).mip.y & (*cpu).mideleg.y;
         return vec2<u32>(sip_x, sip_y);
+    } else if (csr_addr == CSR_TIME) {
+        // Return real time from mtime
+        return vec2<u32>((*cpu).mtime_low, (*cpu).mtime_high);
+    } else if (csr_addr == CSR_STIMECMP) {
+        // Return current stimecmp value
+        return vec2<u32>((*cpu).mtimecmp_low, (*cpu).mtimecmp_high);
+    } else if (csr_addr == CSR_MENVCFG) {
+        // Return MENVCFG (STCE bit for SSTC enable)
+        // We set STCE bit (bit 63) to indicate SSTC is supported
+        return vec2<u32>(0u, 0x80000000u);
+    } else if (csr_addr == CSR_MCOUNTEREN) {
+        // Return MCOUNTEREN (allow supervisor access to time/counter)
+        return vec2<u32>(2u, 0u);  // bit 1 = time
     }
     // Unknown CSR - return zero
     return vec2<u32>(0u, 0u);
@@ -305,6 +325,16 @@ fn write_csr(cpu: ptr<function, RiscvCPU>, csr_addr: u32, val: vec2<u32>) {
         // Write to SSTATUS affects MSTATUS
         (*cpu).mstatus.x = ((*cpu).mstatus.x & ~SSTATUS_MASK_LO) | (val.x & SSTATUS_MASK_LO);
         (*cpu).mstatus.y = ((*cpu).mstatus.y & ~SSTATUS_MASK_HI) | (val.y & SSTATUS_MASK_HI);
+    } else if (csr_addr == CSR_STIMECMP) {
+        // Write to stimecmp sets timer compare value (SSTC extension)
+        (*cpu).mtimecmp_low = val.x;
+        (*cpu).mtimecmp_high = val.y;
+    } else if (csr_addr == CSR_MENVCFG) {
+        // Write to MENVCFG (SSTC STCE enable bit)
+        // Just accept the write (we always support SSTC)
+    } else if (csr_addr == CSR_MCOUNTEREN) {
+        // Write to MCOUNTEREN (allow supervisor access to counters)
+        // Just accept the write
     }
     // Ignore writes to read-only CSRs (CYCLE, TIME, INSTRET, MISA, etc.)
 }
@@ -461,6 +491,11 @@ const VIRTIO_QUEUE_NOTIFY: u32 = 0x50u;  // QueueNotify (kick) offset
 
 // VirtIO IRQ numbers (RISC-V standard)
 const VIRTIO_IRQ: u32 = 1u;  // VirtIO block device = IRQ 1
+
+// CLINT (Core Local Interruptor)
+const CLINT_BASE: u32 = 0x02000000u;
+const CLINT_MTIME: u32 = 0x0200bff8u;     // mtime (64-bit)
+const CLINT_MTIMECMP: u32 = 0x02004000u;  // mtimecmp[0] for hart 0 (64-bit)
 
 // Physical memory base offset
 // For M-mode systems like xv6, DRAM starts at 0x80000000
@@ -996,6 +1031,11 @@ fn is_uart_addr(pa: vec2<u32>) -> bool {
 // Check if address maps to PLIC
 fn is_plic_addr(pa: vec2<u32>) -> bool {
     return pa.x >= PLIC_BASE && pa.x < (PLIC_BASE + 0x210000u);
+}
+
+// Check if address maps to CLINT
+fn is_clint_addr(pa: vec2<u32>) -> bool {
+    return pa.x >= CLINT_BASE && pa.x < (CLINT_BASE + 0x10000u);
 }
 
 // Raise a PLIC interrupt (sets pending bit)
@@ -1977,6 +2017,26 @@ fn execute_load(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32) {
         return;
     }
 
+    // CLINT register reads
+    if (is_clint_addr(pa)) {
+        var val = vec2<u32>(0u, 0u);
+
+        // mtime (64-bit read at 0x0200bff8)
+        if (pa.x == CLINT_MTIME) {
+            val = vec2<u32>((*cpu).mtime_low, (*cpu).mtime_high);
+        }
+        // mtimecmp[0] for hart 0 (64-bit read at 0x02004000)
+        else if (pa.x == CLINT_MTIMECMP) {
+            val = vec2<u32>((*cpu).mtimecmp_low, (*cpu).mtimecmp_high);
+        }
+
+        if (decoded.rd != 0u) {
+            (*cpu).regs[decoded.rd] = val;
+        }
+        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        return;
+    }
+
     // PLIC register reads
     if (is_plic_addr(pa)) {
         let offset = pa.x - PLIC_BASE;
@@ -2108,6 +2168,19 @@ fn execute_store(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32, cpu_
             return;
         }
         // UART LSR - ignore writes
+        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        return;
+    }
+
+    // CLINT register writes
+    if (is_clint_addr(pa)) {
+        // mtimecmp[0] for hart 0 (64-bit write at 0x02004000)
+        if (pa.x == CLINT_MTIMECMP && decoded.funct3 == 3u) {
+            // SD (Store Doubleword) - write both low and high
+            (*cpu).mtimecmp_low = (*cpu).regs[decoded.rs2].x;
+            (*cpu).mtimecmp_high = (*cpu).regs[decoded.rs2].y;
+        }
+        // Ignore writes to mtime (read-only)
         (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
         return;
     }
@@ -2531,6 +2604,28 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             }
         }
 
+        // Increment CLINT mtime every instruction
+        var new_mip = cpu.mip;
+        var mtime_low = cpu.mtime_low;
+        var mtime_high = cpu.mtime_high;
+        mtime_low = mtime_low + 1u;
+        if (mtime_low == 0u) {
+            mtime_high = mtime_high + 1u;
+        }
+        cpu.mtime_low = mtime_low;
+        cpu.mtime_high = mtime_high;
+
+        // Check if timer interrupt should fire (mtime >= mtimecmp)
+        let timer_pending = (mtime_high > cpu.mtimecmp_high) ||
+                           (mtime_high == cpu.mtimecmp_high && mtime_low >= cpu.mtimecmp_low);
+
+        // Update MIP timer interrupt bits (MTIP for M-mode, STIP for S-mode)
+        if (timer_pending) {
+            new_mip.x = new_mip.x | MIP_MTIP | MIP_STIP;
+        } else {
+            new_mip.x = new_mip.x & ~(MIP_MTIP | MIP_STIP);
+        }
+
         // RX-ready is level-triggered, same IRQ line as TX-complete (matches
         // real 16550 behavior - the guest ISR reads LSR to tell them apart).
         // plic_raise_irq is a pure OR onto plic_pending, so it's safe/cheap
@@ -2555,7 +2650,6 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let has_ext_irq = check_external_interrupt(&cpu);
 
         // Update MIP external interrupt bits
-        var new_mip = cpu.mip;
         if (has_ext_irq) {
             // Set both MEIP (M-mode) and SEIP (S-mode) external interrupt bits
             // xv6 runs S-mode, so SEIP is what matters
@@ -2566,16 +2660,24 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         cpu.mip = new_mip;
 
         // Check if we should take an interrupt
-        // S-mode: check if SEIP is set and SIE is enabled (mstatus.sie bit 1)
-        // M-mode: check if MEIP is set and MIE is enabled (mstatus.mie bit 3)
-        let should_trap_s = (cpu.mip.x & MIP_SEIP) != 0u && (cpu.mstatus.x & 2u) != 0u && cpu.priv_mode == PRIV_S;
-        let should_trap_m = (cpu.mip.x & MIP_MEIP) != 0u && (cpu.mstatus.x & 8u) != 0u && cpu.priv_mode == PRIV_M;
+        // S-mode: check for STIP (timer) or SEIP (external), with SIE enabled
+        // M-mode: check for MTIP (timer) or MEIP (external), with MIE enabled
+        let should_trap_s_timer = (cpu.mip.x & MIP_STIP) != 0u && (cpu.mstatus.x & 2u) != 0u && cpu.priv_mode == PRIV_S;
+        let should_trap_m_timer = (cpu.mip.x & MIP_MTIP) != 0u && (cpu.mstatus.x & 8u) != 0u && cpu.priv_mode == PRIV_M;
+        let should_trap_s_ext = (cpu.mip.x & MIP_SEIP) != 0u && (cpu.mstatus.x & 2u) != 0u && cpu.priv_mode == PRIV_S;
+        let should_trap_m_ext = (cpu.mip.x & MIP_MEIP) != 0u && (cpu.mstatus.x & 8u) != 0u && cpu.priv_mode == PRIV_M;
 
-        if (should_trap_s) {
-            take_trap(&cpu, vec2<u32>(9u, 0x80000000u), cpu.pc); // 64-bit interrupt bit
+        if (should_trap_s_timer) {
+            take_trap(&cpu, vec2<u32>(5u, 0x80000000u), cpu.pc); // Supervisor timer interrupt
             continue;
-        } else if (should_trap_m) {
-            take_trap(&cpu, vec2<u32>(11u, 0x80000000u), cpu.pc); // 64-bit interrupt bit
+        } else if (should_trap_m_timer) {
+            take_trap(&cpu, vec2<u32>(7u, 0x80000000u), cpu.pc); // Machine timer interrupt
+            continue;
+        } else if (should_trap_s_ext) {
+            take_trap(&cpu, vec2<u32>(9u, 0x80000000u), cpu.pc); // Supervisor external interrupt
+            continue;
+        } else if (should_trap_m_ext) {
+            take_trap(&cpu, vec2<u32>(11u, 0x80000000u), cpu.pc); // Machine external interrupt
             continue;
         }
 
