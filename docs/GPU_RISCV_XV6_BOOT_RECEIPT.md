@@ -88,9 +88,13 @@ Expected output: xv6 boot sequence ending with `$` shell prompt
 ## Architecture
 
 ### GPU Memory Layout
-- 128MB physical memory (33554432 × 4-byte pixels)
-- Physical base: 0x80000000 → pixel index 0
-- fs.img loaded at 0x81000000 (16MB offset)
+- Host allocates a 128MB physical address window (33554432 4-byte words,
+  536MB of actual VRAM since each byte-channel is stored as its own u32)
+- The xv6 kernel itself is patched to PHYSTOP=16MB (see Vendor
+  Customizations below) - the rest of the 128MB window is allocated but
+  unused headroom, not a hard requirement
+- Physical base: 0x80000000 → word index 0
+- fs.img loaded at 0x81000000 (16MB offset, just past PHYSTOP)
 
 ### CPU State (WGSL struct)
 - 64-bit PC and registers (vec2<u32>: low, high)
@@ -120,18 +124,16 @@ Expected output: xv6 boot sequence ending with `$` shell prompt
 
 ## Test Suite
 
-**Status**: All regression tests passing
+**Status**: All regression tests passing (verified 2026-07-20)
 
-Run with:
+These are standalone GPU harness scripts, not pytest-discoverable (each
+creates its own WebGPU device and runs to completion) - run each directly:
 ```bash
-python3 -m pytest tests/test_gpu_riscv_* -v
+python3 tests/test_csr_m_extension.py   # M/CSR register operations, traps
+python3 tests/test_a_extension.py       # A-extension atomics (LR/SC, AMOs)
+python3 tests/test_smode_sbi.py         # S-mode/SBI trap + delegation handling
+python3 tools/test_mmu_gpu.py           # SV39 page table walk
 ```
-
-Tests cover:
-- M/CSR register operations
-- A-extension atomic instructions
-- S-mode/SBI trap handling
-- MMU page table walks (SV39)
 
 ---
 
@@ -139,7 +141,9 @@ Tests cover:
 
 - wgpu (WebGPU Python bindings)
 - numpy (for memory pixel encoding)
-- riscv64-unknown-elf-gcc (xv6 cross-compiler)
+- A riscv64 cross-compiler (verified with `riscv64-linux-gnu-gcc`; pass
+  `TOOLPREFIX=riscv64-unknown-elf-` to `vendor/xv6-riscv/build.sh` if
+  using that toolchain instead)
 
 ---
 
@@ -155,3 +159,7 @@ This milestone enables:
 
 **Commit**: 18e6d83 (fix(gpu-riscv): PLIC/VirtIO interrupt injection)
 **Commit**: 650ff17 (feat(vendor): Add xv6-riscv patches and build script)
+**Commit**: 7172eda (fix(vendor): make build.sh actually reproduce the verified boot -
+the original script crashed immediately on a clean run and its C-extension
+patch didn't apply; regenerated both patches from a real diff and verified
+end to end against a fully clean checkout)
