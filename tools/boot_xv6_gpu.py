@@ -335,6 +335,7 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None):
     command_injected = False
     last_output_ptr = 0
     command_scan_start = 0
+    pc_history = []  # Track recent PCs for stall detection
 
     for iteration in range(100000):
         encoder = device.create_command_encoder()
@@ -373,6 +374,17 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None):
         # Progress indicator (less frequent to not spam)
         if iteration % 100 == 0 or running == 0:
             print(f"    Iter {iteration:5d}: PC=0x{pc:016x}, running={running}, instr={instr_count}")
+
+        # Stall detection: if PC repeats in a small window, something's wrong
+        pc_history.append(pc)
+        if len(pc_history) > 100:
+            pc_history.pop(0)
+            # Check if PC is stuck in a loop
+            if len(set(pc_history[-20:])) < 5:
+                print(f"\n[!] CPU stall detected - PC stuck in tight loop:")
+                for i, p in enumerate(pc_history[-20:]):
+                    print(f"    [{i}] 0x{p:016x}")
+                break
 
         # Inject command after shell prompt appears
         if command and not command_injected and running == 1:
