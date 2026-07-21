@@ -45,11 +45,17 @@ struct RiscvCPU {
     medeleg: vec2<u32>,         // Exception delegation to S-mode
     mideleg: vec2<u32>,         // Interrupt delegation to S-mode
     virtio_status: u32,         // VirtIO device status
+    vq_desc_low: u32,
+    vq_desc_high: u32,
+    vq_avail_low: u32,
+    vq_avail_high: u32,
+    vq_used_low: u32,
+    vq_used_high: u32,
+    vq_idx: u32,
     plic_pending: u32,          // PLIC pending interrupt bits (IRQ 0-31)
     plic_enable: u32,           // PLIC enable bits for hart 0
     plic_claimed: u32,          // Currently claimed IRQ (0 = none)
-    _pad: u32,                  // Padding (std430 adds padding for alignment)
-    _pad2: u32,                 // More padding to reach 432 bytes
+    uart_irq_delay: u32,       // Delay before UART IRQ
 }
 
 // R-type instruction decoding
@@ -435,11 +441,11 @@ const UART_LSR_THRE: u32 = 32u;      // Transmit Holding Register Empty
 
 // PLIC (Platform-Level Interrupt Controller)
 const PLIC_BASE: u32 = 0x0c000000u;
-const PLIC_PENDING_BASE: u32 = 0x0c001000u;  // Pending bits (1 bit per IRQ)
-const PLIC_ENABLE_BASE: u32 = 0x0c002000u;   // Enable bits per hart/context
-const PLIC_CONTEXT_BASE: u32 = 0x0c200000u;  // Hart 0 context
-const PLIC_THRESHOLD: u32 = 0x0c200000u;     // Priority threshold
-const PLIC_CLAIM: u32 = 0x0c200004u;          // Claim/Complete register
+const PLIC_PENDING_BASE: u32 = 0x0c001000u;
+const PLIC_ENABLE_BASE: u32 = 0x0c002080u;   // S-mode enable for hart 0
+const PLIC_CONTEXT_BASE: u32 = 0x0c201000u;  // S-mode context for hart 0
+const PLIC_THRESHOLD: u32 = 0x0c201000u;     // Priority threshold
+const PLIC_CLAIM: u32 = 0x0c201004u;          // Claim/Complete register
 
 // VirtIO Block Device
 const VIRTIO_BASE: u32 = 0x10001000u;
@@ -949,11 +955,11 @@ fn decode_s_type(instr: u32) -> SType {
 
 // Write character to UART output buffer, returns new output_ptr value
 fn uart_write_char(cpu_id: u32, char: u32, uart_ptr: u32) -> u32 {
-    // Reserve first 256 words (1024 bytes) for UART output per CPU
-    let uart_base_out = cpu_id * 256u;
+    // Reserve first 4096 words (16384 bytes) for UART output per CPU
+    let uart_base_out = cpu_id * 4096u;
     
     // Check buffer bounds
-    if (uart_ptr < 1024u) {
+    if (uart_ptr < 4096u) {
         let word_idx = uart_ptr / 4u;
         let byte_in_word = uart_ptr % 4u;
         
@@ -1001,6 +1007,91 @@ fn check_external_interrupt(cpu: ptr<function, RiscvCPU>) -> bool {
 // VIRTIO BLOCK DEVICE EMULATION
 // ============================================================================
 
+
+fn process_virtqueue(cpu: ptr<function, RiscvCPU>) {
+    let desc_pa = vec2<u32>((*cpu).vq_desc_low, (*cpu).vq_desc_high);
+    let avail_pa = vec2<u32>((*cpu).vq_avail_low, (*cpu).vq_avail_high);
+    let used_pa = vec2<u32>((*cpu).vq_used_low, (*cpu).vq_used_high);
+    
+    let avail_idx_pa = add64(avail_pa, vec2<u32>(2u, 0u));
+    let avail_word = read_phys_word(vec2<u32>(avail_idx_pa.x & ~3u, avail_idx_pa.y));
+    let avail_idx = select(avail_word & 0xFFFFu, avail_word >> 16u, (avail_idx_pa.x & 2u) != 0u);
+    
+    if ((*cpu).vq_idx == avail_idx) { return; }
+    
+    let ring_offset = 4u + ((*cpu).vq_idx % 8u) * 2u;
+    let desc_idx_pa = add64(avail_pa, vec2<u32>(ring_offset, 0u));
+    let desc_idx_word = read_phys_word(vec2<u32>(desc_idx_pa.x & ~3u, desc_idx_pa.y));
+    let desc_idx = select(desc_idx_word & 0xFFFFu, desc_idx_word >> 16u, (desc_idx_pa.x & 2u) != 0u);
+    
+    // desc 0 (header)
+    let desc0_pa = add64(desc_pa, vec2<u32>(desc_idx * 16u, 0u));
+    let desc0_addr_low = read_phys_word(desc0_pa);
+    let desc0_addr_high = read_phys_word(add64(desc0_pa, vec2<u32>(4u, 0u)));
+    let desc0_next_word = read_phys_word(add64(desc0_pa, vec2<u32>(12u, 0u)));
+    let desc0_next = desc0_next_word >> 16u;
+    
+    // read sector from header
+    let header_pa = vec2<u32>(desc0_addr_low, desc0_addr_high);
+    let sector = read_phys_word(add64(header_pa, vec2<u32>(8u, 0u))); // block_virtio.h: sector is at offset 8
+    
+    // desc 1 (buffer)
+    let desc1_pa = add64(desc_pa, vec2<u32>(desc0_next * 16u, 0u));
+    let desc1_addr_low = read_phys_word(desc1_pa);
+    let desc1_addr_high = read_phys_word(add64(desc1_pa, vec2<u32>(4u, 0u)));
+    let desc1_len = read_phys_word(add64(desc1_pa, vec2<u32>(8u, 0u)));
+    let desc1_flags_next = read_phys_word(add64(desc1_pa, vec2<u32>(12u, 0u)));
+    let desc1_flags = desc1_flags_next & 0xFFFFu;
+    let is_write = (desc1_flags & 2u) == 0u; // VRING_DESC_F_WRITE is 2 (device writable = read from disk). If NOT writable, it's a disk WRITE.
+    
+    let buf_pa = vec2<u32>(desc1_addr_low, desc1_addr_high);
+    let disk_pa = vec2<u32>(0x81000000u + sector * 512u, 0u);
+    
+    // copy
+    let words_to_copy = desc1_len / 4u;
+    for (var i = 0u; i < words_to_copy; i = i + 1u) {
+        let offset = i * 4u;
+        if (is_write) {
+            let val = read_phys_word(add64(buf_pa, vec2<u32>(offset, 0u)));
+            write_phys_word(add64(disk_pa, vec2<u32>(offset, 0u)), val);
+        } else {
+            let val = read_phys_word(add64(disk_pa, vec2<u32>(offset, 0u)));
+            write_phys_word(add64(buf_pa, vec2<u32>(offset, 0u)), val);
+        }
+    }
+    
+    let desc1_next = desc1_flags_next >> 16u;
+    if ((desc1_flags & 1u) != 0u) { // VRING_DESC_F_NEXT = 1
+        let desc2_pa = add64(desc_pa, vec2<u32>(desc1_next * 16u, 0u));
+        let desc2_addr_low = read_phys_word(desc2_pa);
+        let desc2_addr_high = read_phys_word(add64(desc2_pa, vec2<u32>(4u, 0u)));
+        let status_pa = vec2<u32>(desc2_addr_low, desc2_addr_high);
+        
+        // Write 0 to status_pa (byte write)
+        let byte_offset = status_pa.x & 3u;
+        let old_word = read_phys_word(status_pa);
+        let mask = ~(0xFFu << (byte_offset * 8u));
+        let new_word = old_word & mask;
+        write_phys_word(status_pa, new_word);
+    }
+
+    // Write used ring
+    let used_idx_pa = add64(used_pa, vec2<u32>(2u, 0u));
+    let used_word0 = read_phys_word(vec2<u32>(used_idx_pa.x & ~3u, used_idx_pa.y));
+    let used_idx = select(used_word0 & 0xFFFFu, used_word0 >> 16u, (used_idx_pa.x & 2u) != 0u);
+    
+    let used_ring_offset = 4u + (used_idx % 8u) * 8u;
+    let used_elem_pa = add64(used_pa, vec2<u32>(used_ring_offset, 0u));
+    write_phys_word(used_elem_pa, desc_idx);
+    write_phys_word(add64(used_elem_pa, vec2<u32>(4u, 0u)), desc1_len); // length written
+    
+    let new_used_idx = (used_idx + 1u) & 0xFFFFu;
+    let new_used_word0 = (used_word0 & ~(0xFFFFu << (select(0u, 16u, (used_idx_pa.x & 2u) != 0u)))) | (new_used_idx << (select(0u, 16u, (used_idx_pa.x & 2u) != 0u)));
+    write_phys_word(vec2<u32>(used_idx_pa.x & ~3u, used_idx_pa.y), new_used_word0);
+    
+    (*cpu).vq_idx = ((*cpu).vq_idx + 1u) & 0xFFFFu;
+}
+
 // Check if address maps to VirtIO
 fn is_virtio_addr(pa: vec2<u32>) -> bool {
     return pa.x >= VIRTIO_BASE && pa.x < (VIRTIO_BASE + 0x1000u);
@@ -1027,22 +1118,6 @@ fn is_virtio_addr(pa: vec2<u32>) -> bool {
 //   u32 reserved;
 //   u64 sector;  // LBA sector number
 // }
-
-// Process VirtIO block read request (synchronously)
-fn virtio_process_block_read(cpu: ptr<function, RiscvCPU>, queue_addr: vec2<u32>, queue_idx: u32) {
-    // Read queue descriptor address (vring.desc) from queue memory
-    // This is a simplification: xv6 stores queue info in memory, we need to walk it
-
-    // For now: stub - just signal completion via PLIC
-    // Real implementation would:
-    // 1. Read vring.desc array (queue_addr)
-    // 2. Walk descriptors, read data from disk image to guest buffer
-    // 3. Write to vring.used array with length
-    // 4. Update vring.used.idx
-
-    // Minimal stub: raise IRQ to indicate completion
-    plic_raise_irq(cpu, VIRTIO_IRQ);
-}
 
 // ============================================================================
 // INSTRUCTION EXECUTION
@@ -1707,8 +1782,10 @@ fn csr_write(cpu: ptr<function, RiscvCPU>, addr: u32, val: vec2<u32>) {
 // in medeleg vector to S-mode (stvec); everything else goes to M-mode (mtvec).
 fn take_trap(cpu: ptr<function, RiscvCPU>, cause: vec2<u32>, tval: vec2<u32>) {
     let code = cause.x & 31u;
+    let is_interrupt = (cause.y & 0x80000000u) != 0u;
+    let deleg_mask = select((*cpu).medeleg.x, (*cpu).mideleg.x, is_interrupt);
     let delegated = (*cpu).priv_mode != PRIV_M &&
-                    (((*cpu).medeleg.x >> code) & 1u) != 0u;
+                    ((deleg_mask >> code) & 1u) != 0u;
 
     if (delegated) {
         (*cpu).sepc = (*cpu).pc;
@@ -1890,7 +1967,7 @@ fn execute_load(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32) {
             val = (*cpu).plic_enable;
         }
         // Claim/Complete register (hart 0, mode S)
-        else if (offset == 0x200004u) {
+        else if (offset == 0x201004u) {
             // Claim: return lowest-priority pending+enabled IRQ
             let pending_enabled = (*cpu).plic_pending & (*cpu).plic_enable;
             if (pending_enabled != 0u) {
@@ -1927,7 +2004,7 @@ fn execute_load(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32) {
         else if (offset == 0x10u) { val = 0u; }     // DeviceFeatures
         else if (offset == 0x34u) { val = 8u; }     // QueueNumMax
         else if (offset == 0x44u) { val = 0u; }     // QueueReady
-        else if (offset == 0x60u) { val = 0u; }     // InterruptStatus
+        else if (offset == 0x60u) { val = select(0u, 1u, ((*cpu).plic_pending & (1u << VIRTIO_IRQ)) != 0u); } // InterruptStatus
         else if (offset == 0x70u) { val = (*cpu).virtio_status; } // Status
         
         if (decoded.rd != 0u) {
@@ -1999,10 +2076,12 @@ fn execute_store(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32, cpu_
     
     // Check if this is a UART write
     if (is_uart_addr(pa)) {
-        // UART THR (Transmit Holding Register)
         if (pa.x == UART_THR && decoded.funct3 == 0u) {
             let char = (*cpu).regs[decoded.rs2].x & 0xFFu;
             (*cpu).output_ptr = uart_write_char(cpu_id, char, (*cpu).output_ptr);
+            (*cpu).uart_irq_delay = 5000u; // Raise IRQ after 5000 cycles
+            (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+            return;
         }
         // UART LSR - ignore writes
         (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
@@ -2019,7 +2098,7 @@ fn execute_store(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32, cpu_
             (*cpu).plic_enable = (*cpu).regs[decoded.rs2].x;
         }
         // Claim/Complete register (write completes interrupt)
-        else if (offset == 0x200004u) {
+        else if (offset == 0x201004u) {
             let completed_irq = (*cpu).regs[decoded.rs2].x;
             if (completed_irq == (*cpu).plic_claimed) {
                 // Clear the pending bit
@@ -2037,9 +2116,20 @@ fn execute_store(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32, cpu_
         let offset = pa.x - 0x10001000u;
         if (offset == 0x70u) {
             (*cpu).virtio_status = (*cpu).regs[decoded.rs2].x;
+        } else if (offset == 0x80u) {
+            (*cpu).vq_desc_low = (*cpu).regs[decoded.rs2].x;
+        } else if (offset == 0x84u) {
+            (*cpu).vq_desc_high = (*cpu).regs[decoded.rs2].x;
+        } else if (offset == 0x90u) {
+            (*cpu).vq_avail_low = (*cpu).regs[decoded.rs2].x;
+        } else if (offset == 0x94u) {
+            (*cpu).vq_avail_high = (*cpu).regs[decoded.rs2].x;
+        } else if (offset == 0xA0u) {
+            (*cpu).vq_used_low = (*cpu).regs[decoded.rs2].x;
+        } else if (offset == 0xA4u) {
+            (*cpu).vq_used_high = (*cpu).regs[decoded.rs2].x;
         } else if (offset == VIRTIO_QUEUE_NOTIFY) {
-            // QueueNotify (kick): synchronously process request
-            // For now: stub that just raises the interrupt
+            process_virtqueue(cpu);
             plic_raise_irq(cpu, VIRTIO_IRQ);
         }
         (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
@@ -2409,6 +2499,13 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         if (cpu.running == 0u) {
             break;
         }
+
+        if (cpu.uart_irq_delay > 0u) {
+            cpu.uart_irq_delay = cpu.uart_irq_delay - 1u;
+            if (cpu.uart_irq_delay == 0u) {
+                plic_raise_irq(&cpu, 10u);
+            }
+        }
         
         if (cpu.instr_count >= max_instructions) {
             // Budget for this dispatch exhausted - pause, don't halt.
@@ -2444,10 +2541,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let should_trap_m = (cpu.mip.x & MIP_MEIP) != 0u && (cpu.mstatus.x & 8u) != 0u && cpu.priv_mode == PRIV_M;
 
         if (should_trap_s) {
-            take_trap(&cpu, vec2<u32>(CAUSE_SUPERVISOR_EXTERNAL, 0u), cpu.pc);
+            take_trap(&cpu, vec2<u32>(9u, 0x80000000u), cpu.pc); // 64-bit interrupt bit
             continue;
         } else if (should_trap_m) {
-            take_trap(&cpu, vec2<u32>(CAUSE_MACHINE_EXTERNAL, 0u), cpu.pc);
+            take_trap(&cpu, vec2<u32>(11u, 0x80000000u), cpu.pc); // 64-bit interrupt bit
             continue;
         }
 

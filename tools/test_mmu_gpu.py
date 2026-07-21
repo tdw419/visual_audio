@@ -32,25 +32,26 @@ def main():
     # Root PT (PPN 1) -> entry 1 points to L2 PT (PPN 2)
     # L2 PT (PPN 2) -> entry 0 points to L3 PT (PPN 3)
     # L3 PT (PPN 3) -> entry 0 points to TARGET (PPN 4)
-    # PTE format (simplified 32-bit for GPU): [31:10] PPN, [9:0] flags. V=1, R=2, W=4, X=8
-    # NOTE: The WGSL uses 32-bit PTEs
+    # Real SV39 PTEs are 8 bytes (64-bit) each - PPN in bits [53:10], flags
+    # in [7:0]. A prior version of this test used a 4-byte "simplified" PTE
+    # stride that only matched an equally wrong shader implementation, not
+    # real hardware or real kernel-built page tables (see xv6 boot work).
 
     PTE_V = 1
     PTE_R = 2
     PTE_W = 4
     PTE_X = 8
 
-    # L1 entry
-    val = (L2_PT_PPN << 10) | PTE_V
-    memory[ROOT_PT_ADDR//4 + 1] = [val & 0xFF, (val >> 8) & 0xFF, (val >> 16) & 0xFF, (val >> 24) & 0xFF]
-    
-    # L2 entry
-    val = (L3_PT_PPN << 10) | PTE_V
-    memory[L2_PT_ADDR//4 + 0] = [val & 0xFF, (val >> 8) & 0xFF, (val >> 16) & 0xFF, (val >> 24) & 0xFF]
+    def write_pte(byte_addr, ppn, flags):
+        val = (ppn << 10) | flags
+        word_idx = byte_addr // 4
+        memory[word_idx] = [val & 0xFF, (val >> 8) & 0xFF, (val >> 16) & 0xFF, (val >> 24) & 0xFF]
+        memory[word_idx + 1] = [0, 0, 0, 0]  # high 32 bits of the PTE
 
-    # L3 entry (leaf)
-    val = (TARGET_PPN << 10) | PTE_V | PTE_R | PTE_W | PTE_X
-    memory[L3_PT_ADDR//4 + 0] = [val & 0xFF, (val >> 8) & 0xFF, (val >> 16) & 0xFF, (val >> 24) & 0xFF]
+    # entry i within a page lives at byte offset i*8 (8-byte PTE stride)
+    write_pte(ROOT_PT_ADDR + 1 * 8, L2_PT_PPN, PTE_V)                    # L1 entry (VPN2=1)
+    write_pte(L2_PT_ADDR + 0 * 8, L3_PT_PPN, PTE_V)                      # L2 entry (VPN1=0)
+    write_pte(L3_PT_ADDR + 0 * 8, TARGET_PPN, PTE_V | PTE_R | PTE_W | PTE_X)  # L3 leaf (VPN0=0)
 
     # Target Program (LUI a0, 0x00100; ADDI a0, a0, 0x100; ECALL for exit)
     # NOTE: previous encoding 0x01100513 was ADDI a0, x0, 17 (rs1=zero!),

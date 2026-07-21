@@ -30,15 +30,21 @@ CPU_DTYPE = np.dtype([
     ('sscratch', np.uint32, 2),
     ('medeleg', np.uint32, 2),
     ('mideleg', np.uint32, 2),
-    ('virtio_status', np.uint32),    # 408
-    ('plic_pending', np.uint32),     # 412
-    ('plic_enable', np.uint32),      # 416
-    ('plic_claimed', np.uint32),     # 420
-    ('_pad1', np.uint32),            # 424
-    ('_pad2', np.uint32),            # 428 (pad to align WGSL struct to 432 bytes)
+    ('virtio_status', np.uint32),
+    ('vq_desc_low', np.uint32),
+    ('vq_desc_high', np.uint32),
+    ('vq_avail_low', np.uint32),
+    ('vq_avail_high', np.uint32),
+    ('vq_used_low', np.uint32),
+    ('vq_used_high', np.uint32),
+    ('vq_idx', np.uint32),
+    ('plic_pending', np.uint32),
+    ('plic_enable', np.uint32),
+    ('plic_claimed', np.uint32),
+    ('_pad1', np.uint32),
 ])
 
-assert CPU_DTYPE.itemsize == 432, f"CPU struct layout drifted: {CPU_DTYPE.itemsize}"
+assert CPU_DTYPE.itemsize == 456, f"CPU struct layout drifted: {CPU_DTYPE.itemsize}"
 
 SATP_MODE_SV39 = 8
 

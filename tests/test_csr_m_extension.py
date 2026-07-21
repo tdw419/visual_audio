@@ -128,7 +128,11 @@ class GpuCpu:
         queue.write_buffer(cpu_buf, 0, cpu.tobytes())
         out_buf = dev.create_buffer(size=65536,
                                     usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC)
-        uni = np.array([1_000_000], dtype=np.uint32)
+        # main() now runs an internal batch loop (up to 60000 instructions
+        # per dispatch) instead of one instruction per dispatch_workgroups
+        # call, so single-stepping must go through max_instructions - a
+        # dispatch count no longer corresponds to an instruction count.
+        uni = np.array([steps], dtype=np.uint32)
         uni_buf = dev.create_buffer(size=uni.nbytes,
                                     usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
         queue.write_buffer(uni_buf, 0, uni.tobytes())
@@ -141,12 +145,11 @@ class GpuCpu:
         ])
 
         encoder = dev.create_command_encoder()
-        for _ in range(steps):
-            p = encoder.begin_compute_pass()
-            p.set_pipeline(self.pipeline)
-            p.set_bind_group(0, bind_group)
-            p.dispatch_workgroups(1)
-            p.end()
+        p = encoder.begin_compute_pass()
+        p.set_pipeline(self.pipeline)
+        p.set_bind_group(0, bind_group)
+        p.dispatch_workgroups(1)
+        p.end()
         queue.submit([encoder.finish()])
 
         self.last_output = np.frombuffer(queue.read_buffer(out_buf), dtype=np.uint8)
@@ -319,6 +322,19 @@ def main():
     prog = [WFI, FENCE, ADDI(5, 0, 7)]
     st = gpu.run(prog, 3)
     check('WFI+FENCE fall through', reg64(st, 5), 7)
+
+    # Regression: fetch_instruction used to signal "translation/fetch
+    # failed" by returning the sentinel 0xFFFFFFFF as the instruction word
+    # itself, indistinguishable from a real (if unrecognized) instruction
+    # that happens to equal 0xFFFFFFFF - MMU off, no fetch fault possible,
+    # so this must raise CAUSE_ILLEGAL_INSTR, never CAUSE_INSTR_PAGE_FAULT.
+    prog = [0] * 32
+    prog[0] = i_type(0x13, 5, 0, 0, 0x40)   # ADDI x5, x0, 0x40
+    prog[1] = CSRRW(0, MTVEC, 5)            # mtvec = 0x40
+    prog[2] = 0xFFFFFFFF                    # not a fetch fault - illegal instr
+    prog[16] = CSRRS(6, MCAUSE, 0)
+    st = gpu.run(prog, 4)
+    check('0xFFFFFFFF word is illegal-instr, not page-fault', reg64(st, 6), 2)
 
     print()
     if failures:

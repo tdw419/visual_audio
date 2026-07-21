@@ -127,7 +127,10 @@ class GpuCpu:
         queue.write_buffer(cpu_buf, 0, cpu.tobytes())
         out_buf = dev.create_buffer(size=65536,
                                     usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC)
-        uni = np.array([1_000_000], dtype=np.uint32)
+        # main() batches up to 60000 instructions per dispatch now, so a
+        # dispatch count no longer equals an instruction count - drive
+        # single-stepping through max_instructions instead.
+        uni = np.array([steps], dtype=np.uint32)
         uni_buf = dev.create_buffer(size=uni.nbytes,
                                     usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
         queue.write_buffer(uni_buf, 0, uni.tobytes())
@@ -140,12 +143,11 @@ class GpuCpu:
         ])
 
         encoder = dev.create_command_encoder()
-        for _ in range(steps):
-            p = encoder.begin_compute_pass()
-            p.set_pipeline(self.pipeline)
-            p.set_bind_group(0, bind_group)
-            p.dispatch_workgroups(1)
-            p.end()
+        p = encoder.begin_compute_pass()
+        p.set_pipeline(self.pipeline)
+        p.set_bind_group(0, bind_group)
+        p.dispatch_workgroups(1)
+        p.end()
         queue.submit([encoder.finish()])
 
         return np.frombuffer(queue.read_buffer(cpu_buf), dtype=CPU_DTYPE)[0]

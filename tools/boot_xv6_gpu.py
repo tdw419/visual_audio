@@ -128,7 +128,7 @@ def build_memory_image(elf_path: str) -> Tuple[np.ndarray, int]:
     elf.print_info()
 
     # xv6 uses 128MB memory starting at 0x80000000
-    memory_size = 16 * 1024 * 1024
+    memory_size = 128 * 1024 * 1024
     dram_base = 0x80000000
     memory = bytearray(memory_size)
 
@@ -157,6 +157,18 @@ def build_memory_image(elf_path: str) -> Tuple[np.ndarray, int]:
                     if bss_end <= memory_size:
                         memory[bss_start:bss_end] = b'\x00' * (bss_end - bss_start)
                         print(f"    BSS: 0x{seg['vaddr'] + seg['filesz']:016x} - 0x{seg['vaddr'] + seg['memsz']:016x}")
+
+
+    # Load fs.img at 0x81000000 (16MB offset)
+    fs_path = "/tmp/xv6-riscv/fs.img"
+    try:
+        with open(fs_path, "rb") as f:
+            fs_data = f.read()
+        fs_offset = 0x1000000
+        memory[fs_offset:fs_offset+len(fs_data)] = fs_data
+        print(f"  Loaded {len(fs_data)} bytes of fs.img at 0x81000000")
+    except Exception as e:
+        print(f"Warning: could not load fs.img: {e}")
 
     # Convert to RGBA pixels
     print(f"\n[3] Converting to RGBA pixels...")
@@ -217,6 +229,7 @@ def create_gpu_boot_harness(pixels: np.ndarray, entry_point: int) -> dict:
     cpu_state[0]['regs'][3] = [gp_value & 0xFFFFFFFF, (gp_value >> 32) & 0xFFFFFFFF]
     print(f"    Initial gp (x3): 0x{gp_value:#010x}")
 
+
     cpu_buffer = device.create_buffer(
         size=cpu_state.nbytes,
         usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.COPY_SRC,
@@ -230,7 +243,7 @@ def create_gpu_boot_harness(pixels: np.ndarray, entry_point: int) -> dict:
         usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC,
     )
 
-    max_instructions = np.array([60000005], dtype=np.uint32)  # 2M instructions for kernel boot
+    max_instructions = np.array([100000000], dtype=np.uint32)  # 500M instructions for kernel boot
     uniform_buffer = device.create_buffer(
         size=max_instructions.nbytes,
         usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST,
@@ -394,7 +407,7 @@ def boot_xv6_on_gpu(elf_path: str):
     )
 
     output_str = ''
-    for i in range(0, len(output_data), 4):
+    for i in range(0, 16384, 4):
         word = struct.unpack('<I', output_data[i:i+4])[0]
         for b in word.to_bytes(4, 'little'):
             if b == 0:
