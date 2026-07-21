@@ -66,6 +66,7 @@ struct RiscvCPU {
     mtime_high: u32,            // CLINT mtime (high 32 bits)
     mtimecmp_low: u32,          // CLINT mtimecmp (low 32 bits)
     mtimecmp_high: u32,         // CLINT mtimecmp (high 32 bits)
+    timer_fired: u32,           // Edge trigger: timer already fired for this mtimecmp
 }
 
 // R-type instruction decoding
@@ -329,6 +330,9 @@ fn write_csr(cpu: ptr<function, RiscvCPU>, csr_addr: u32, val: vec2<u32>) {
         // Write to stimecmp sets timer compare value (SSTC extension)
         (*cpu).mtimecmp_low = val.x;
         (*cpu).mtimecmp_high = val.y;
+        // Re-arm timer: clear fired flag and MIP so next edge fires fresh
+        (*cpu).timer_fired = 0u;
+        (*cpu).mip.x = (*cpu).mip.x & ~(MIP_MTIP | MIP_STIP);
     } else if (csr_addr == CSR_MENVCFG) {
         // Write to MENVCFG (SSTC STCE enable bit)
         // Just accept the write (we always support SSTC)
@@ -1796,8 +1800,8 @@ fn csr_write(cpu: ptr<function, RiscvCPU>, addr: u32, val: vec2<u32>) {
         case CSR_MCAUSE: { (*cpu).mcause = val; }
         case CSR_MTVAL: { (*cpu).mtval = val; }
         case CSR_MIP: { (*cpu).mip = val; }
-        case CSR_MEDELEG: { (*cpu).medeleg = val; }
-        case CSR_MIDELEG: { (*cpu).mideleg = val; }
+        case CSR_MEDELEG: { (*cpu).medeleg = vec2<u32>(val.x & 0x0000B3FFu, val.y); }
+        case CSR_MIDELEG: { (*cpu).mideleg = vec2<u32>(val.x & 0x00000222u, val.y); }
         case CSR_SSTATUS: {
             // Only the S-view bits of mstatus are writable through sstatus.
             // CRITICAL: Preserve MIE bit (bit 3) - S-mode writes to sstatus must not
@@ -2179,6 +2183,9 @@ fn execute_store(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32, cpu_
             // SD (Store Doubleword) - write both low and high
             (*cpu).mtimecmp_low = (*cpu).regs[decoded.rs2].x;
             (*cpu).mtimecmp_high = (*cpu).regs[decoded.rs2].y;
+            // Re-arm timer: clear fired flag and MIP so next edge fires fresh
+            (*cpu).timer_fired = 0u;
+            (*cpu).mip.x = (*cpu).mip.x & ~(MIP_MTIP | MIP_STIP);
         }
         // Ignore writes to mtime (read-only)
         (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
@@ -2615,14 +2622,19 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         cpu.mtime_low = mtime_low;
         cpu.mtime_high = mtime_high;
 
-        // Check if timer interrupt should fire (mtime >= mtimecmp)
-        let timer_pending = (mtime_high > cpu.mtimecmp_high) ||
-                           (mtime_high == cpu.mtimecmp_high && mtime_low >= cpu.mtimecmp_low);
-
-        // Update MIP timer interrupt bits (MTIP for M-mode, STIP for S-mode)
-        if (timer_pending) {
+        // Edge-triggered timer interrupt: fire once when mtime crosses mtimecmp
+        let timer_crossed = (mtime_high > cpu.mtimecmp_high) ||
+                            (mtime_high == cpu.mtimecmp_high && mtime_low >= cpu.mtimecmp_low);
+        
+        // Set fired flag on first crossing, set MIP bits
+        // MIP stays set until software writes mtimecmp (which clears timer_fired AND MIP)
+        if (timer_crossed && cpu.timer_fired == 0u) {
+            cpu.timer_fired = 1u;
+            // Set both MTIP (M-mode) and STIP (S-mode) - will be filtered by delegation
             new_mip.x = new_mip.x | MIP_MTIP | MIP_STIP;
-        } else {
+        }
+        // Clear MIP timer bits if timer was just re-armed (timer_fired reset to 0)
+        if (cpu.timer_fired == 0u) {
             new_mip.x = new_mip.x & ~(MIP_MTIP | MIP_STIP);
         }
 
@@ -2662,13 +2674,19 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         // Check if we should take an interrupt
         // S-mode: check for STIP (timer) or SEIP (external), with SIE enabled
         // M-mode: check for MTIP (timer) or MEIP (external), with MIE enabled
-        let should_trap_s_timer = (cpu.mip.x & MIP_STIP) != 0u && (cpu.mstatus.x & 2u) != 0u && cpu.priv_mode == PRIV_S;
-        let should_trap_m_timer = (cpu.mip.x & MIP_MTIP) != 0u && (cpu.mstatus.x & 8u) != 0u && cpu.priv_mode == PRIV_M;
-        let should_trap_s_ext = (cpu.mip.x & MIP_SEIP) != 0u && (cpu.mstatus.x & 2u) != 0u && cpu.priv_mode == PRIV_S;
-        let should_trap_m_ext = (cpu.mip.x & MIP_MEIP) != 0u && (cpu.mstatus.x & 8u) != 0u && cpu.priv_mode == PRIV_M;
+        let m_ie = cpu.priv_mode < PRIV_M || (cpu.priv_mode == PRIV_M && (cpu.mstatus.x & 8u) != 0u);
+        let s_ie = cpu.priv_mode < PRIV_S || (cpu.priv_mode == PRIV_S && (cpu.mstatus.x & 2u) != 0u);
 
-        if (should_trap_s_timer) {
-            take_trap(&cpu, vec2<u32>(5u, 0x80000000u), cpu.pc); // Supervisor timer interrupt
+        let m_pending_enabled = cpu.mip.x & cpu.mie.x & ~cpu.mideleg.x;
+        let s_pending_enabled = cpu.mip.x & cpu.mie.x & cpu.mideleg.x;
+
+        let should_trap_m_ext   = (m_pending_enabled & MIP_MEIP) != 0u && m_ie;
+        let should_trap_m_timer = (m_pending_enabled & MIP_MTIP) != 0u && m_ie;
+        let should_trap_s_ext   = (s_pending_enabled & MIP_SEIP) != 0u && s_ie;
+        let should_trap_s_timer = (s_pending_enabled & MIP_STIP) != 0u && s_ie;
+
+        if (should_trap_m_ext) {
+            take_trap(&cpu, vec2<u32>(11u, 0x80000000u), cpu.pc); // Machine external interrupt
             continue;
         } else if (should_trap_m_timer) {
             take_trap(&cpu, vec2<u32>(7u, 0x80000000u), cpu.pc); // Machine timer interrupt
@@ -2676,8 +2694,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         } else if (should_trap_s_ext) {
             take_trap(&cpu, vec2<u32>(9u, 0x80000000u), cpu.pc); // Supervisor external interrupt
             continue;
-        } else if (should_trap_m_ext) {
-            take_trap(&cpu, vec2<u32>(11u, 0x80000000u), cpu.pc); // Machine external interrupt
+        } else if (should_trap_s_timer) {
+            take_trap(&cpu, vec2<u32>(5u, 0x80000000u), cpu.pc); // Supervisor timer interrupt
             continue;
         }
 
