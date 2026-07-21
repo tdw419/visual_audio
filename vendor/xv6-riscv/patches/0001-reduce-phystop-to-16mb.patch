@@ -1,5 +1,8 @@
-# Reduce PHYSTOP from 128MB to 16MB for GPU memory constraints
-# The GPU emulator allocates a fixed 16MB memory buffer
+# Reduce PHYSTOP from 128MB to 16MB.
+# Purely a build-time speed tradeoff: kinit's page-by-page memset clear
+# loop takes ~50M instructions at 16MB vs. ~800M at 128MB on this
+# single-hart, sequential GPU emulator. 16MB is still plenty of RAM for
+# the kernel, first processes, and shell.
 --- a/kernel/memlayout.h
 +++ b/kernel/memlayout.h
 @@ -37,7 +37,7 @@

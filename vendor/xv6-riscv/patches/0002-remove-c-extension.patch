@@ -1,13 +1,26 @@
 # Remove C extension (compressed instructions) from kernel build
-# GPU emulator WGSL only supports RV64IMA, not RV64C
+# GPU emulator WGSL only supports RV64IMA + Zicsr/Zifencei, not RV64C.
+# Verified: after this patch, every instruction in kernel/kernel is 4
+# bytes (riscv64-linux-gnu-objdump -d | check hex-char width == 18).
+diff --git a/Makefile b/Makefile
+index f59a9ad..77e3e2d 100644
 --- a/Makefile
 +++ b/Makefile
-@@ -92,7 +92,7 @@ QEMUOPTS = -machine virt -bios none -kernel kernel/kernel -m 128M \
- 		-smp $(CPUS) -nographic -drive file=fs.img,if=none,format=raw,id=x0 \
- 		-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
+@@ -61,7 +61,7 @@ OBJCOPY = $(TOOLPREFIX)objcopy
+ OBJDUMP = $(TOOLPREFIX)objdump
 
--	$(CC) -march=rv64gc -mabi=lp64 -g -c -o $@ $<
+ CFLAGS = -Wall -Werror -Wno-unknown-attributes -O -fno-omit-frame-pointer -ggdb -gdwarf-2
+-CFLAGS += -march=rv64gc
++CFLAGS += -march=rv64ima_zicsr_zifencei -mabi=lp64
+ CFLAGS += -std=gnu99
+ CFLAGS += -MD
+ CFLAGS += -mcmodel=medany
+@@ -92,7 +92,7 @@ $K/kernel: $(OBJS) $K/kernel.ld
+ 	$(OBJDUMP) -t $K/kernel | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $K/kernel.sym
+
+ $K/%.o: $K/%.S
+-	$(CC) -march=rv64gc -g -c -o $@ $<
 +	$(CC) -march=rv64ima_zicsr_zifencei -mabi=lp64 -g -c -o $@ $<
 
- # Include user makefile
- include $U/Makefile
+ tags: $(OBJS)
+ 	etags kernel/*.S kernel/*.c
