@@ -2623,8 +2623,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         cpu.mtime_high = mtime_high;
 
         // Edge-triggered timer interrupt: fire once when mtime crosses mtimecmp
-        let timer_crossed = (mtime_high > cpu.mtimecmp_high) ||
-                            (mtime_high == cpu.mtimecmp_high && mtime_low >= cpu.mtimecmp_low);
+        // Treat mtimecmp == 0 as "timer disabled" — don't fire until kernel programs it.
+        // This prevents spurious early interrupts before stvec is set up.
+        let timer_enabled = (cpu.mtimecmp_high != 0u) || (cpu.mtimecmp_low != 0u);
+        let timer_crossed = timer_enabled && ((mtime_high > cpu.mtimecmp_high) ||
+                            (mtime_high == cpu.mtimecmp_high && mtime_low >= cpu.mtimecmp_low));
         
         // Set fired flag on first crossing, set MIP bits
         // MIP stays set until software writes mtimecmp (which clears timer_fired AND MIP)
