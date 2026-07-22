@@ -67,6 +67,9 @@ struct RiscvCPU {
     mtimecmp_low: u32,          // CLINT mtimecmp (low 32 bits)
     mtimecmp_high: u32,         // CLINT mtimecmp (high 32 bits)
     timer_fired: u32,           // Edge trigger: timer already fired for this mtimecmp
+    timer_interrupt_count: u32, // Number of timer interrupts taken
+    total_interrupt_count: u32, // Total interrupts taken
+    _pad0: u32,                 // WGSL alignment padding
 }
 
 // R-type instruction decoding
@@ -423,16 +426,16 @@ const CAUSE_USER_EXTERNAL: u32 = 0x80000008u;    // 8
 const CAUSE_SUPERVISOR_EXTERNAL: u32 = 0x80000009u; // 9
 const CAUSE_MACHINE_EXTERNAL: u32 = 0x8000000Bu;   // 11
 
-// MIP interrupt bits
-const MIP_USIP: u32 = 1u;
-const MIP_SSIP: u32 = 2u;
-const MIP_MSIP: u32 = 4u;
-const MIP_UTIP: u32 = 8u;
-const MIP_STIP: u32 = 16u;
-const MIP_MTIP: u32 = 32u;
-const MIP_UEIP: u32 = 64u;
-const MIP_SEIP: u32 = 128u;   // S-mode external interrupt
-const MIP_MEIP: u32 = 256u;   // M-mode external interrupt (from PLIC)
+// MIP interrupt bits (RISC-V spec bit positions)
+const MIP_USIP: u32 = 1u;      // Bit 0
+const MIP_SSIP: u32 = 2u;      // Bit 1
+const MIP_MSIP: u32 = 8u;      // Bit 3
+const MIP_UTIP: u32 = 16u;     // Bit 4
+const MIP_STIP: u32 = 32u;     // Bit 5
+const MIP_MTIP: u32 = 128u;    // Bit 7
+const MIP_UEIP: u32 = 256u;    // Bit 8
+const MIP_SEIP: u32 = 512u;    // Bit 9
+const MIP_MEIP: u32 = 2048u;   // Bit 11
 
 // SBI extension IDs (a7) - the WGSL emulator IS the M-mode firmware.
 // S-mode ECALLs are handled inline instead of vectoring to mtvec.
@@ -1839,6 +1842,14 @@ fn take_trap(cpu: ptr<function, RiscvCPU>, cause: vec2<u32>, tval: vec2<u32>) {
     let deleg_mask = select((*cpu).medeleg.x, (*cpu).mideleg.x, is_interrupt);
     let delegated = (*cpu).priv_mode != PRIV_M &&
                     ((deleg_mask >> code) & 1u) != 0u;
+
+    // Count interrupts
+    if (is_interrupt) {
+        (*cpu).total_interrupt_count = (*cpu).total_interrupt_count + 1u;
+        if (code == 7u || code == 5u) {
+            (*cpu).timer_interrupt_count = (*cpu).timer_interrupt_count + 1u;
+        }
+    }
 
     if (delegated) {
         (*cpu).sepc = (*cpu).pc;
