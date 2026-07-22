@@ -451,9 +451,9 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
                         dtype=cpu_layout
                     )
                     regs = cpu_data['regs'][0]
-                    mstatus_val = 0  # TODO: extract from cpu_readback
-                    mie_val = int(cpu_data[0]['mie'][0])
-                    mip_val = int(cpu_data[0]['mip'][0])
+                    mstatus_val = (int(cpu_data[0]['mstatus'][1]) << 32) | int(cpu_data[0]['mstatus'][0])
+                    mie_val = (int(cpu_data[0]['mie'][1]) << 32) | int(cpu_data[0]['mie'][0])
+                    mip_val = (int(cpu_data[0]['mip'][1]) << 32) | int(cpu_data[0]['mip'][0])
                     plic_pending = int(cpu_data[0]['plic_pending'])
                     plic_enable = int(cpu_data[0]['plic_enable'])
                     print(f"    Current MSTATUS: 0x{mstatus_val:08x}")
