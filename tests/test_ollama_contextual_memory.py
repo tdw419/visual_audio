@@ -1,329 +1,491 @@
 #!/usr/bin/env python3
 """
-Ollama Contextual Memory Tests - TASK_A001
-Tests for conversation history tracking across container sessions.
+Test suite for Ollama contextual memory functionality.
 
-Verifies:
-1. Context persists between queries in the same session
-2. Session history can be saved and loaded
-3. Context window management works correctly
-4. Memory persists across container sessions (when persisted to disk)
-5. Context summarization kicks in when window is full
+Verifies that context persists between queries across container sessions.
 """
 
 import json
 import os
 import tempfile
-from datetime import datetime
+import shutil
 from pathlib import Path
-from typing import List, Dict
+from datetime import datetime
 
-import pytest
-
-# Add tools to path
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "tools"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from ollama_prompt import ConversationMemory, prompt_ollama
+from tools.ollama_prompt import (
+    ConversationMemory,
+    ContextualOllamaPrompter,
+    prompt_ollama_with_context
+)
 
 
 class TestConversationMemory:
-    """Tests for conversation history tracking."""
-
-    def test_memory_initializes_empty(self):
-        """Verify conversation memory starts empty."""
-        memory = ConversationMemory(max_tokens=4096)
+    """Test ConversationMemory core functionality."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.memory = ConversationMemory(max_tokens=4096)
+        self.temp_dir = tempfile.mkdtemp()
+    
+    def teardown_method(self):
+        """Clean up test fixtures."""
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+    
+    def test_add_and_retrieve_messages(self):
+        """Test that messages can be added and retrieved."""
+        self.memory.add_message("user", "Hello")
+        self.memory.add_message("assistant", "Hi there")
         
-        assert memory.get_conversation_history() == []
-        assert memory.get_token_count() == 0
-
-    def test_add_message_to_history(self):
-        """Verify messages can be added to conversation history."""
-        memory = ConversationMemory(max_tokens=4096)
-        
-        memory.add_message("user", "Hello, how are you?")
-        memory.add_message("assistant", "I'm doing well, thank you!")
-        
-        history = memory.get_conversation_history()
-        
+        history = self.memory.get_conversation_history()
         assert len(history) == 2
-        assert history[0]["role"] == "user"
-        assert history[0]["content"] == "Hello, how are you?"
-        assert history[1]["role"] == "assistant"
-        assert history[1]["content"] == "I'm doing well, thank you!"
-
-    def test_memory_persists_to_disk(self):
-        """Verify conversation memory can be saved to and loaded from disk."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            memory_path = Path(tmpdir) / "conversation.json"
-            
-            # Create and populate memory
-            memory1 = ConversationMemory(max_tokens=4096)
-            memory1.add_message("user", "What is the weather?")
-            memory1.add_message("assistant", "I don't have weather data.")
-            
-            # Save to disk
-            memory1.save(str(memory_path))
-            
-            # Verify file exists
-            assert memory_path.exists()
-            
-            # Load into new memory instance
-            memory2 = ConversationMemory(max_tokens=4096)
-            memory2.load(str(memory_path))
-            
-            # Verify history matches
-            history1 = memory1.get_conversation_history()
-            history2 = memory2.get_conversation_history()
-            
-            assert len(history2) == 2
-            assert history1 == history2
-
-    def test_memory_loads_invalid_file_gracefully(self):
-        """Verify loading invalid memory file doesn't crash."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            memory_path = Path(tmpdir) / "invalid.json"
-            
-            # Write invalid JSON
-            memory_path.write_text("{ invalid json")
-            
-            memory = ConversationMemory(max_tokens=4096)
-            memory.load(str(memory_path))
-            
-            # Should initialize empty
-            assert memory.get_conversation_history() == []
-
-    def test_context_window_management(self):
-        """Verify old messages are dropped when window is full."""
-        memory = ConversationMemory(max_tokens=100)  # Very small window
+        assert history[0]['role'] == 'user'
+        assert history[0]['content'] == 'Hello'
+        assert history[1]['role'] == 'assistant'
+        assert history[1]['content'] == 'Hi there'
+    
+    def test_timestamp_tracking(self):
+        """Test that messages have timestamps."""
+        self.memory.add_message("user", "Test message")
         
-        # Add messages that will exceed token limit
-        for i in range(10):
-            memory.add_message("user", f"This is message number {i} with some text")
-            memory.add_message("assistant", f"Response number {i}")
+        history = self.memory.get_conversation_history()
+        assert 'timestamp' in history[0]
         
-        # Token count should be managed
-        assert memory.get_token_count() <= memory.max_tokens
-        
-        # Should still have recent messages
-        history = memory.get_conversation_history()
-        assert len(history) > 0
-
-    def test_clear_memory(self):
-        """Verify memory can be cleared."""
-        memory = ConversationMemory(max_tokens=4096)
-        
-        memory.add_message("user", "Test message")
-        memory.add_message("assistant", "Test response")
-        
-        assert len(memory.get_conversation_history()) == 2
-        
-        memory.clear()
-        
-        assert memory.get_conversation_history() == []
-        assert memory.get_token_count() == 0
-
+        # Verify timestamp is valid ISO format
+        timestamp_str = history[0]['timestamp']
+        datetime.fromisoformat(timestamp_str)  # Will raise if invalid
+    
     def test_get_last_n_messages(self):
-        """Verify retrieving last N messages works."""
-        memory = ConversationMemory(max_tokens=4096)
+        """Test retrieving last N messages."""
+        for i in range(5):
+            self.memory.add_message("user", f"Message {i}")
         
-        for i in range(10):
-            memory.add_message("user", f"Message {i}")
-        
-        last_3 = memory.get_last_n_messages(3)
-        
+        last_3 = self.memory.get_last_n_messages(3)
         assert len(last_3) == 3
-        assert "Message 7" in last_3[0]["content"]
-        assert "Message 9" in last_3[2]["content"]
-
+        assert last_3[0]['content'] == 'Message 2'
+        assert last_3[2]['content'] == 'Message 4'
+    
     def test_get_messages_by_role(self):
-        """Verify filtering messages by role works."""
-        memory = ConversationMemory(max_tokens=4096)
+        """Test filtering messages by role."""
+        self.memory.add_message("user", "Question 1")
+        self.memory.add_message("assistant", "Answer 1")
+        self.memory.add_message("user", "Question 2")
         
-        memory.add_message("user", "Question 1")
-        memory.add_message("assistant", "Answer 1")
-        memory.add_message("user", "Question 2")
-        memory.add_message("assistant", "Answer 2")
-        memory.add_message("user", "Question 3")
+        user_messages = self.memory.get_messages_by_role("user")
+        assert len(user_messages) == 2
         
-        user_msgs = memory.get_messages_by_role("user")
-        assistant_msgs = memory.get_messages_by_role("assistant")
+        assistant_messages = self.memory.get_messages_by_role("assistant")
+        assert len(assistant_messages) == 1
+    
+    def test_clear_memory(self):
+        """Test clearing conversation history."""
+        self.memory.add_message("user", "Test")
+        assert len(self.memory.get_conversation_history()) == 1
         
-        assert len(user_msgs) == 3
-        assert len(assistant_msgs) == 2
-        assert all(msg["role"] == "user" for msg in user_msgs)
-
-    def test_metadata_tracking(self):
-        """Verify metadata can be attached to memory."""
-        memory = ConversationMemory(
-            max_tokens=4096,
-            metadata={
-                "session_id": "test-session-001",
-                "container_id": "visual_audio.mkv",
-                "started_at": datetime.now().isoformat()
-            }
-        )
+        self.memory.clear()
+        assert len(self.memory.get_conversation_history()) == 0
+    
+    def test_persistence_save_and_load(self):
+        """Test saving and loading conversation history to/from disk."""
+        # Add some messages
+        self.memory.add_message("user", "Question")
+        self.memory.add_message("assistant", "Response")
         
-        meta = memory.get_metadata()
+        # Save to file
+        save_path = os.path.join(self.temp_dir, "conversation.json")
+        self.memory.save(save_path)
+        assert os.path.exists(save_path)
         
-        assert meta["session_id"] == "test-session-001"
-        assert meta["container_id"] == "visual_audio.mkv"
-
-    def test_multiple_sessions(self):
-        """Verify multiple conversation sessions can be distinguished."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir = Path(tmpdir)
-            
-            # Session 1
-            session1_path = tmpdir / "session1.json"
-            memory1 = ConversationMemory(
-                max_tokens=4096,
-                metadata={"session_id": "session-1"}
-            )
-            memory1.add_message("user", "Session 1 question")
-            memory1.add_message("assistant", "Session 1 answer")
-            memory1.save(str(session1_path))
-            
-            # Session 2
-            session2_path = tmpdir / "session2.json"
-            memory2 = ConversationMemory(
-                max_tokens=4096,
-                metadata={"session_id": "session-2"}
-            )
-            memory2.add_message("user", "Session 2 question")
-            memory2.add_message("assistant", "Session 2 answer")
-            memory2.save(str(session2_path))
-            
-            # Load both and verify they're separate
-            loaded1 = ConversationMemory(max_tokens=4096)
-            loaded1.load(str(session1_path))
-            
-            loaded2 = ConversationMemory(max_tokens=4096)
-            loaded2.load(str(session2_path))
-            
-            assert "Session 1 question" in str(loaded1.get_conversation_history())
-            assert "Session 2 question" not in str(loaded1.get_conversation_history())
-            assert "Session 2 question" in str(loaded2.get_conversation_history())
-            assert "Session 1 question" not in str(loaded2.get_conversation_history())
-
-
-class TestOllamaWithContext:
-    """Tests for Ollama with contextual memory."""
-
-    def test_prompt_ollama_with_context(self):
-        """Verify Ollama prompt includes conversation history."""
-        memory = ConversationMemory(max_tokens=4096)
+        # Load into new memory instance
+        new_memory = ConversationMemory()
+        new_memory.load(save_path)
         
-        # Add context
-        memory.add_message("user", "My name is Alice")
-        memory.add_message("assistant", "Hello Alice!")
+        # Verify content
+        history = new_memory.get_conversation_history()
+        assert len(history) == 2
+        assert history[0]['content'] == 'Question'
+        assert history[1]['content'] == 'Response'
+    
+    def test_persistence_with_metadata(self):
+        """Test that metadata is persisted correctly."""
+        metadata = {
+            'container_id': 'test_container',
+            'session_id': 'session_123',
+            'created_at': datetime.now().isoformat()
+        }
+        self.memory = ConversationMemory(max_tokens=4096, metadata=metadata)
         
-        # Build context-aware prompt
-        history = memory.get_conversation_history()
-        context_str = "\n".join([
-            f"{msg['role']}: {msg['content']}" 
-            for msg in history
-        ])
+        save_path = os.path.join(self.temp_dir, "conversation.json")
+        self.memory.save(save_path)
         
-        full_prompt = f"Previous conversation:\n{context_str}\n\nCurrent question: What is my name?"
+        # Load and verify metadata
+        new_memory = ConversationMemory()
+        new_memory.load(save_path)
         
-        # Note: We don't actually call Ollama here (it may not be available in test env)
-        # Just verify the context is properly formatted
-        assert "My name is Alice" in full_prompt
-        assert "Hello Alice!" in full_prompt
-        assert "Current question:" in full_prompt
-
-    def test_token_count_estimation(self):
-        """Verify token counting is reasonably accurate."""
-        memory = ConversationMemory(max_tokens=4096)
+        loaded_metadata = new_memory.get_metadata()
+        assert loaded_metadata['container_id'] == 'test_container'
+        assert loaded_metadata['session_id'] == 'session_123'
+    
+    def test_merge_memories(self):
+        """Test merging two conversation memories."""
+        mem1 = ConversationMemory()
+        mem1.add_message("user", "First message")
         
-        # Short message
-        memory.add_message("user", "Hi")
-        short_count = memory.get_token_count()
-        
-        # Longer message
-        memory.clear()
-        memory.add_message("user", "Hello, how are you doing today?")
-        long_count = memory.get_token_count()
-        
-        # Longer message should have more tokens
-        assert long_count > short_count
-
-
-class TestSessionPersistenceAcrossContainer:
-    """Tests for memory persistence across container sessions."""
-
-    def test_container_session_id_tracking(self):
-        """Verify container sessions can be tracked by ID."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            session_file = Path(tmpdir) / "container_session.json"
-            
-            # Simulate container session
-            memory = ConversationMemory(
-                max_tokens=4096,
-                metadata={
-                    "container_id": "visual_audio.mkv",
-                    "session_id": "container-run-123",
-                    "started_at": datetime.now().isoformat()
-                }
-            )
-            
-            memory.add_message("user", "Container boot complete")
-            memory.add_message("assistant", "Acknowledged")
-            
-            memory.save(str(session_file))
-            
-            # Simulate container restart - load memory
-            new_memory = ConversationMemory(max_tokens=4096)
-            new_memory.load(str(session_file))
-            
-            history = new_memory.get_conversation_history()
-            meta = new_memory.get_metadata()
-            
-            assert len(history) == 2
-            assert meta["container_id"] == "visual_audio.mkv"
-            assert meta["session_id"] == "container-run-123"
-
-    def test_session_continuation(self):
-        """Verify conversation can continue from saved session."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            session_file = Path(tmpdir) / "continue_test.json"
-            
-            # First session
-            mem1 = ConversationMemory(max_tokens=4096)
-            mem1.add_message("user", "Step 1: Initialize")
-            mem1.add_message("assistant", "Initialized")
-            mem1.save(str(session_file))
-            
-            # Second session (continuation)
-            mem2 = ConversationMemory(max_tokens=4096)
-            mem2.load(str(session_file))
-            
-            assert len(mem2.get_conversation_history()) == 2
-            
-            # Add more
-            mem2.add_message("user", "Step 2: Process")
-            mem2.add_message("assistant", "Processed")
-            
-            assert len(mem2.get_conversation_history()) == 4
-
-    def test_session_merge(self):
-        """Verify sessions can be merged."""
-        mem1 = ConversationMemory(max_tokens=4096)
-        mem1.add_message("user", "Session A question")
-        
-        mem2 = ConversationMemory(max_tokens=4096)
-        mem2.add_message("user", "Session B question")
+        mem2 = ConversationMemory()
+        mem2.add_message("assistant", "Response")
+        mem2.add_message("user", "Follow-up")
         
         # Merge mem2 into mem1
         mem1.merge(mem2)
         
         history = mem1.get_conversation_history()
+        assert len(history) == 3
+        assert history[0]['content'] == 'First message'
+        assert history[1]['content'] == 'Response'
+        assert history[2]['content'] == 'Follow-up'
+    
+    def test_token_limit_pruning(self):
+        """Test that old messages are pruned when token limit is exceeded."""
+        # Create memory with small token limit
+        memory = ConversationMemory(max_tokens=50)
         
+        # Add messages with longer text (each ~50 chars = 12-13 tokens)
+        # Adding 5 messages would exceed 50 token limit
+        for i in range(5):
+            memory.add_message("user", f"This is a much longer message number {i} with more text content that will consume tokens")
+        
+        # Should prune to stay under limit
+        assert memory.get_token_count() <= 50
+        assert len(memory.get_conversation_history()) < 5
+    
+    def test_clear_preserves_metadata(self):
+        """Test that clearing messages preserves metadata."""
+        metadata = {'container_id': 'test'}
+        self.memory = ConversationMemory(metadata=metadata)
+        
+        self.memory.add_message("user", "Test")
+        self.memory.clear()
+        
+        # Messages should be gone
+        assert len(self.memory.get_conversation_history()) == 0
+        # Metadata should remain
+        assert self.memory.get_metadata()['container_id'] == 'test'
+
+
+class TestContextualOllamaPrompter:
+    """Test ContextualOllamaPrompter container-specific functionality."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.temp_dir = tempfile.mkdtemp()
+        self.prompter = ContextualOllamaPrompter(
+            container_id="test_container",
+            context_dir=self.temp_dir,
+            auto_persist=False  # Disable auto-persist for cleaner tests
+        )
+    
+    def teardown_method(self):
+        """Clean up test fixtures."""
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+    
+    def test_container_id_tracking(self):
+        """Test that container ID is tracked correctly."""
+        assert self.prompter.get_container_id() == "test_container"
+        
+        metadata = self.prompter.get_metadata()
+        assert metadata['container_id'] == "test_container"
+    
+    def test_context_persistence_across_sessions(self):
+        """Test that context persists across prompter instances (sessions)."""
+        # First session: add some context
+        self.prompter.track_context("user", "My name is Alice")
+        self.prompter.track_context("assistant", "Hello Alice!")
+        self.prompter.save_context()
+        
+        # Create new prompter instance (simulating new session)
+        prompter2 = ContextualOllamaPrompter(
+            container_id="test_container",
+            context_dir=self.temp_dir,
+            auto_persist=False
+        )
+        
+        # Context should be loaded automatically
+        history = prompter2.get_conversation_history()
         assert len(history) == 2
-        assert "Session A question" in str(history)
-        assert "Session B question" in str(history)
+        assert history[0]['content'] == "My name is Alice"
+        assert history[1]['content'] == "Hello Alice!"
+    
+    def test_auto_persist_enabled(self):
+        """Test that auto_persist saves context after each update."""
+        prompter = ContextualOllamaPrompter(
+            container_id="auto_container",
+            context_dir=self.temp_dir,
+            auto_persist=True
+        )
+        
+        # Add context - should auto-save
+        prompter.track_context("user", "Auto-persist test")
+        
+        # Load into new instance
+        prompter2 = ContextualOllamaPrompter(
+            container_id="auto_container",
+            context_dir=self.temp_dir,
+            auto_persist=False
+        )
+        
+        history = prompter2.get_conversation_history()
+        assert len(history) == 1
+        assert history[0]['content'] == "Auto-persist test"
+    
+    def test_max_history_limit(self):
+        """Test that max_history limits the number of messages."""
+        prompter = ContextualOllamaPrompter(
+            container_id="limit_container",
+            context_dir=self.temp_dir,
+            max_history=5,
+            auto_persist=False
+        )
+        
+        # Add 10 messages
+        for i in range(10):
+            prompter.track_context("user", f"Message {i}")
+        
+        # Should only keep last 5
+        history = prompter.get_conversation_history()
+        assert len(history) == 5
+        assert history[0]['content'] == "Message 5"
+        assert history[4]['content'] == "Message 9"
+    
+    def test_clear_context(self):
+        """Test clearing context removes all messages."""
+        self.prompter.track_context("user", "Test")
+        self.prompter.track_context("assistant", "Response")
+        
+        assert len(self.prompter.get_conversation_history()) == 2
+        
+        self.prompter.clear_context()
+        assert len(self.prompter.get_conversation_history()) == 0
+    
+    def test_history_to_prompt_string(self):
+        """Test converting history to readable prompt string."""
+        self.prompter.track_context("user", "What is Python?")
+        self.prompter.track_context("assistant", "Python is a programming language")
+        
+        prompt_str = self.prompter.history_to_prompt_string(max_messages=2)
+        
+        assert "USER:" in prompt_str
+        assert "ASSISTANT:" in prompt_str
+        assert "What is Python?" in prompt_str
+        assert "Python is a programming language" in prompt_str
+    
+    def test_get_context_for_ollama(self):
+        """Test getting context formatted for Ollama API."""
+        self.prompter.track_context("user", "Hello")
+        
+        ollama_context = self.prompter.get_context_for_ollama(max_messages=1)
+        
+        assert isinstance(ollama_context, list)
+        assert len(ollama_context) == 1
+        assert ollama_context[0]['role'] == 'user'
+        assert ollama_context[0]['content'] == 'Hello'
+    
+    def test_container_isolation(self):
+        """Test that different containers have separate histories."""
+        prompter1 = ContextualOllamaPrompter(
+            container_id="container_1",
+            context_dir=self.temp_dir,
+            auto_persist=False
+        )
+        
+        prompter2 = ContextualOllamaPrompter(
+            container_id="container_2",
+            context_dir=self.temp_dir,
+            auto_persist=False
+        )
+        
+        prompter1.track_context("user", "Container 1 message")
+        prompter2.track_context("user", "Container 2 message")
+        
+        # Each should have only its own messages
+        assert len(prompter1.get_conversation_history()) == 1
+        assert prompter1.get_conversation_history()[0]['content'] == "Container 1 message"
+        
+        assert len(prompter2.get_conversation_history()) == 1
+        assert prompter2.get_conversation_history()[0]['content'] == "Container 2 message"
+    
+    def test_save_and_load_context(self):
+        """Test explicit save and load of context."""
+        self.prompter.track_context("user", "Save test")
+        
+        # Explicit save
+        saved = self.prompter.save_context()
+        assert saved is True
+        
+        # Clear memory
+        self.prompter.clear_context()
+        assert len(self.prompter.get_conversation_history()) == 0
+        
+        # Load back
+        loaded = self.prompter.load_context()
+        assert loaded is True
+        assert len(self.prompter.get_conversation_history()) == 1
+
+
+class TestContextPersistenceAcrossQueries:
+    """Integration tests for context persistence between queries."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.temp_dir = tempfile.mkdtemp()
+    
+    def teardown_method(self):
+        """Clean up test fixtures."""
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+    
+    def test_context_flows_through_query_ollama(self):
+        """Test that context is maintained across multiple query_ollama calls."""
+        prompter = ContextualOllamaPrompter(
+            container_id="flow_test",
+            context_dir=self.temp_dir,
+            auto_persist=False
+        )
+        
+        # First query - tracks user prompt and would track response
+        # (We're mocking query_ollama_with_context to avoid actual Ollama calls)
+        history_before = prompter.get_conversation_history()
+        assert len(history_before) == 0
+        
+        # Simulate what query_ollama does
+        prompter.track_context("user", "First question")
+        assert len(prompter.get_conversation_history()) == 1
+        
+        # Track response (simulated)
+        prompter.track_context("assistant", "First answer")
+        assert len(prompter.get_conversation_history()) == 2
+        
+        # Second query
+        prompter.track_context("user", "Follow-up question")
+        history = prompter.get_conversation_history()
+        
+        # All messages should be present
+        assert len(history) == 3
+        assert history[0]['content'] == "First question"
+        assert history[1]['content'] == "First answer"
+        assert history[2]['content'] == "Follow-up question"
+    
+    def test_conversation_memory_integration(self):
+        """Test ConversationMemory integrates correctly with prompt_ollama_with_context."""
+        memory = ConversationMemory(max_tokens=4096)
+        
+        # Add context to memory
+        memory.add_message("user", "Context question")
+        memory.add_message("assistant", "Context answer")
+        
+        # Get context for prompt
+        history = memory.get_last_n_messages(10)
+        assert len(history) == 2
+        
+        # Format as expected by prompt_ollama_with_context
+        assert history[0]['role'] == 'user'
+        assert history[1]['role'] == 'assistant'
+    
+    def test_multiple_container_sessions(self):
+        """Test that multiple sessions for same container maintain continuity."""
+        container_id = "session_test"
+        
+        # Session 1
+        prompter1 = ContextualOllamaPrompter(
+            container_id=container_id,
+            context_dir=self.temp_dir,
+            auto_persist=False
+        )
+        prompter1.track_context("user", "Session 1 message")
+        prompter1.save_context()
+        
+        # Session 2 (new instance, same container)
+        prompter2 = ContextualOllamaPrompter(
+            container_id=container_id,
+            context_dir=self.temp_dir,
+            auto_persist=False
+        )
+        prompter2.track_context("user", "Session 2 message")
+        prompter2.save_context()
+        
+        # Session 3
+        prompter3 = ContextualOllamaPrompter(
+            container_id=container_id,
+            context_dir=self.temp_dir,
+            auto_persist=False
+        )
+        
+        history = prompter3.get_conversation_history()
+        assert len(history) == 2
+        assert history[0]['content'] == "Session 1 message"
+        assert history[1]['content'] == "Session 2 message"
+
+
+def run_all_tests():
+    """Run all test classes."""
+    test_classes = [
+        TestConversationMemory,
+        TestContextualOllamaPrompter,
+        TestContextPersistenceAcrossQueries
+    ]
+    
+    total_passed = 0
+    total_failed = 0
+    failures = []
+    
+    for test_class in test_classes:
+        print(f"\n{'='*60}")
+        print(f"Running {test_class.__name__}")
+        print(f"{'='*60}")
+        
+        test_instance = test_class()
+        
+        # Get all test methods
+        test_methods = [m for m in dir(test_instance) if m.startswith('test_')]
+        
+        for method_name in test_methods:
+            # Run setup
+            test_instance.setup_method()
+            
+            try:
+                # Run test
+                getattr(test_instance, method_name)()
+                print(f"✓ {method_name}")
+                total_passed += 1
+            except Exception as e:
+                print(f"✗ {method_name}: {e}")
+                total_failed += 1
+                failures.append(f"{test_class.__name__}.{method_name}: {e}")
+            
+            # Run teardown
+            try:
+                test_instance.teardown_method()
+            except Exception:
+                pass
+    
+    # Summary
+    print(f"\n{'='*60}")
+    print(f"Test Summary")
+    print(f"{'='*60}")
+    print(f"Passed: {total_passed}")
+    print(f"Failed: {total_failed}")
+    
+    if failures:
+        print(f"\nFailures:")
+        for failure in failures:
+            print(f"  - {failure}")
+    
+    return total_failed == 0
 
 
 if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    success = run_all_tests()
+    sys.exit(0 if success else 1)

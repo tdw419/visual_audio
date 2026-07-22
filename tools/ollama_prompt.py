@@ -873,22 +873,25 @@ class ConversationMemory:
     def load(self, path: str):
         """
         Load conversation history from disk.
-        
+
         Args:
             path: Path to load conversation JSON from
         """
+        # Ensure messages list exists before any operation
+        self.messages = []
+        self._token_count = 0
         try:
             with open(path, 'r') as f:
                 data = json.load(f)
-            
+
             self.metadata = data.get('metadata', {})
             self.messages = data.get('messages', [])
             self._token_count = data.get('token_count', 0)
             self.max_tokens = data.get('max_tokens', 4096)
-            
+
             # Prune if loaded history exceeds current limit
             self._prune_to_limit()
-            
+
         except (FileNotFoundError, json.JSONDecodeError):
             # If file doesn't exist or is invalid, start fresh
             self.messages = []

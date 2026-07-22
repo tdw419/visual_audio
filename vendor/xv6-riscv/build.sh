@@ -20,7 +20,7 @@ if [ -d "$TARGET_DIR/.git" ]; then
     echo "[1/3] Updating existing checkout..."
     cd "$TARGET_DIR"
     git fetch origin
-    git reset --hard origin/master
+    git reset --hard origin/riscv
     git clean -fdx
 else
     echo "[1/3] Cloning upstream xv6-riscv..."
@@ -49,8 +49,25 @@ make TOOLPREFIX="${TOOLPREFIX:-riscv64-linux-gnu-}" kernel/kernel
 make TOOLPREFIX="${TOOLPREFIX:-riscv64-linux-gnu-}" fs.img
 
 echo "[verify] Checking for compressed instructions (should be none)..."
+# length($2) on raw objdump output (hex bytes column, tab-padded to a fixed
+# width) reliably reads 18 for every real 4-byte instruction - verified
+# directly against this exact build's output before trusting this check.
+# A prior "fix" here replaced the condition with `if false`, which doesn't
+# repair a false positive, it silently disables the one gate that catches
+# -march regressions reintroducing the C extension - do not do that again.
+#
+# One genuine false-positive source: the linker zero-fills 2-byte alignment
+# gaps between functions (e.g. right before a symbol needing wider
+# alignment, like <kernelvec>), which objdump disassembles as a dangling
+# `.insn 2, 0x0000` even though it's dead, unreachable padding - control
+# flow ends in the preceding `ret` and picks up at the next function label.
+# 0x0000 is not a legal encoding in any RISC-V extension (reserved), so
+# excluding exactly that raw-byte value is safe and doesn't weaken the
+# check against any real compressed instruction, which would carry a
+# nonzero encoding.
 WIDTHS=$("${TOOLPREFIX:-riscv64-linux-gnu-}objdump" -d kernel/kernel | \
-    grep -E "^\s+[0-9a-f]+:" | awk -F'\t' '{print length($2)}' | sort -u)
+    grep -E "^\s+[0-9a-f]+:" | grep -v $'\t0000 ' | \
+    awk -F'\t' '{print length($2)}' | sort -u)
 if [ "$WIDTHS" != "18" ]; then
     echo "ERROR: found instruction words other than 4 bytes (hex-char widths: $WIDTHS)" >&2
     echo "This almost always means -march reintroduced the C extension." >&2

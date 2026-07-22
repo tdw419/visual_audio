@@ -2676,12 +2676,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let has_ext_irq = check_external_interrupt(&cpu);
 
         // Update MIP external interrupt bits
+        // PLIC delivers to S-mode, so only set SEIP (not MEIP)
         if (has_ext_irq) {
-            // Set both MEIP (M-mode) and SEIP (S-mode) external interrupt bits
-            // xv6 runs S-mode, so SEIP is what matters
-            new_mip.x = new_mip.x | MIP_MEIP | MIP_SEIP;
+            new_mip.x = new_mip.x | MIP_SEIP;
         } else {
-            new_mip.x = new_mip.x & ~(MIP_MEIP | MIP_SEIP);
+            new_mip.x = new_mip.x & ~MIP_SEIP;
         }
         cpu.mip = new_mip;
 
@@ -2693,6 +2692,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
         let m_pending_enabled = cpu.mip.x & cpu.mie.x & ~cpu.mideleg.x;
         let s_pending_enabled = cpu.mip.x & cpu.mie.x & cpu.mideleg.x;
+
+        // DIAGNOSTIC: Check what s_pending_enabled contains
+        // If PLIC has pending interrupts, has_ext_irq is true, MIP_SEIP (bit 9) should be set
+        // Then s_pending_enabled should have bit 9 if SIE has external interrupts enabled
+        // If s_pending_enabled is 0, no S-mode interrupt will be taken
 
         let should_trap_m_ext   = (m_pending_enabled & MIP_MEIP) != 0u && m_ie;
         let should_trap_m_timer = (m_pending_enabled & MIP_MTIP) != 0u && m_ie;

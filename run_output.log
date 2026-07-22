@@ -1,0 +1,8 @@
+Unable to find extension: VK_EXT_physical_device_drm
+Detected skylake derivative running on mesa i915. Clears to srgb textures will use manual shader clears.
+Exception ignored from cffi callback <function GPUAdapter._request_device_async.<locals>.request_device_callback at 0x72d8b194d120>:
+Traceback (most recent call last):
+  File "/home/jericho/.local/lib/python3.12/site-packages/wgpu/backends/wgpu_native/_api.py", line 1346, in request_device_callback
+    @ffi.callback(
+
+KeyboardInterrupt: 

@@ -16,6 +16,7 @@ import sys
 import argparse
 import wgpu
 import wgpu.utils
+sys.path.insert(0, str(Path(__file__).parent))
 from riscv_gpu_cpu import make_cpu_state
 
 
@@ -118,7 +119,7 @@ def create_gpu_hardware(pixel_data: np.ndarray, cpu_state: np.ndarray, max_instr
     # Create buffers
     memory_buffer = device.create_buffer(
         size=pixel_data.nbytes,
-        usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST,
+        usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.COPY_SRC,
     )
     cpu_buffer = device.create_buffer(
         size=cpu_state.nbytes,
@@ -405,36 +406,76 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
             pass_enc.dispatch_workgroups(1)
             pass_enc.end()
             queue.submit([encoder.finish()])
+            
+            if iteration == 0:
+                print("DEBUG: Submitted first dispatch")
 
             # Read CPU state to check progress
+            if iteration == 0:
+                print("DEBUG: Calling read_buffer on cpu_buffer")
             cpu_readback_bytes = queue.read_buffer(harness['cpu_buffer'])
+            if iteration == 0:
+                print("DEBUG: Read cpu_buffer complete")
             cpu_readback = np.frombuffer(cpu_readback_bytes, dtype=cpu_layout)
             pc = (cpu_readback['pc'][0][1] << 32) | cpu_readback['pc'][0][0]
             running = int(cpu_readback['running'][0])
             instr_count = int(cpu_readback['instr_count'][0])
+            timer_irq_count = int(cpu_readback['timer_interrupt_count'][0])
+            total_irq_count = int(cpu_readback['total_interrupt_count'][0])
 
             # Progress indicator (less frequent to not spam)
-            if iteration % 100 == 0 or running == 0:
-                print(f"    Iter {iteration:5d}: PC=0x{pc:016x}, running={running}, instr={instr_count}")
+            if iteration % 1 == 0 or running == 0:
+                ra = (int(cpu_readback['regs'][0][1][1]) << 32) | int(cpu_readback['regs'][0][1][0]); print(f"    Iter {iteration:5d}: PC=0x{pc:016x}, RA=0x{ra:016x}, instr={instr_count}, timer_irq={timer_irq_count}, total_irq={total_irq_count}")
 
-            # Stall detection: PC cycling through a small set of addresses
-            # at dispatch boundaries is NOT reliably distinguishable from a
-            # genuine deadlock using PC samples alone - a legitimate tight
-            # loop (kinit's page-clear, or usertests' own stress loops) can
-            # run for hundreds of millions of instructions and land on the
-            # same handful of addresses every dispatch boundary purely from
-            # dispatch-size/loop-body-length arithmetic, not because it's
-            # stuck. A short window with a loose threshold flagged exactly
-            # that pattern as a false "stall" twice already. Use a much
-            # longer window and a stricter threshold so this only fires on
-            # non-progress sustained over billions of instructions, not a
-            # few dispatches of normal work.
+            # Stall detection: track both interrupt flow and PC cycling
             pc_history.append(pc)
             if len(pc_history) > 2000:
                 pc_history.pop(0)
-                if len(set(pc_history[-500:])) < 3:
-                    print(f"\n[!] CPU stall detected - PC stuck in tight loop:")
+
+            # Interrupt stall detection: if total_irq hasn't changed in 100 iterations,
+            # capture diagnostic state - this is NOT a guest hang, it's an emulator bug
+            if not hasattr(boot_xv6_on_gpu, 'last_total_irq'):
+                boot_xv6_on_gpu.last_total_irq = total_irq_count
+                boot_xv6_on_gpu.irq_stall_counter = 0
+
+            if total_irq_count == boot_xv6_on_gpu.last_total_irq:
+                boot_xv6_on_gpu.irq_stall_counter += 1
+                if boot_xv6_on_gpu.irq_stall_counter >= 100:
+                    print(f"\n[!] INTERRUPT STALL DETECTED - interrupts frozen at {total_irq_count}")
+                    print(f"    Last {len(set(pc_history[-20:]))} unique PCs in last 20 dispatches:")
                     for i, p in enumerate(pc_history[-20:]):
+                        print(f"      [{i}] 0x{p:016x}")
+                    # Read full CPU state for diagnosis
+                    cpu_data = np.frombuffer(
+                        device.queue.read_buffer(harness['cpu_buffer']),
+                        dtype=cpu_layout
+                    )
+                    regs = cpu_data['regs'][0]
+                    mstatus_val = 0  # TODO: extract from cpu_readback
+                    mie_val = int(cpu_data[0]['mie'][0])
+                    mip_val = int(cpu_data[0]['mip'][0])
+                    plic_pending = int(cpu_data[0]['plic_pending'])
+                    plic_enable = int(cpu_data[0]['plic_enable'])
+                    print(f"    Current MSTATUS: 0x{mstatus_val:08x}")
+                    print(f"    Current MIE: 0x{mie_val:08x}")
+                    print(f"    Current MIP: 0x{mip_val:08x}")
+                    print(f"    PLIC pending: 0x{plic_pending:08x}")
+                    print(f"    PLIC enable:  0x{plic_enable:08x}")
+                    print(f"    RA: 0x{int(regs[1][1]):08x}_{int(regs[1][0]):08x}")
+                    print(f"    SP: 0x{int(regs[2][1]):08x}_{int(regs[2][0]):08x}")
+                    print(f"    A0: 0x{int(regs[10][1]):08x}_{int(regs[10][0]):08x}")
+                    print(f"    A1: 0x{int(regs[11][1]):08x}_{int(regs[11][0]):08x}")
+                    break
+            else:
+                boot_xv6_on_gpu.last_total_irq = total_irq_count
+                boot_xv6_on_gpu.irq_stall_counter = 0
+
+            # PC cycling detection (ONLY after boot is established, iteration > 50)
+            # 1000-sample window with < 5 unique addresses = genuine deadlock
+            if iteration > 50 and len(pc_history) >= 1000:
+                if len(set(pc_history[-1000:])) < 5:
+                    print(f"\n[!] CPU PC stall detected (iter {iteration}) - cycling through {len(set(pc_history[-1000:]))} addresses:")
+                    for i, p in enumerate(pc_history[-15:]):
                         print(f"    [{i}] 0x{p:016x}")
                     break
 
@@ -446,10 +487,14 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
                 (autonomous and autonomous_turns_used < autonomous_turns)
             )
             if ready_to_inject and running == 1:
+                if iteration == 0:
+                    print("DEBUG: Calling read_buffer on output_buffer")
                 output_data = np.frombuffer(
                     device.queue.read_buffer(harness['output_buffer']),
                     dtype=np.uint8
                 )
+                if iteration == 0:
+                    print("DEBUG: Read output_buffer complete")
                 output_str = ''
                 for i in range(0, 16384, 4):
                     word = struct.unpack_from('<I', output_data[i:i+4])[0]
@@ -458,6 +503,9 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
                             break
                         if 32 <= b < 127 or b == ord('\n') or b == ord('\r'):
                             output_str += chr(b)
+                if len(output_str) > command_scan_start and output_str != getattr(boot_xv6_on_gpu, 'last_out', ''):
+                    print(f"\\nOutput so far:\\n{output_str}\\n")
+                    boot_xv6_on_gpu.last_out = output_str
                 if '$ ' in output_str[command_scan_start:]:
                     if autonomous:
                         recent = output_str[max(0, command_scan_start - 500):]
@@ -480,7 +528,7 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
                         print(f"\n[!] Shell prompt detected, injecting command: {repr(command)}")
                         inject_command(queue, harness, cpu_layout, command)
                         command_injected = True
-                        iterations_since_injection = -200
+                        iterations_since_injection = -5000
                     print(f"[!] Command injected, resuming...")
                     # Update scan position to avoid re-detecting the same prompt
                     command_scan_start = len(output_str)
@@ -494,6 +542,11 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
             if running == 0:
                 print(f"\n[*] Guest CPU halted, stopping dispatch loop.")
                 break
+
+            # Removed iteration cap to allow full usertests completion
+            # if iteration >= 500:
+            #     print(f"\n[*] Reached 500 iterations naturally, stopping.")
+            #     break
 
             iteration += 1
 

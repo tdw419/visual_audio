@@ -49,10 +49,12 @@ CPU_DTYPE = np.dtype([
     ('mtimecmp_low', np.uint32),    # CLINT mtimecmp (low 32 bits)
     ('mtimecmp_high', np.uint32),   # CLINT mtimecmp (high 32 bits)
     ('timer_fired', np.uint32),     # Edge trigger: timer already fired for this mtimecmp
+    ('timer_interrupt_count', np.uint32),  # Number of timer interrupts taken
+    ('total_interrupt_count', np.uint32),  # Total interrupts taken
     ('_pad0', np.uint32),           # WGSL alignment padding
 ])
 
-assert CPU_DTYPE.itemsize == 488, f"CPU struct layout drifted: {CPU_DTYPE.itemsize}"
+assert CPU_DTYPE.itemsize == 496, f"CPU struct layout drifted: {CPU_DTYPE.itemsize}"
 
 SATP_MODE_SV39 = 8
 

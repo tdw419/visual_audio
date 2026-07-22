@@ -1,0 +1,25 @@
+diff --git a/kernel/string.c b/kernel/string.c
+index adaa708..a4b4beb 100644
+--- a/kernel/string.c
++++ b/kernel/string.c
+@@ -5,8 +5,18 @@ memset(void *dst, int c, uint n)
+ {
+   char *cdst = (char *)dst;
+   int i;
+-  for (i = 0; i < n; i++) {
+-    cdst[i] = c;
++  if (((uint64)dst % 8) == 0 && (n % 8) == 0) {
++    uint64 *wdst = (uint64 *)dst;
++    uint64 v = (c & 0xFF);
++    v = v | (v << 8) | (v << 16) | (v << 24);
++    v = v | (v << 32);
++    for (i = 0; i < n / 8; i++) {
++      wdst[i] = v;
++    }
++  } else {
++    for (i = 0; i < n; i++) {
++      cdst[i] = c;
++    }
+   }
+   return dst;
+ }
