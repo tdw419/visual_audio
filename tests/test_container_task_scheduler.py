@@ -5,10 +5,14 @@ test_container_task_scheduler.py — Tests for container task scheduler.
 Verifies correct task prioritization based on frame metadata.
 """
 
-import json
+import sys
 import tempfile
 import time
 from pathlib import Path
+
+# Add project root to path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
 from PIL import Image, PngImagePlugin
 
@@ -377,7 +381,8 @@ def test_scan_containers():
         # Create some containers
         create_test_container(tmpdir / "container1.png", "task1")
         create_test_container(tmpdir / "container2.png", "task2")
-        create_test_container(tmpdir / "not_a_png.txt", "task3")  # Should be ignored
+        # Create a non-PNG file that should be ignored
+        (tmpdir / "not_a_png.txt").write_text("test content")
 
         containers = scan_containers(tmpdir)
 

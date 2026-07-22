@@ -30,6 +30,7 @@ CPU_DTYPE = np.dtype([
     ('sscratch', np.uint32, 2),
     ('medeleg', np.uint32, 2),
     ('mideleg', np.uint32, 2),
+    ('menvcfg', np.uint32, 2),  # CSR 0x30A, machine environment config
     ('virtio_status', np.uint32),
     ('vq_desc_low', np.uint32),
     ('vq_desc_high', np.uint32),
@@ -38,6 +39,9 @@ CPU_DTYPE = np.dtype([
     ('vq_used_low', np.uint32),
     ('vq_used_high', np.uint32),
     ('vq_idx', np.uint32),
+    ('vq_ready', np.uint32),
+    ('vq_queue_num', np.uint32),
+    ('vq_queue_align', np.uint32),
     ('plic_pending', np.uint32),
     ('plic_enable', np.uint32),
     ('plic_claimed', np.uint32),
@@ -51,10 +55,11 @@ CPU_DTYPE = np.dtype([
     ('timer_fired', np.uint32),     # Edge trigger: timer already fired for this mtimecmp
     ('timer_interrupt_count', np.uint32),  # Number of timer interrupts taken
     ('total_interrupt_count', np.uint32),  # Total interrupts taken
-    ('_pad0', np.uint32),           # WGSL alignment padding
+    ('plic_priority_irq1', np.uint32),     # Priority for IRQ 1
+    ('_pad1', np.uint32),                  # WGSL alignment padding
 ])
 
-assert CPU_DTYPE.itemsize == 496, f"CPU struct layout drifted: {CPU_DTYPE.itemsize}"
+assert CPU_DTYPE.itemsize == 520, f"CPU struct layout drifted: {CPU_DTYPE.itemsize}"
 
 SATP_MODE_SV39 = 8
 
@@ -71,6 +76,13 @@ def make_satp(root_ppn: int, mode: int = SATP_MODE_SV39):
     return [value & 0xFFFFFFFF, (value >> 32) & 0xFFFFFFFF]
 
 
+# QEMU's virt machine reads menvcfg as 0x2000000000000000 at hart reset,
+# before any explicit CSR write (confirmed via `-d in_asm` trace at `IN: start`).
+# qemu_cpu_trace.py's register dump doesn't capture menvcfg, so this can't be
+# picked up via apply_init_state - it must match QEMU's hart reset default here.
+MENVCFG_RESET_DEFAULT = 0x2000000000000000
+
+
 def make_cpu_state(entry_point: int, satp=(0, 0), priv_mode: int = 3):
     """One-hart CPU state array, booting in M-mode with MMU off by default."""
     cpu = np.zeros(1, dtype=CPU_DTYPE)
@@ -78,6 +90,53 @@ def make_cpu_state(entry_point: int, satp=(0, 0), priv_mode: int = 3):
     cpu[0]['running'] = 1
     cpu[0]['priv_mode'] = priv_mode
     cpu[0]['satp'] = list(satp)
+    cpu[0]['menvcfg'] = [MENVCFG_RESET_DEFAULT & 0xFFFFFFFF, (MENVCFG_RESET_DEFAULT >> 32) & 0xFFFFFFFF]
+    return cpu
+
+
+def apply_init_state(cpu: np.ndarray, init_state_path: str) -> np.ndarray:
+    """Apply a QEMU-extracted initial state JSON to a CPU state array.
+    
+    The JSON format matches what qemu_cpu_trace.py and diff_qemu_gpu_traces.py emit:
+    {'pc': int, 'regs': {name: value, ...}}
+    
+    Only registers matching known CSR/GPR names are applied; unknown names are silently skipped.
+    """
+    import json
+    with open(init_state_path) as f:
+        state = json.load(f)
+    
+    # Determine which CSR fields are present in our cpu_dtype layout
+    non_csr_fields = {'pc', 'regs', 'running', 'instr_count', 'output_ptr',
+                      'priv_mode', 'virtio_status', 'vq_desc_low', 'vq_desc_high',
+                      'vq_avail_low', 'vq_avail_high', 'vq_used_low', 'vq_used_high',
+                      'vq_idx', 'plic_pending', 'plic_enable', 'plic_claimed',
+                      'uart_irq_delay', 'uart_input_ptr', 'uart_input_len',
+                      'mtime_low', 'mtime_high', 'mtimecmp_low', 'mtimecmp_high',
+                      'timer_fired', 'timer_interrupt_count', 'total_interrupt_count',
+                      '_pad0'}
+    csr_fields = {name for name in CPU_DTYPE.names if name not in non_csr_fields}
+    
+    regs = state.get('regs', {})
+    
+    # Apply GPRs from x0-x31
+    for i in range(32):
+        key = f'x{i}'
+        if key in regs and regs[key] != 0:
+            val = int(regs[key])
+            cpu[0]['regs'][i] = [val & 0xFFFFFFFF, (val >> 32) & 0xFFFFFFFF]
+    
+    # Apply CSRs (vec2<u32> fields)
+    for field in csr_fields:
+        if field in regs:
+            val = int(regs[field])
+            cpu[0][field] = [val & 0xFFFFFFFF, (val >> 32) & 0xFFFFFFFF]
+    
+    # Apply PC
+    if 'pc' in regs:
+        val = int(regs['pc'])
+        cpu[0]['pc'] = [val & 0xFFFFFFFF, (val >> 32) & 0xFFFFFFFF]
+    
     return cpu
 
 

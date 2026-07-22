@@ -9,9 +9,10 @@ Phase 13: GPU-Native OS Boot
 """
 
 import struct
+import json
 import numpy as np
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 import sys
 import argparse
 import wgpu
@@ -246,7 +247,9 @@ def get_next_autonomous_command(recent_output, model):
 
 
 def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False,
-                    autonomous_turns: int = 20, autonomous_model: str = 'qwen2.5-coder:14b'):
+                    autonomous_turns: int = 20, autonomous_model: str = 'qwen2.5-coder:14b',
+                    trace_file: Optional[str] = None, trace_max: int = 2000,
+                    init_state: Optional[str] = None, stall_threshold: int = 100):
     """Main boot sequence.
 
     Args:
@@ -256,6 +259,10 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
             instead of a single fixed `command`, for up to autonomous_turns
         autonomous_turns: Cap on how many Ollama-driven commands to run
         autonomous_model: Ollama model tag to use for autonomous mode
+        trace_file: If set, capture per-instruction CPU state trace to this
+            JSONL file (uses max_instructions=1 for instruction-level
+            granularity)
+        trace_max: Max instructions to capture when tracing (default: 2000)
     """
     print("=" * 70)
     print("XV6 RISC-V GPU BOOT - Phase 13")
@@ -357,12 +364,21 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
     # [4] Initialize GPU hardware
     print("\n[4] Initializing GPU...")
     cpu_state = make_cpu_state(elf.entry_point, priv_mode=3)  # M-mode boot
+    if init_state:
+        from riscv_gpu_cpu import apply_init_state
+        cpu_state = apply_init_state(cpu_state, init_state)
+        print(f"    Applied initial state from {init_state}")
     # This is a PER-DISPATCH budget (the WGSL loop bound is exactly
     # max_instructions), not a lifetime total - a single dispatch runs to
     # completion before the host ever gets a chance to read UART output or
     # inject input, so it must be small enough that dispatches return
     # control frequently. At ~10 MIPS this is roughly 0.2s/dispatch.
-    max_instructions = 2_000_000
+    # When tracing, use max_instructions=1 for instruction-level granularity.
+    if trace_file:
+        max_instructions = 1
+        print(f"    *** TRACE MODE: max_instructions=1, max_trace={trace_max}")
+    else:
+        max_instructions = 2_000_000
 
     harness = create_gpu_hardware(memory, cpu_state, max_instructions)
     device = harness['device']
@@ -377,7 +393,10 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
 
     # [6] Boot loop - infinite dispatch for autonomous execution
     print("\n[6] Booting xv6 on GPU...")
-    print(f"    ({max_instructions // 1000000}M instructions/dispatch, infinite)")
+    if trace_file:
+        print(f"    (1 instruction/dispatch, per-instruction trace mode)")
+    else:
+        print(f"    ({max_instructions // 1000000}M instructions/dispatch, infinite)")
     print(f"    Use Ctrl+C to stop gracefully")
 
     cpu_layout = cpu_state.dtype
@@ -390,6 +409,13 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
     iterations_since_injection = 0
     iteration = 0
     autonomous_turns_used = 0
+    trace_out = None
+
+    # Initialize trace output file if requested
+    if trace_file:
+        trace_out = open(trace_file, 'w')
+        print(f"    Tracing per-instruction CPU state to {trace_file}")
+        print(f"    Max trace instructions: {trace_max}")
 
     # Initialize CPU state variables for final readback
     cpu_readback = np.zeros(1, dtype=cpu_layout)
@@ -423,6 +449,19 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
             timer_irq_count = int(cpu_readback['timer_interrupt_count'][0])
             total_irq_count = int(cpu_readback['total_interrupt_count'][0])
 
+            # Write trace entry if tracing
+            if trace_out is not None:
+                regs = cpu_readback['regs'][0]
+                regs_dict = {}
+                for i in range(32):
+                    regs_dict[f'x{i}'] = int((int(regs[i][1]) << 32) | int(regs[i][0]))
+                regs_dict['pc'] = int(pc)
+                regs_dict['mstatus'] = int((int(cpu_readback[0]['mstatus'][1]) << 32) | int(cpu_readback[0]['mstatus'][0]))
+                regs_dict['mepc'] = int((int(cpu_readback[0]['mepc'][1]) << 32) | int(cpu_readback[0]['mepc'][0]))
+                regs_dict['mcause'] = int((int(cpu_readback[0]['mcause'][1]) << 32) | int(cpu_readback[0]['mcause'][0]))
+                trace_out.write(json.dumps({'pc': pc, 'instr_count': int(instr_count), 'regs': regs_dict}, 
+                                      default=lambda o: int(o) if hasattr(o, 'dtype') else str(o)) + '\n')
+
             # Progress indicator (less frequent to not spam)
             if iteration % 1 == 0 or running == 0:
                 ra = (int(cpu_readback['regs'][0][1][1]) << 32) | int(cpu_readback['regs'][0][1][0]); print(f"    Iter {iteration:5d}: PC=0x{pc:016x}, RA=0x{ra:016x}, instr={instr_count}, timer_irq={timer_irq_count}, total_irq={total_irq_count}")
@@ -440,7 +479,7 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
 
             if total_irq_count == boot_xv6_on_gpu.last_total_irq:
                 boot_xv6_on_gpu.irq_stall_counter += 1
-                if boot_xv6_on_gpu.irq_stall_counter >= 100:
+                if boot_xv6_on_gpu.irq_stall_counter >= stall_threshold:
                     print(f"\n[!] INTERRUPT STALL DETECTED - interrupts frozen at {total_irq_count}")
                     print(f"    Last {len(set(pc_history[-20:]))} unique PCs in last 20 dispatches:")
                     for i, p in enumerate(pc_history[-20:]):
@@ -543,10 +582,10 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
                 print(f"\n[*] Guest CPU halted, stopping dispatch loop.")
                 break
 
-            # Removed iteration cap to allow full usertests completion
-            # if iteration >= 500:
-            #     print(f"\n[*] Reached 500 iterations naturally, stopping.")
-            #     break
+            # Trace mode cap
+            if trace_out is not None and iteration >= trace_max:
+                print(f"\n[*] Reached trace max ({trace_max} instructions), stopping.")
+                break
 
             iteration += 1
 
@@ -555,6 +594,10 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
     except Exception as e:
         print(f"\n\n[!] Exception in dispatch loop: {e}")
         raise
+    finally:
+        if trace_out is not None:
+            trace_out.close()
+            print(f"  Trace closed ({iteration} entries written)")
 
     # Read output (UART console)
     print("\n[7] Reading UART console output...")
@@ -600,10 +643,22 @@ if __name__ == '__main__':
                         help='Max Ollama-driven commands to run (default: 20)')
     parser.add_argument('--autonomous-model', default='qwen2.5-coder:14b',
                         help='Ollama model tag for autonomous mode (default: qwen2.5-coder:14b)')
+    parser.add_argument('--trace', metavar='FILE',
+                        help='Capture per-instruction CPU state trace to FILE (JSONL format)')
+    parser.add_argument('--trace-max', type=int, default=2000,
+                        help='Max instructions to capture when tracing (default: 2000)')
+    parser.add_argument('--init-state', metavar='JSON',
+                        help='Load initial CPU state from QEMU-extracted JSON')
+    parser.add_argument('--stall-threshold', type=int, default=100,
+                        help='Dispatches with no IRQ-count change before treating '
+                             'as a stall (default: 100; small payloads whose first '
+                             'legitimate interrupt takes longer need this raised)')
     args = parser.parse_args()
 
     if args.autonomous and args.command:
         parser.error('--autonomous and --command are mutually exclusive')
 
     boot_xv6_on_gpu(args.kernel, args.command, args.autonomous,
-                    args.autonomous_turns, args.autonomous_model)
+                    args.autonomous_turns, args.autonomous_model,
+                    args.trace, args.trace_max, args.init_state,
+                    args.stall_threshold)

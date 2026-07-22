@@ -44,6 +44,7 @@ struct RiscvCPU {
     sscratch: vec2<u32>,        // S-mode scratch
     medeleg: vec2<u32>,         // Exception delegation to S-mode
     mideleg: vec2<u32>,         // Interrupt delegation to S-mode
+    menvcfg: vec2<u32>,         // Machine environment config (CSR 0x30A)
     virtio_status: u32,         // VirtIO device status
     vq_desc_low: u32,
     vq_desc_high: u32,
@@ -52,6 +53,9 @@ struct RiscvCPU {
     vq_used_low: u32,
     vq_used_high: u32,
     vq_idx: u32,
+    vq_ready: u32,
+    vq_queue_num: u32,          // Legacy: written by VIRTIO_QUEUE_NUM (0x38)
+    vq_queue_align: u32,        // Legacy: written by VIRTIO_QUEUE_ALIGN (0x3C)
     plic_pending: u32,          // PLIC pending interrupt bits (IRQ 0-31)
     plic_enable: u32,           // PLIC enable bits for hart 0
     plic_claimed: u32,          // Currently claimed IRQ (0 = none)
@@ -69,7 +73,8 @@ struct RiscvCPU {
     timer_fired: u32,           // Edge trigger: timer already fired for this mtimecmp
     timer_interrupt_count: u32, // Number of timer interrupts taken
     total_interrupt_count: u32, // Total interrupts taken
-    _pad0: u32,                 // WGSL alignment padding
+    plic_priority_irq1: u32,    // Priority for IRQ 1
+    _pad1: u32,                 // WGSL alignment padding
 }
 
 // R-type instruction decoding
@@ -1101,7 +1106,7 @@ fn process_virtqueue(cpu: ptr<function, RiscvCPU>) {
     let is_write = (desc1_flags & 2u) == 0u; // VRING_DESC_F_WRITE is 2 (device writable = read from disk). If NOT writable, it's a disk WRITE.
     
     let buf_pa = vec2<u32>(desc1_addr_low, desc1_addr_high);
-    let disk_pa = vec2<u32>(0x81000000u + sector * 512u, 0u);
+    let disk_pa = vec2<u32>(0x02000000u + sector * 512u, 0u);  // Disk at 32MB (within 64MB pixel memory)
     
     // copy
     let words_to_copy = desc1_len / 4u;
@@ -1765,6 +1770,7 @@ fn csr_read(cpu: ptr<function, RiscvCPU>, addr: u32) -> vec2<u32> {
         case CSR_MIP: { return (*cpu).mip; }
         case CSR_MEDELEG: { return (*cpu).medeleg; }
         case CSR_MIDELEG: { return (*cpu).mideleg; }
+        case CSR_MENVCFG: { return (*cpu).menvcfg; }
         case CSR_SSTATUS: {
             // Restricted view of mstatus; UXL reads as 2 (RV64)
             return vec2<u32>((*cpu).mstatus.x & SSTATUS_MASK_LO,
@@ -1805,6 +1811,7 @@ fn csr_write(cpu: ptr<function, RiscvCPU>, addr: u32, val: vec2<u32>) {
         case CSR_MIP: { (*cpu).mip = val; }
         case CSR_MEDELEG: { (*cpu).medeleg = vec2<u32>(val.x & 0x0000B3FFu, val.y); }
         case CSR_MIDELEG: { (*cpu).mideleg = vec2<u32>(val.x & 0x00000222u, val.y); }
+        case CSR_MENVCFG: { (*cpu).menvcfg = val; }
         case CSR_SSTATUS: {
             // Only the S-view bits of mstatus are writable through sstatus.
             // CRITICAL: Preserve MIE bit (bit 3) - S-mode writes to sstatus must not
@@ -2061,12 +2068,16 @@ fn execute_load(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32) {
         if (offset >= 0x1000u && offset < 0x1004u) {
             val = (*cpu).plic_pending;
         }
-        // Enable bits for hart 0, mode S
-        else if (offset >= 0x2080u && offset < 0x2084u) {
+        // Priority for IRQ 1 (at offset 0x4)
+        else if (offset == 0x0004u) {
+            val = (*cpu).plic_priority_irq1;
+        }
+        // Enable bits for hart 0, mode S and mode M
+        else if ((offset >= 0x2080u && offset < 0x2084u) || (offset >= 0x2000u && offset < 0x2004u)) {
             val = (*cpu).plic_enable;
         }
-        // Claim/Complete register (hart 0, mode S)
-        else if (offset == 0x201004u) {
+        // Claim/Complete register (hart 0, mode S and mode M)
+        else if (offset == 0x201004u || offset == 0x200004u) {
             // Claim: return lowest-priority pending+enabled IRQ
             let pending_enabled = (*cpu).plic_pending & (*cpu).plic_enable;
             if (pending_enabled != 0u) {
@@ -2102,7 +2113,7 @@ fn execute_load(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32) {
         else if (offset == 0xcu) { val = 0x554d4551u; } // Vendor (QEMU)
         else if (offset == 0x10u) { val = 0u; }     // DeviceFeatures
         else if (offset == 0x34u) { val = 8u; }     // QueueNumMax
-        else if (offset == 0x44u) { val = 0u; }     // QueueReady
+        else if (offset == 0x44u) { val = (*cpu).vq_ready; } // QueueReady
         else if (offset == 0x60u) { val = select(0u, 1u, ((*cpu).plic_pending & (1u << VIRTIO_IRQ)) != 0u); } // InterruptStatus
         else if (offset == 0x70u) { val = (*cpu).virtio_status; } // Status
         
@@ -2208,12 +2219,24 @@ fn execute_store(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32, cpu_
         let offset = pa.x - PLIC_BASE;
 
         // Pending bits: ignore writes (read-only)
-        // Enable bits for hart 0, mode S
-        if (offset >= 0x2080u && offset < 0x2084u) {
+        // Priority bits
+        if (offset < 0x1000u) {
+            if (offset == 0x0004u) {
+                (*cpu).plic_priority_irq1 = (*cpu).regs[decoded.rs2].x;
+            } else {
+                // Other priorities ignored for now
+            }
+        }
+        // Enable bits for hart 0, mode S and mode M
+        else if ((offset >= 0x2080u && offset < 0x2084u) || (offset >= 0x2000u && offset < 0x2004u)) {
             (*cpu).plic_enable = (*cpu).regs[decoded.rs2].x;
         }
+        // Threshold: ignore writes (stub)
+        else if (offset == 0x200000u || offset == 0x201000u) {
+            // Threshold ignored
+        }
         // Claim/Complete register (write completes interrupt)
-        else if (offset == 0x201004u) {
+        else if (offset == 0x201004u || offset == 0x200004u) {
             let completed_irq = (*cpu).regs[decoded.rs2].x;
             if (completed_irq == (*cpu).plic_claimed) {
                 // Clear the pending bit
@@ -2229,8 +2252,32 @@ fn execute_store(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32, cpu_
     // VirtIO MMIO stub
     if (pa.x >= 0x10001000u && pa.x < 0x10002000u) {
         let offset = pa.x - 0x10001000u;
-        if (offset == 0x70u) {
+        if (offset == 0x44u) {
+            (*cpu).vq_ready = (*cpu).regs[decoded.rs2].x;
+        } else if (offset == 0x70u) {
             (*cpu).virtio_status = (*cpu).regs[decoded.rs2].x;
+        } else if (offset == 0x38u) {
+            // Legacy QueueNum
+            (*cpu).vq_queue_num = (*cpu).regs[decoded.rs2].x;
+        } else if (offset == 0x3Cu) {
+            // Legacy QueueAlign
+            (*cpu).vq_queue_align = (*cpu).regs[decoded.rs2].x;
+        } else if (offset == 0x40u) {
+            // Legacy QueuePFN: compute desc/avail/used addresses
+            let pfn = (*cpu).regs[decoded.rs2].x;
+            let desc_low = pfn * 4096u;
+            // avail = desc + num * 16
+            let avail_low = desc_low + (*cpu).vq_queue_num * 16u;
+            // used = align(avail + 4 + num*2, queue_align)
+            let used_raw = avail_low + 4u + (*cpu).vq_queue_num * 2u;
+            let align_mask = (*cpu).vq_queue_align - 1u;
+            let used_low = (used_raw + align_mask) & ~align_mask;
+            (*cpu).vq_desc_low = desc_low;
+            (*cpu).vq_desc_high = 0u;
+            (*cpu).vq_avail_low = avail_low;
+            (*cpu).vq_avail_high = 0u;
+            (*cpu).vq_used_low = used_low;
+            (*cpu).vq_used_high = 0u;
         } else if (offset == 0x80u) {
             (*cpu).vq_desc_low = (*cpu).regs[decoded.rs2].x;
         } else if (offset == 0x84u) {
@@ -2675,12 +2722,15 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         // Check for external interrupts from PLIC
         let has_ext_irq = check_external_interrupt(&cpu);
 
-        // Update MIP external interrupt bits
-        // PLIC delivers to S-mode, so only set SEIP (not MEIP)
+        // Update MIP external interrupt bits.
+        // plic_enable is a single shared field (M-mode and S-mode contexts
+        // both write into it - see the PLIC MMIO handlers), so we can't tell
+        // which context enabled the IRQ. Assert both SEIP and MEIP; mideleg
+        // routing below decides which mode actually traps.
         if (has_ext_irq) {
-            new_mip.x = new_mip.x | MIP_SEIP;
+            new_mip.x = new_mip.x | MIP_SEIP | MIP_MEIP;
         } else {
-            new_mip.x = new_mip.x & ~MIP_SEIP;
+            new_mip.x = new_mip.x & ~(MIP_SEIP | MIP_MEIP);
         }
         cpu.mip = new_mip;
 

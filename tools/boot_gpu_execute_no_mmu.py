@@ -76,12 +76,21 @@ def main():
     queue.write_buffer(uniform_buffer, 0, max_instructions.tobytes())
     print(f"  Max instructions: {max_instructions[0]}")
 
+    # UART input buffer (unused by this harness, but the shader requires the binding)
+    uart_input = np.zeros(1, dtype=np.uint32)
+    uart_input_buffer = device.create_buffer(
+        size=uart_input.nbytes,
+        usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST,
+    )
+    queue.write_buffer(uart_input_buffer, 0, uart_input.tobytes())
+
     # Create bind group
     bind_group_layout = device.create_bind_group_layout(entries=[
         {'binding': 0, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'storage'}},
         {'binding': 1, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'storage'}},
         {'binding': 2, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'storage'}},
         {'binding': 3, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'uniform'}},
+        {'binding': 4, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'read-only-storage'}},
     ])
 
     bind_group = device.create_bind_group(
@@ -91,6 +100,7 @@ def main():
             {'binding': 1, 'resource': {'buffer': cpu_buffer, 'offset': 0, 'size': cpu_state.nbytes}},
             {'binding': 2, 'resource': {'buffer': output_buffer, 'offset': 0, 'size': 65536}},
             {'binding': 3, 'resource': {'buffer': uniform_buffer, 'offset': 0, 'size': max_instructions.nbytes}},
+            {'binding': 4, 'resource': {'buffer': uart_input_buffer, 'offset': 0, 'size': uart_input.nbytes}},
         ]
     )
 

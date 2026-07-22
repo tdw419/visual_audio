@@ -7,11 +7,11 @@ Converts RISC-V ELF binaries to RGBA pixel arrays for GPU execution.
 Architecture:
 - 1 Pixel = 1 32-bit instruction (RGBA = little-endian bytes)
 - Pixel layout: [Byte0, Byte1, Byte2, Byte3] = [R, G, B, A]
-- Supports RV32 ELF loading (loadable sections: .text, .data, .rodata)
+- Supports RV32 and RV64 ELF loading via program headers
 
 Usage:
-    python3 elf_to_pixel_loader.py kernel.elf kernel_pixels.png
     python3 elf_to_pixel_loader.py kernel.elf -o kernel_pixels.npy
+    python3 elf_to_pixel_loader.py kernel.elf kernel_pixels.png
 """
 
 import struct
@@ -23,12 +23,14 @@ import numpy as np
 
 
 class ELFLoader:
-    """Parse and load RISC-V ELF binaries."""
+    """Parse and load RISC-V ELF binaries (ELF32 and ELF64)."""
 
     # ELF constants
     EI_CLASS_32 = 1
+    EI_CLASS_64 = 2
     EI_DATA_LITTLE = 1
     ET_EXEC = 2
+    ET_DYN = 3
     EM_RISCV = 243
 
     # Section types
@@ -39,11 +41,16 @@ class ELFLoader:
     SHT_RELA = 4
     SHT_NOBITS = 8
 
+    # Program header types
+    PT_LOAD = 1
+
     def __init__(self, elf_path: str):
         self.path = Path(elf_path)
         self.data: bytes = b''
         self.entry_point: int = 0
         self.sections: List[dict] = []
+        self.segments: List[dict] = []
+        self.elf_class: int = 0
         self._parse()
 
     def _parse(self):
@@ -55,30 +62,55 @@ class ELFLoader:
         if self.data[:4] != b'\x7fELF':
             raise ValueError(f"Invalid ELF file: {self.path}")
 
-        # Parse ELF header
-        ei_class = self.data[4]
+        self.elf_class = self.data[4]
         ei_data = self.data[5]
+
         e_type = struct.unpack('<H', self.data[16:18])[0]
         e_machine = struct.unpack('<H', self.data[18:20])[0]
-        e_entry = struct.unpack('<I', self.data[24:28])[0]
-        e_phoff = struct.unpack('<I', self.data[28:32])[0]
-        e_phentsize = struct.unpack('<H', self.data[42:44])[0]
-        e_phnum = struct.unpack('<H', self.data[44:46])[0]
-        e_shoff = struct.unpack('<I', self.data[32:36])[0]
-        e_shentsize = struct.unpack('<H', self.data[46:48])[0]
-        e_shnum = struct.unpack('<H', self.data[48:50])[0]
 
-        # Validate ELF32 RISC-V
-        if ei_class != self.EI_CLASS_32:
-            raise ValueError(f"Only ELF32 supported (got class {ei_class})")
         if ei_data != self.EI_DATA_LITTLE:
-            raise ValueError(f"Only little-endian ELF supported")
+            raise ValueError("Only little-endian ELF supported")
         if e_machine != self.EM_RISCV:
             raise ValueError(f"Only RISC-V ELF supported (got machine {e_machine})")
 
+        if self.elf_class == self.EI_CLASS_32:
+            self._parse_elf32()
+        elif self.elf_class == self.EI_CLASS_64:
+            self._parse_elf64()
+        else:
+            raise ValueError(f"Unsupported ELF class {self.elf_class}")
+
+    def _parse_elf32(self):
+        """Parse ELF32 header fields."""
+        e_entry = struct.unpack('<I', self.data[24:28])[0]
+        e_phoff = struct.unpack('<I', self.data[28:32])[0]
+        e_shoff = struct.unpack('<I', self.data[32:36])[0]
+        e_phentsize = struct.unpack('<H', self.data[42:44])[0]
+        e_phnum = struct.unpack('<H', self.data[44:46])[0]
+        e_shentsize = struct.unpack('<H', self.data[46:48])[0]
+        e_shnum = struct.unpack('<H', self.data[48:50])[0]
+        e_shstrndx = struct.unpack('<H', self.data[50:52])[0]
+
         self.entry_point = e_entry
 
-        # Parse section headers
+        # Parse program headers (LOAD segments) — 32 bytes each
+        for i in range(e_phnum):
+            ph_offset = e_phoff + i * e_phentsize
+            p_type = struct.unpack('<I', self.data[ph_offset:ph_offset+4])[0]
+            p_offset = struct.unpack('<I', self.data[ph_offset+4:ph_offset+8])[0]
+            p_vaddr = struct.unpack('<I', self.data[ph_offset+8:ph_offset+12])[0]
+            p_paddr = struct.unpack('<I', self.data[ph_offset+12:ph_offset+16])[0]
+            p_filesz = struct.unpack('<I', self.data[ph_offset+16:ph_offset+20])[0]
+            p_memsz = struct.unpack('<I', self.data[ph_offset+20:ph_offset+24])[0]
+            p_flags = struct.unpack('<I', self.data[ph_offset+24:ph_offset+28])[0]
+            p_align = struct.unpack('<I', self.data[ph_offset+28:ph_offset+32])[0]
+            self.segments.append({
+                'type': p_type, 'offset': p_offset, 'vaddr': p_vaddr,
+                'paddr': p_paddr, 'filesz': p_filesz, 'memsz': p_memsz,
+                'flags': p_flags, 'align': p_align,
+            })
+
+        # Parse section headers — only needed for section name lookup
         for i in range(e_shnum):
             sh_offset = e_shoff + i * e_shentsize
             sh_name = struct.unpack('<I', self.data[sh_offset:sh_offset+4])[0]
@@ -87,19 +119,67 @@ class ELFLoader:
             sh_addr = struct.unpack('<I', self.data[sh_offset+12:sh_offset+16])[0]
             sh_offset_data = struct.unpack('<I', self.data[sh_offset+16:sh_offset+20])[0]
             sh_size = struct.unpack('<I', self.data[sh_offset+20:sh_offset+24])[0]
+            sh_link = struct.unpack('<I', self.data[sh_offset+24:sh_offset+28])[0]
 
-            # String table for section names
-            strtab_offset = e_shoff + e_shentsize * struct.unpack('<H', self.data[sh_offset+24:sh_offset+26])[0]
-            strtab_data_offset = struct.unpack('<I', self.data[strtab_offset+16:strtab_offset+20])[0]
-            name_str = self._get_string(strtab_data_offset + sh_name)
+            # Get section name from string table
+            strtab_hdr_off = e_shoff + e_shentsize * e_shstrndx
+            strtab_data_off = struct.unpack('<I', self.data[strtab_hdr_off+16:strtab_hdr_off+20])[0]
+            name_str = self._get_string(strtab_data_off + sh_name)
 
             self.sections.append({
-                'name': name_str,
-                'type': sh_type,
-                'flags': sh_flags,
-                'addr': sh_addr,
-                'offset': sh_offset_data,
-                'size': sh_size,
+                'name': name_str, 'type': sh_type, 'flags': sh_flags,
+                'addr': sh_addr, 'offset': sh_offset_data, 'size': sh_size,
+            })
+
+    def _parse_elf64(self):
+        """Parse ELF64 header fields."""
+        e_entry = struct.unpack('<Q', self.data[24:32])[0]
+        e_phoff = struct.unpack('<Q', self.data[32:40])[0]
+        e_shoff = struct.unpack('<Q', self.data[40:48])[0]
+        e_phentsize = struct.unpack('<H', self.data[54:56])[0]
+        e_phnum = struct.unpack('<H', self.data[56:58])[0]
+        e_shentsize = struct.unpack('<H', self.data[58:60])[0]
+        e_shnum = struct.unpack('<H', self.data[60:62])[0]
+        e_shstrndx = struct.unpack('<H', self.data[62:64])[0]
+
+        self.entry_point = e_entry
+
+        # Parse program headers (LOAD segments) — 56 bytes each
+        for i in range(e_phnum):
+            ph_offset = e_phoff + i * e_phentsize
+            p_type = struct.unpack('<I', self.data[ph_offset:ph_offset+4])[0]
+            p_flags = struct.unpack('<I', self.data[ph_offset+4:ph_offset+8])[0]
+            p_offset = struct.unpack('<Q', self.data[ph_offset+8:ph_offset+16])[0]
+            p_vaddr = struct.unpack('<Q', self.data[ph_offset+16:ph_offset+24])[0]
+            p_paddr = struct.unpack('<Q', self.data[ph_offset+24:ph_offset+32])[0]
+            p_filesz = struct.unpack('<Q', self.data[ph_offset+32:ph_offset+40])[0]
+            p_memsz = struct.unpack('<Q', self.data[ph_offset+40:ph_offset+48])[0]
+            p_align = struct.unpack('<Q', self.data[ph_offset+48:ph_offset+56])[0]
+            self.segments.append({
+                'type': p_type, 'offset': p_offset, 'vaddr': p_vaddr,
+                'paddr': p_paddr, 'filesz': p_filesz, 'memsz': p_memsz,
+                'flags': p_flags, 'align': p_align,
+            })
+
+        # Parse section headers (ELF64: 64 bytes each)
+        for i in range(e_shnum):
+            sh_offset = e_shoff + i * e_shentsize
+            sh_name = struct.unpack('<I', self.data[sh_offset:sh_offset+4])[0]
+            sh_type = struct.unpack('<I', self.data[sh_offset+4:sh_offset+8])[0]
+            sh_flags = struct.unpack('<Q', self.data[sh_offset+8:sh_offset+16])[0]
+            sh_addr = struct.unpack('<Q', self.data[sh_offset+16:sh_offset+24])[0]
+            sh_offset_data = struct.unpack('<Q', self.data[sh_offset+24:sh_offset+32])[0]
+            sh_size = struct.unpack('<Q', self.data[sh_offset+32:sh_offset+40])[0]
+            sh_link = struct.unpack('<I', self.data[sh_offset+40:sh_offset+44])[0]
+
+            # Get section name from string table
+            strtab_hdr_off = e_shoff + e_shentsize * e_shstrndx
+            strtab_data_off = struct.unpack('<Q', self.data[strtab_hdr_off+24:strtab_hdr_off+32])[0]
+            name_str = self._get_string(strtab_data_off + sh_name)
+
+            self.sections.append({
+                'name': name_str, 'type': sh_type, 'flags': sh_flags,
+                'addr': sh_addr, 'offset': sh_offset_data, 'size': sh_size,
             })
 
     def _get_string(self, offset: int) -> str:
@@ -109,9 +189,9 @@ class ELFLoader:
             end += 1
         return self.data[offset:end].decode('utf-8', errors='replace')
 
-    def get_loadable_sections(self) -> List[dict]:
-        """Return list of PROGBITS sections that should be loaded."""
-        return [s for s in self.sections if s['type'] in (self.SHT_PROGBITS, self.SHT_NOBITS)]
+    def get_loadable_segments(self) -> List[dict]:
+        """Return PT_LOAD segments for memory loading."""
+        return [s for s in self.segments if s['type'] == self.PT_LOAD]
 
     def get_section_data(self, section: dict) -> bytes:
         """Extract raw section data from ELF."""
@@ -119,13 +199,22 @@ class ELFLoader:
             return b'\x00' * section['size']  # BSS sections are zero-filled
         return self.data[section['offset']:section['offset'] + section['size']]
 
+    def get_segment_data(self, segment: dict) -> bytes:
+        """Extract raw segment data, zero-padding to memsz."""
+        data = self.data[segment['offset']:segment['offset'] + segment['filesz']]
+        if len(data) < segment['memsz']:
+            data += b'\x00' * (segment['memsz'] - len(data))
+        return data
+
     def print_info(self):
         """Print ELF information."""
         print(f"ELF File: {self.path}")
         print(f"Entry Point: 0x{self.entry_point:08x}")
-        print(f"\nLoadable Sections:")
-        for sec in self.get_loadable_sections():
-            print(f"  {sec['name']:20s} 0x{sec['addr']:08x} - 0x{sec['addr'] + sec['size']:08x} ({sec['size']} bytes)")
+        print(f"Class: {'ELF64' if self.elf_class == self.EI_CLASS_64 else 'ELF32'}")
+        print(f"\nLoadable Segments:")
+        for seg in self.get_loadable_segments():
+            print(f"  LOAD 0x{seg['vaddr']:08x} - 0x{seg['vaddr'] + seg['memsz']:08x}"
+                  f" (filesz={seg['filesz']}, memsz={seg['memsz']})")
 
 
 def word_to_rgba(word: int) -> Tuple[int, int, int, int]:
@@ -174,30 +263,30 @@ def load_elf_to_pixels(
     entry_point = base_addr
 
     if is_elf:
-        # Load ELF sections
+        # Load via program headers (PT_LOAD segments) — handles ELF32 and ELF64
         entry_point = elf.entry_point
 
-        for section in elf.get_loadable_sections():
-            section_data = elf.get_section_data(section)
+        for segment in elf.get_loadable_segments():
+            segment_data = elf.get_segment_data(segment)
 
-            # Calculate pixel offset for this section
-            section_base = section['addr'] - base_addr
+            # Calculate pixel offset for this segment
+            segment_base = segment['vaddr'] - base_addr
 
             # Load data as 32-bit words into pixels
-            word_count = (len(section_data) + 3) // 4
+            word_count = (len(segment_data) + 3) // 4
 
             for word_idx in range(word_count):
                 # Extract 32-bit word (little-endian)
-                word_bytes = section_data[word_idx*4:word_idx*4+4]
+                word_bytes = segment_data[word_idx*4:word_idx*4+4]
                 if len(word_bytes) < 4:
                     word_bytes += b'\x00' * (4 - len(word_bytes))
                 word = struct.unpack('<I', word_bytes)[0]
 
                 # Calculate pixel position
-                pixel_idx = section_base // 4 + word_idx
+                pixel_idx = segment_base // 4 + word_idx
 
                 if pixel_idx >= total_pixels:
-                    print(f"Warning: Section {section['name']} exceeds pixel array size")
+                    print(f"Warning: Segment at 0x{segment['vaddr']:08x} exceeds pixel array size")
                     break
 
                 # Calculate 2D coordinates
@@ -208,31 +297,25 @@ def load_elf_to_pixels(
                 pixels[y, x] = word_to_rgba(word)
     else:
         # Load raw binary (treat as starting at base_addr)
-        print(f"Loading raw binary (not ELF)")
+        print("Loading raw binary (not ELF)")
         with open(elf_path, 'rb') as f:
             raw_data = f.read()
 
         word_count = (len(raw_data) + 3) // 4
 
         for word_idx in range(word_count):
-            # Extract 32-bit word (little-endian)
             word_bytes = raw_data[word_idx*4:word_idx*4+4]
             if len(word_bytes) < 4:
                 word_bytes += b'\x00' * (4 - len(word_bytes))
             word = struct.unpack('<I', word_bytes)[0]
 
-            # Calculate pixel position
             pixel_idx = word_idx
-
             if pixel_idx >= total_pixels:
-                print(f"Warning: Binary exceeds pixel array size")
+                print("Warning: Binary exceeds pixel array size")
                 break
 
-            # Calculate 2D coordinates
             x = pixel_idx % image_width
             y = pixel_idx // image_width
-
-            # Write pixel (RGBA = word bytes)
             pixels[y, x] = word_to_rgba(word)
 
     return pixels, entry_point
@@ -259,37 +342,19 @@ def save_pixels_as_npy(pixels: np.ndarray, output_path: str):
 
 def create_minimal_test_kernel(output_path: str = 'kernel_minimal.elf'):
     """Create a minimal RISC-V test kernel for verification."""
-
-    # Hand-coded RISC-V machine code
-    #   lui a0, 0x00100        ; Load upper immediate: a0 = 0x00100000
-    # Hand-coded RISC-V machine code
-    #   lui a0, 0x00100        ; Load upper immediate: a0 = 0x00100000
-    #   addi a0, a0, 0x100    ; Add immediate: a0 = 0x00100100
-    #   addi a1, x0, 42       ; a1 = 42
-    #   addi a2, x0, 23       ; a2 = 23
-    #   add a3, a1, a2        ; a3 = 65
-    #   lui ra, 0x00000       ; ra = 0 (just for instruction coverage)
-    #   ecall                 ; System call (will halt emulator)
-
     machine_code = bytes([
         # lui a0, 0x00100  (0x00100537)
         0x37, 0x05, 0x10, 0x00,
-
         # addi a0, a0, 0x100  (0x10050513)
         0x13, 0x05, 0x05, 0x10,
-
         # addi a1, x0, 42  (0x02a00593)
         0x93, 0x05, 0xa0, 0x02,
-
         # addi a2, x0, 23  (0x01700613)
         0x13, 0x06, 0x70, 0x01,
-
         # add a3, a1, a2  (0x00c586b3)
         0xb3, 0x86, 0xc5, 0x00,
-
         # lui ra, 0x00000  (0x00000097)
         0x97, 0x00, 0x00, 0x00,
-
         # ecall (0x00000073)
         0x73, 0x00, 0x00, 0x00,
     ])

@@ -37,7 +37,7 @@ def load_gpu_trace(trace_file: str):
 
 def compare_state(qemu_regs: dict, gpu_regs: dict, ignore_regs=None):
     """
-    Compare register states.
+    Compare register states. Only compares registers present in BOTH sides.
     
     Returns: (match, differences_dict)
     """
@@ -46,13 +46,10 @@ def compare_state(qemu_regs: dict, gpu_regs: dict, ignore_regs=None):
     
     differences = {}
     
-    # Get all register names from both sides
-    all_regs = set(qemu_regs.keys()) | set(gpu_regs.keys())
+    # Only compare regs that exist in both traces
+    common_regs = set(qemu_regs.keys()) & set(gpu_regs.keys()) - ignore_regs
     
-    for reg in all_regs:
-        if reg in ignore_regs:
-            continue
-        
+    for reg in sorted(common_regs):
         qemu_val = qemu_regs.get(reg, None)
         gpu_val = gpu_regs.get(reg, None)
         
@@ -88,7 +85,7 @@ def find_alignment_point(qemu_trace, gpu_trace, pc: int):
 
 
 def diff_traces(qemu_trace, gpu_trace, start_pc: int = None, 
-                 max_instructions: int = 100):
+                 max_instructions: int = 100, ignore_regs: set = None):
     """
     Diff two traces and report first mismatch.
     
@@ -101,6 +98,24 @@ def diff_traces(qemu_trace, gpu_trace, start_pc: int = None,
     print(f"QEMU trace: {len(qemu_trace)} instructions")
     print(f"GPU trace: {len(gpu_trace)} instructions")
     
+    # Allow extracting QEMU's initial state for GPU initialization
+    # Find first kernel entry (PC >= KERNEL_BASE)
+    for qemu_entry in qemu_trace:
+        if qemu_entry['pc'] >= 0x80000000:
+            # Save as reference init state
+            import json
+            ref_path = '/tmp/qemu_kernel_init_state.json'
+            init_state = {
+                'pc': qemu_entry['pc'],
+                'regs': {k: v for k, v in qemu_entry['regs'].items() 
+                         if not k.startswith('h')}  # Skip h-mode CSRs
+            }
+            with open(ref_path, 'w') as f:
+                json.dump(init_state, f)
+            print(f"Saved QEMU init state (at PC=0x{qemu_entry['pc']:016x}) to {ref_path}")
+            break
+    
+    # Find alignment point
     start_qemu, start_gpu = 0, 0
     
     if start_pc is not None:
@@ -134,9 +149,10 @@ def diff_traces(qemu_trace, gpu_trace, start_pc: int = None,
             print(f"  GPU  PC: {gpu_entry['pc']:016x}")
             return False
         
-        # Compare registers (ignore mhartid which may differ)
+        # Compare registers (ignore boot ROM regs)
+        effective_ignore = ignore_regs | {'mhartid'} if ignore_regs else {'mhartid'}
         match, diffs = compare_state(qemu_entry['regs'], gpu_entry['regs'], 
-                                     ignore_regs={'mhartid'})
+                                     effective_ignore)
         
         if not match:
             print(f"\nFirst mismatch at instruction {compared} (PC={qemu_entry['pc']:016x}):")
@@ -144,7 +160,12 @@ def diff_traces(qemu_trace, gpu_trace, start_pc: int = None,
             print(f"  GPU  instr: {gpu_entry.get('instr', 'N/A')}")
             print(f"\n  Register differences:")
             for reg, values in sorted(diffs.items())[:5]:  # Show first 5
-                print(f"    {reg}: QEMU={values['qemu']:016x}, GPU={values['gpu']:016x}")
+                qv = values['qemu']
+                gv = values['gpu']
+                if qv is not None and gv is not None:
+                    print(f"    {reg}: QEMU={qv:016x}, GPU={gv:016x}")
+                else:
+                    print(f"    {reg}: QEMU={qv}, GPU={gv}")
             if len(diffs) > 5:
                 print(f"    ... and {len(diffs)-5} more")
             return False
@@ -167,13 +188,19 @@ def main():
                         help='Align at this PC (default: start from beginning)')
     parser.add_argument('--max-instructions', type=int, default=100,
                         help='Max instructions to compare (default: 100)')
+    parser.add_argument('--ignore-regs', type=str, default='',
+                        help='Comma-separated registers to ignore (e.g. x2,x3,x10,x11)')
     
     args = parser.parse_args()
+    
+    ignore_regs = set()
+    if args.ignore_regs:
+        ignore_regs = set(r.strip() for r in args.ignore_regs.split(','))
     
     qemu_trace = load_qemu_trace(args.qemu_trace)
     gpu_trace = load_gpu_trace(args.gpu_trace)
     
-    success = diff_traces(qemu_trace, gpu_trace, args.start_pc, args.max_instructions)
+    success = diff_traces(qemu_trace, gpu_trace, args.start_pc, args.max_instructions, ignore_regs)
     
     sys.exit(0 if success else 1)
 
