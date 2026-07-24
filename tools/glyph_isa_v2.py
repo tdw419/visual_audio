@@ -46,6 +46,35 @@ class OpcodeMapV2:
         'PRT': 'print',
         'LD': 'load',
         'ST': 'store',
+        'AND': 'intersect',
+        'OR': 'union',
+        'XOR': 'exclusive',
+        'SHL': 'shift_left',
+        'SHR': 'shift_right',
+        'PUSH': 'push',
+        'POP': 'pop',
+        'CALL': 'call',
+        'RET': 'return',
+        'SYSCALL': 'system_call',
+    }
+
+    # Fixed literal colors for the opcodes added in the Turing-complete
+    # expansion (AND/OR/XOR/SHL/SHR/PUSH/POP/CALL/RET/SYSCALL). Unlike the original
+    # 10 opcodes (which derive their color from a wordbase.db lookup and
+    # therefore shift if the wordbase changes), these are pinned so the
+    # WGSL GPU port never has to be regenerated to match a live database -
+    # a real requirement once a decoder is hardcoding color literals.
+    FIXED_COLORS: Dict[str, Tuple[int, int, int]] = {
+        'AND':  (100, 149, 237),
+        'OR':   (255, 165, 0),
+        'XOR':  (238, 130, 238),
+        'SHL':  (0, 206, 209),
+        'SHR':  (218, 112, 214),
+        'PUSH': (34, 139, 34),
+        'POP':  (139, 69, 19),
+        'CALL': (75, 0, 130),
+        'RET':  (255, 215, 0),
+        'SYSCALL': (255, 69, 0),
     }
 
     def __init__(self, wordbase_path: Optional[Path] = None):
@@ -76,9 +105,14 @@ class OpcodeMapV2:
 
     def _build_maps(self):
         for opcode, word in self.OPCODES.items():
-            rgb = self._color_for_word(word, opcode)
-            if self._is_reserved(rgb) or rgb in self._rgb_to_opcode:
-                rgb = self._next_free_color(rgb)
+            if opcode in self.FIXED_COLORS:
+                rgb = self.FIXED_COLORS[opcode]
+                if self._is_reserved(rgb) or rgb in self._rgb_to_opcode:
+                    rgb = self._next_free_color(rgb)
+            else:
+                rgb = self._color_for_word(word, opcode)
+                if self._is_reserved(rgb) or rgb in self._rgb_to_opcode:
+                    rgb = self._next_free_color(rgb)
             self._opcode_to_rgb[opcode] = rgb
             self._rgb_to_opcode[rgb] = opcode
 
@@ -151,16 +185,28 @@ class GlyphAssemblerV2:
 
             if opcode == 'LDI':
                 rd = int(args[0][1:])
-                imm = int(args[1])
-            elif opcode in ('ADD', 'SUB', 'CMP', 'LD', 'ST'):
+                # Parse immediate, supporting hex (0x) and decimal
+                imm_str = args[1]
+                if imm_str.startswith('0x') or imm_str.startswith('0X'):
+                    imm = int(imm_str, 16)
+                else:
+                    imm = int(imm_str)
+            elif opcode in ('ADD', 'SUB', 'CMP', 'LD', 'ST', 'AND', 'OR', 'XOR', 'SHL', 'SHR'):
                 rd = int(args[0][1:])
                 rs2 = int(args[1][1:])
-            elif opcode == 'PRT':
+            elif opcode in ('PRT', 'PUSH', 'POP', 'SYSCALL'):
                 rd = int(args[0][1:])
-            elif opcode in ('JMP', 'JZ'):
+                # Parse immediate for SYSCALL
+                if opcode == 'SYSCALL' and len(args) > 1:
+                    imm_str = args[1]
+                    if imm_str.startswith('0x') or imm_str.startswith('0X'):
+                        imm = int(imm_str, 16)
+                    else:
+                        imm = int(imm_str)
+            elif opcode in ('JMP', 'JZ', 'CALL'):
                 x, y = args[0].split(',')
                 imm = (int(y) << 16) | int(x)  # pack coord into imm
-            elif opcode == 'HALT':
+            elif opcode in ('HALT', 'RET'):
                 pass
 
             image[row, base_x + 1] = (rs1, rs2, rd)
@@ -230,6 +276,16 @@ class GlyphCPUv2:
             self.registers[rd] += self.registers[rs2]
         elif opcode == 'SUB':
             self.registers[rd] -= self.registers[rs2]
+        elif opcode == 'AND':
+            self.registers[rd] &= self.registers[rs2]
+        elif opcode == 'OR':
+            self.registers[rd] |= self.registers[rs2]
+        elif opcode == 'XOR':
+            self.registers[rd] ^= self.registers[rs2]
+        elif opcode == 'SHL':
+            self.registers[rd] <<= self.registers[rs2]
+        elif opcode == 'SHR':
+            self.registers[rd] >>= self.registers[rs2]
         elif opcode == 'CMP':
             self.registers[0] = 1 if self.registers[rd] == self.registers[rs2] else 0
         elif opcode == 'LD':
@@ -239,10 +295,36 @@ class GlyphCPUv2:
             # ST rd rs2 -> store rs2 into the pixel at address rd
             addr = self.registers[rd]
             self._mem_write(image, addr, self.registers[rs2])
+        elif opcode == 'PUSH':
+            self.registers[31] -= 1
+            self._mem_write(image, self.registers[31], self.registers[rd])
+        elif opcode == 'POP':
+            self.registers[rd] = self._mem_read(image, self.registers[31])
+            self.registers[31] += 1
         elif opcode == 'PRT':
             val = self.registers[rd]
             self.output.append(val)
             print(f"OUTPUT: r{rd} = {val}")
+        elif opcode == 'CALL':
+            # Save next_pc (packed) to stack and jump
+            self.registers[31] -= 1
+            packed_pc = (next_pc[1] << 16) | (next_pc[0] & 0xFFFF)
+            self._mem_write(image, self.registers[31], packed_pc)
+            
+            tx, ty = imm & 0xFFFF, (imm >> 16) & 0xFFFF
+            target_x = tx * INSTR_WIDTH
+            self._check_alignment(target_x)
+            next_pc = (target_x, ty)
+        elif opcode == 'RET':
+            # Pop packed_pc from stack and jump
+            packed_pc = self._mem_read(image, self.registers[31])
+            self.registers[31] += 1
+            tx, ty = packed_pc & 0xFFFF, (packed_pc >> 16) & 0xFFFF
+            next_pc = (tx, ty)
+        elif opcode == 'SYSCALL':
+            # Invoke hypervisor syscall - number in immediate, result in rd
+            syscall_num = imm
+            self.registers[rd] = self._handle_syscall(syscall_num, image)
         elif opcode == 'JMP':
             tx, ty = imm & 0xFFFF, (imm >> 16) & 0xFFFF
             target_x = tx * INSTR_WIDTH
@@ -261,6 +343,82 @@ class GlyphCPUv2:
 
         self.pc = next_pc
         return True
+
+    def _handle_syscall(self, syscall_num: int, image: np.ndarray) -> int:
+        """
+        Handle hypervisor syscalls from spatial programs.
+
+        Syscall interface compatible with GeOS hypervisor:
+        - 0x01: SYSCALL_WRITE - Write to output buffer (arg1=r1=addr, arg2=r2=len)
+        - 0x02: SYSCALL_READ  - Read from input buffer (arg1=r1=addr, arg2=r2=len)
+        - 0x03: SYSCALL_FILE_WRITE - Write to file (arg1=r1=path_addr, arg2=r2=data_addr, arg3=r3=len)
+        - 0x04: SYSCALL_FILE_READ  - Read from file (arg1=r1=path_addr, arg2=r2=data_addr, arg3=r3=len)
+        - 0x05: SYSCALL_EXIT   - Exit with status (arg1=r1=status)
+        - 0x06: SYSCALL_DEBUG  - Debug print (arg1=r1=value)
+        - 0x10-0xFF: Reserved for Geometry OS spatial services
+
+        Returns: syscall result (0=success, -1=error)
+        """
+        # Map syscall numbers to hypervisor service addresses
+        # These match the GeOS hypervisor bridge constants
+        SPATIAL_REGISTRY_BASE = 0x8009_0000
+
+        if syscall_num == 0x01:  # SYSCALL_WRITE
+            # Write r2 bytes from address r1 to output buffer
+            addr = self.registers[1]
+            length = self.registers[2]
+            for i in range(length):
+                val = self._mem_read(image, addr + i)
+                self.output.append(val)
+            print(f"[SYSCALL] WRITE: {length} bytes from addr {addr}")
+            return 0
+
+        elif syscall_num == 0x02:  # SYSCALL_READ
+            # Read r2 bytes from input to address r1 (stub - returns zeros)
+            addr = self.registers[1]
+            length = self.registers[2]
+            for i in range(length):
+                self._mem_write(image, addr + i, 0)
+            print(f"[SYSCALL] READ: {length} bytes to addr {addr} (stub)")
+            return 0
+
+        elif syscall_num == 0x03:  # SYSCALL_FILE_WRITE
+            # Write file: r1=path_addr, r2=data_addr, r3=len (stub)
+            path_addr = self.registers[1]
+            data_addr = self.registers[2]
+            length = self.registers[3]
+            print(f"[SYSCALL] FILE_WRITE: {length} bytes from addr {data_addr} to path at {path_addr} (stub)")
+            return 0
+
+        elif syscall_num == 0x04:  # SYSCALL_FILE_READ
+            # Read file: r1=path_addr, r2=data_addr, r3=len (stub)
+            path_addr = self.registers[1]
+            data_addr = self.registers[2]
+            length = self.registers[3]
+            print(f"[SYSCALL] FILE_READ: {length} bytes from path at {path_addr} to addr {data_addr} (stub)")
+            return 0
+
+        elif syscall_num == 0x05:  # SYSCALL_EXIT
+            # Exit with status in r1
+            status = self.registers[1]
+            print(f"[SYSCALL] EXIT: status={status}")
+            self.running = False
+            return status
+
+        elif syscall_num == 0x06:  # SYSCALL_DEBUG
+            # Debug print: r1=value
+            value = self.registers[1]
+            print(f"[SYSCALL] DEBUG: r1={value}")
+            return 0
+
+        elif 0x10 <= syscall_num <= 0xFF:
+            # Reserved for GeOS spatial services - bridge to hypervisor
+            print(f"[SYSCALL] GEOS_SERVICE 0x{syscall_num:02X}: dispatched to MMIO 0x{SPATIAL_REGISTRY_BASE:08X}")
+            return 0
+
+        else:
+            print(f"[SYSCALL] UNKNOWN: syscall_num=0x{syscall_num:02X}")
+            return -1
 
     def run(self, image: np.ndarray, max_instructions: int = 1000):
         self.running = True

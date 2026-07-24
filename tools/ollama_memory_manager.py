@@ -33,6 +33,13 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 
+class MessageRole:
+    """Role constants for conversation messages."""
+    SYSTEM = "system"
+    USER = "user"
+    ASSISTANT = "assistant"
+
+
 class ConversationMessage:
     """Represents a single message in a conversation."""
     

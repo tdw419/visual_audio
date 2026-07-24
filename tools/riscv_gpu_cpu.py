@@ -56,7 +56,7 @@ CPU_DTYPE = np.dtype([
     ('timer_interrupt_count', np.uint32),  # Number of timer interrupts taken
     ('total_interrupt_count', np.uint32),  # Total interrupts taken
     ('plic_priority_irq1', np.uint32),     # Priority for IRQ 1
-    ('_pad1', np.uint32),                  # WGSL alignment padding
+    ('current_instr_len', np.uint32),      # 2 (RVC) or 4 - set by fetch
 ])
 
 assert CPU_DTYPE.itemsize == 520, f"CPU struct layout drifted: {CPU_DTYPE.itemsize}"

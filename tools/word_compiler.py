@@ -10,11 +10,13 @@ TASK_P001: Added 5ms crossfade between phonemes for smooth transitions.
 """
 
 import argparse
+import hashlib
 import json
 import os
+import re
 import sys
+import tempfile
 import urllib.request
-import hashlib
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -352,8 +354,13 @@ def compile_word(word: str, cmudict: Dict[str, List[str]],
     os.makedirs(VOICEBOOK_DIR, exist_ok=True)
     
     word_hash = hashlib.md5(word.encode()).hexdigest()[:8]
-    wav_path = os.path.join(VOICEBOOK_DIR, f"{word}_{word_hash}.wav")
-    upic_path = os.path.join(VOICEBOOK_DIR, f"{word}_{word_hash}.upic.json")
+    # Sanitize word for use as filename (strip chars that break paths like '/')
+    safe_word = re.sub(r'[^\w\-]', '_', word)
+    # Truncate to prevent path length issues on filesystem
+    if len(safe_word) > 48:
+        safe_word = safe_word[:48]
+    wav_path = os.path.join(VOICEBOOK_DIR, f"{safe_word}_{word_hash}.wav")
+    upic_path = os.path.join(VOICEBOOK_DIR, f"{safe_word}_{word_hash}.upic.json")
     
     # Check cache
     if os.path.exists(wav_path) and not force:
