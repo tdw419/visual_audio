@@ -191,17 +191,17 @@ class TestPixelOSLMInput:
         # Test that wordbase can lookup words
         # In pixel-LM, token IDs map to wordbase entries
         # The first word token is at SpecialTokens.NUM_SPECIAL (16)
-        # But actual word IDs in wordbase start at 3 (min_id)
+        # Real word IDs in wordbase start at 16 (NUM_SPECIAL)
         
-        # Query for the first actual word (min_id=3)
+        # Query for the first actual word (min_id=16)
         cursor = daemon.db.execute(
-            "SELECT word FROM words WHERE id = 3"
+            "SELECT word FROM words WHERE id = 16"
         )
         result = cursor.fetchone()
         
-        # Word ID 3 should be "test" based on earlier query
-        assert result is not None, f"Word ID 3 not found in wordbase"
-        assert result[0] == "test", f"Expected 'test', got '{result[0]}'"
+        # Word ID 16 should be "a" based on wordbase initialization
+        assert result is not None, f"Word ID 16 not found in wordbase"
+        assert result[0] == "a", f"Expected 'a', got '{result[0]}'"
         
         # Also test that special tokens map to negative word_ids
         # For special tokens: word_id = token_id - NUM_SPECIAL
