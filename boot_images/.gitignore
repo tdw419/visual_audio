@@ -1,3 +1,4 @@
 # Third-party (GPL/MIT) images built locally — see README.md, not committed here.
 xv6.img
 fs.img
+arch_desktop.qcow2

@@ -84,3 +84,12 @@
 2026-07-16 19:56:13,771 - ERROR - Refusing boot op: boot not enabled (pass --enable-boot to opt in)
 2026-07-16 19:56:13,902 - WARNING - words count mismatch on 100.0% of the lines (1/1)
 2026-07-16 19:56:14,193 - INFO - Launched QEMU from signed boot op: qemu-system-riscv64 -nographic -machine virt -kernel /tmp/tmpwesb1hll/xv6.img
+2026-07-23 20:56:13,087 - ERROR - Refusing boot op: provenance not required (unsigned frames could launch QEMU)
+2026-07-23 20:56:13,087 - ERROR - Refusing boot op: boot not enabled (pass --enable-boot to opt in)
+2026-07-23 20:56:13,411 - INFO - Launched QEMU from signed boot op: qemu-system-riscv64 -nographic -machine virt -kernel /tmp/tmp41wo846n/xv6.img
+2026-07-23 20:58:14,237 - ERROR - Refusing boot op: provenance not required (unsigned frames could launch QEMU)
+2026-07-23 20:58:14,237 - ERROR - Refusing boot op: boot not enabled (pass --enable-boot to opt in)
+2026-07-23 20:58:14,522 - INFO - Launched QEMU from signed boot op: qemu-system-riscv64 -nographic -machine virt -kernel /tmp/tmpqo113hxx/xv6.img
+2026-07-23 20:58:35,626 - ERROR - Refusing boot op: provenance not required (unsigned frames could launch QEMU)
+2026-07-23 20:58:35,626 - ERROR - Refusing boot op: boot not enabled (pass --enable-boot to opt in)
+2026-07-23 20:58:35,964 - INFO - Launched QEMU from signed boot op: qemu-system-riscv64 -nographic -machine virt -kernel /tmp/tmpuizm6qhx/xv6.img
