@@ -57,8 +57,6 @@ def test_phy_ecc_roundtrip():
         assert decoded == test_data, f"Round-trip should preserve data for {description}"
         
         print(f"  ✓ PASS: {description} ({len(test_data)} bytes -> {len(encoded)} bytes)")
-    
-    return True
 
 
 def test_corruption_recovery():
@@ -123,8 +121,6 @@ def test_corruption_recovery():
     else:
         print(f"    ~ WARN: Partial corruption (20 errors exceeds 16 per-block limit)")
         print(f"    This demonstrates the 5% corruption recovery capability boundary")
-    
-    return True  # Test passes - corruption recovery demonstrated
 
 
 def test_metadata_persistence():
@@ -198,8 +194,6 @@ def test_metadata_persistence():
         print(f"    ecc_parity: {reloaded_metadata['ecc_parity']}")
         print(f"    original_len: {reloaded_metadata['original_len']}")
         
-        return True
-        
     finally:
         if os.path.exists(temp_path):
             os.unlink(temp_path)
@@ -252,8 +246,6 @@ def test_recovery_logging():
     
     print(f"  ✓ PASS: Recovery logging functional")
     print(f"    Sample log: {log_output.split(chr(10))[0]}")
-    
-    return True
 
 
 def test_full_memory_to_png_workflow():
@@ -308,8 +300,6 @@ def test_full_memory_to_png_workflow():
         print(f"  ✓ PASS: Full encode/decode workflow works")
         print(f"    Original: {len(test_data)} bytes")
         print(f"    Recovered: {len(recovered_data)} bytes")
-        
-        return True
         
     finally:
         for path in [input_path, png_path, output_path]:

@@ -26,11 +26,12 @@ from scipy.io import wavfile
 from scipy import signal
 
 
-def test_dual_band_basic_generation():
-    """Test that dual-band WAV generation works via speak.py"""
-    print("\n[1/5] Testing dual-band basic generation via speak.py...")
-    
-    # Create test data - human readable summary for phonemes, full JSON for bytes
+import pytest
+
+
+@pytest.fixture
+def test_data():
+    """Create test data for dual-band encoding"""
     summary_text = "User prefers local LLMs and privacy-focused tools"
     full_data = {
         "user": {
@@ -41,54 +42,62 @@ def test_dual_band_basic_generation():
         },
         "timestamp": 1710655200
     }
+    return summary_text, full_data
+
+
+@pytest.fixture
+def summary_file(test_data, tmp_path):
+    """Create summary file fixture"""
+    summary_text, _ = test_data
+    file_path = tmp_path / "summary.txt"
+    file_path.write_text(summary_text)
+    return str(file_path)
+
+
+@pytest.fixture
+def data_file(test_data, tmp_path):
+    """Create data file fixture"""
+    _, full_data = test_data
+    file_path = tmp_path / "data.json"
+    file_path.write_text(json.dumps(full_data))
+    return str(file_path)
+
+
+@pytest.fixture
+def dual_band_wav(summary_file, data_file, tmp_path):
+    """Generate dual-band WAV file fixture"""
+    wav_file = tmp_path / "dualband.wav"
     
-    # Write test files
-    with tempfile.NamedTemporaryFile(mode='w', suffix='_summary.txt', delete=False) as f:
-        f.write(summary_text)
-        summary_file = f.name
+    result = subprocess.run(
+        [
+            'python3', 'tools/speak.py', 'encode_dual',
+            '-t', summary_file,
+            '-b', data_file,
+            '-o', str(wav_file)
+        ],
+        capture_output=True, text=True, cwd=str(project_root)
+    )
     
-    with tempfile.NamedTemporaryFile(mode='w', suffix='_data.json', delete=False) as f:
-        json.dump(full_data, f)
-        data_file = f.name
+    assert result.returncode == 0, f"speak.py encode_dual failed: {result.stderr}"
+    assert wav_file.exists(), f"WAV file not created: {wav_file}"
     
-    dual_band_wav = tempfile.NamedTemporaryFile(suffix='_dualband.wav', delete=False).name
+    return str(wav_file)
+
+
+def test_dual_band_basic_generation(dual_band_wav):
+    """Test that dual-band WAV generation works via speak.py"""
+    print("\n[1/5] Testing dual-band basic generation via speak.py...")
     
-    try:
-        # Use speak.py encode_dual for proper dual-band generation
-        result = subprocess.run(
-            [
-                'python3', 'tools/speak.py', 'encode_dual',
-                '-t', summary_file,
-                '-b', data_file,
-                '-o', dual_band_wav
-            ],
-            capture_output=True, text=True, cwd=str(project_root)
-        )
-        
-        if result.returncode != 0:
-            print(f"  ✗ speak.py encode_dual failed: {result.stderr}")
-            raise AssertionError(f"speak.py encode_dual failed: {result.stderr}")
-        
-        # Verify WAV file exists and is valid
-        assert os.path.exists(dual_band_wav), f"WAV file not created: {dual_band_wav}"
-        
-        # Read and verify WAV file
-        sample_rate, audio_data = wavfile.read(dual_band_wav)
-        assert sample_rate == 44100, f"Expected sample rate 44100, got {sample_rate}"
-        assert audio_data.dtype == np.int16, f"Expected int16 audio, got {audio_data.dtype}"
-        assert len(audio_data) > 0, "Audio data is empty"
-        
-        print(f"  ✓ Generated dual-band WAV via speak.py")
-        print(f"  ✓ Duration: {len(audio_data)/sample_rate:.2f}s")
-        print(f"  ✓ Sample rate: {sample_rate} Hz")
-        print(f"  ✓ Audio dtype: {audio_data.dtype}")
-        
-        return dual_band_wav, data_file, full_data
-        
-    finally:
-        # Clean up summary_file only - data_file needed for subsequent tests
-        if os.path.exists(summary_file):
-            os.unlink(summary_file)
+    # Read and verify WAV file
+    sample_rate, audio_data = wavfile.read(dual_band_wav)
+    assert sample_rate == 44100, f"Expected sample rate 44100, got {sample_rate}"
+    assert audio_data.dtype == np.int16, f"Expected int16 audio, got {audio_data.dtype}"
+    assert len(audio_data) > 0, "Audio data is empty"
+    
+    print(f"  ✓ Generated dual-band WAV via speak.py")
+    print(f"  ✓ Duration: {len(audio_data)/sample_rate:.2f}s")
+    print(f"  ✓ Sample rate: {sample_rate} Hz")
+    print(f"  ✓ Audio dtype: {audio_data.dtype}")
 
 
 def test_frequency_band_separation(dual_band_wav):
@@ -147,7 +156,14 @@ def test_frequency_band_separation(dual_band_wav):
     print("  ✓ Frequency bands properly separated")
 
 
-def test_byte_identical_decode(dual_band_wav, original_data_file, original_data):
+@pytest.fixture
+def original_data(data_file):
+    """Load original data from data_file"""
+    with open(data_file, 'r') as f:
+        return json.load(f)
+
+
+def test_byte_identical_decode(dual_band_wav, data_file, original_data):
     """Test that byte band decodes to byte-identical data"""
     print("\n[3/5] Testing byte-identical decode of byte band...")
     
@@ -174,7 +190,7 @@ def test_byte_identical_decode(dual_band_wav, original_data_file, original_data)
             print(f"     stdout: {result.stdout}")
         
         # Read original and decoded files
-        with open(original_data_file, 'r') as f:
+        with open(data_file, 'r') as f:
             original_content = f.read()
         
         with open(decoded_file, 'r') as f:
