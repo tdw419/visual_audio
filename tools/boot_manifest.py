@@ -61,6 +61,8 @@ class BootManifest:
     image: str  # bare filename, validated against the image directory later
     bios: str = "default"  # one of ALLOWED_BIOS
     drive: str = None  # optional bare filename attached as a virtio-blk disk
+    gui: bool = False  # boot `image` itself as a qcow2 disk with a VNC display,
+                        # instead of direct-kernel-booting it (x86_64 only)
 
 
 def parse_boot_op(op) -> BootManifest:
@@ -91,7 +93,7 @@ def parse_boot_op(op) -> BootManifest:
 
     if not isinstance(opts, dict):
         raise BootManifestError(f"boot options must be an object, got {opts!r}")
-    unknown = set(opts) - {"bios", "drive"}
+    unknown = set(opts) - {"bios", "drive", "gui"}
     if unknown:
         raise BootManifestError(f"unknown boot options: {sorted(unknown)}")
     bios = opts.get("bios", "default")
@@ -106,7 +108,20 @@ def parse_boot_op(op) -> BootManifest:
         if arch != "riscv64":
             raise BootManifestError(f"drive option is only supported for riscv64, not {arch!r}")
 
-    return BootManifest(arch=arch, image=image, bios=bios, drive=drive)
+    gui = opts.get("gui", False)
+    if not isinstance(gui, bool):
+        raise BootManifestError(f"gui must be a boolean, got {gui!r}")
+    if gui:
+        # gui boots `image` itself as a qcow2 disk (BIOS/GRUB inside the
+        # image drives the rest) with a VNC display instead of -nographic -
+        # only meaningful for x86_64, and incompatible with the riscv-virt
+        # direct-kernel-boot "bios"/"drive" options.
+        if arch != "x86_64":
+            raise BootManifestError(f"gui option is only supported for x86_64, not {arch!r}")
+        if bios != "default" or drive is not None:
+            raise BootManifestError("gui cannot be combined with bios or drive options")
+
+    return BootManifest(arch=arch, image=image, bios=bios, drive=drive, gui=gui)
 
 
 def _resolve_in_dir(name: str, base_dir: str, label: str) -> Path:
@@ -133,6 +148,23 @@ def build_qemu_argv(manifest: BootManifest, image_path: Path,
                     drive_path: Optional[Path] = None) -> List[str]:
     """Build the qemu argv list for a validated manifest and resolved paths."""
     binary, template = ARCH_QEMU[manifest.arch]
+
+    if manifest.gui:
+        # Boot `image_path` itself as a qcow2 disk with a VNC display,
+        # snapshot=on so the signed manifest can never persist changes to
+        # the trusted image on disk. Display :1 is fixed and deterministic -
+        # every gui boot is reachable the same way (127.0.0.1:5901).
+        # -M pc -m 2048 are required: QEMU's bare defaults (no explicit
+        # machine/memory) are too constrained for a real desktop image and
+        # panic with "VFS: Unable to mount root fs" before GRUB is even
+        # reached - confirmed by reproducing the panic without them.
+        return [
+            binary,
+            "-M", "pc", "-m", "2048",
+            "-drive", f"file={image_path},format=qcow2,if=virtio,snapshot=on",
+            "-vnc", ":1",
+        ]
+
     bios = ["-bios", "none"] if manifest.bios == "none" else []
     # template ends with "-kernel"; splice any disk wiring in before it.
     pre_kernel, kernel_flag = template[:-1], template[-1]

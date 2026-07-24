@@ -74,7 +74,7 @@ struct RiscvCPU {
     timer_interrupt_count: u32, // Number of timer interrupts taken
     total_interrupt_count: u32, // Total interrupts taken
     plic_priority_irq1: u32,    // Priority for IRQ 1
-    _pad1: u32,                 // WGSL alignment padding
+    current_instr_len: u32,     // 2 (RVC) or 4 - set by fetch, consumed by every pc-advance site
 }
 
 // R-type instruction decoding
@@ -363,7 +363,7 @@ fn execute_csrrw(cpu: ptr<function, RiscvCPU>, instr: u32) {
     if (rd != 0u) {
         (*cpu).regs[rd] = old_val;
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // CSRRS (Read-Set CSR)
@@ -379,7 +379,7 @@ fn execute_csrrs(cpu: ptr<function, RiscvCPU>, instr: u32) {
     if (rd != 0u) {
         (*cpu).regs[rd] = old_val;
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // CSRRC (Read-Clear CSR)
@@ -395,7 +395,7 @@ fn execute_csrrc(cpu: ptr<function, RiscvCPU>, instr: u32) {
     if (rd != 0u) {
         (*cpu).regs[rd] = old_val;
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // mstatus bit positions (low word)
@@ -405,6 +405,8 @@ const MSTATUS_SPIE_BIT: u32 = 5u;
 const MSTATUS_MPIE_BIT: u32 = 7u;
 const MSTATUS_SPP_BIT: u32 = 8u;
 const MSTATUS_MPP_SHIFT: u32 = 11u;  // bits [12:11]
+const MSTATUS_SUM_BIT: u32 = 18u;
+const MSTATUS_MXR_BIT: u32 = 19u;
 
 // sstatus = restricted view of mstatus: SIE, SPIE, UBE, SPP, VS, FS, XS, SUM, MXR
 const SSTATUS_MASK_LO: u32 = 0x000DE762u;
@@ -869,8 +871,57 @@ fn make_pa(ppn: vec2<u32>, offset: u32) -> vec2<u32> {
     return vec2<u32>(pa_low, pa_high);
 }
 
-fn translate_va(cpu: ptr<function, RiscvCPU>, va: vec2<u32>) -> vec2<u32> {
-    if (!mmu_enabled((*cpu).satp)) {
+// RISC-V page permission matrix (priv spec 4.3.2 / 4.6). Returns true if
+// the access is permitted, false if it must page-fault.
+fn check_pte_permission(cpu: ptr<function, RiscvCPU>, pte: u32, is_fetch: bool, is_store: bool) -> bool {
+    let priv_mode = (*cpu).priv_mode;
+    let pte_u = (pte & PTE_U_MASK) != 0u;
+    let ms = (*cpu).mstatus.x;
+    let sum = (ms >> MSTATUS_SUM_BIT) & 1u;
+    let mxr = (ms >> MSTATUS_MXR_BIT) & 1u;
+
+    // U-bit rule: U-mode may only touch U=1 pages.
+    if (priv_mode == PRIV_U && !pte_u) {
+        return false;
+    }
+    // SUM rule: S-mode touching a U=1 page needs mstatus.SUM=1, and even
+    // then only for data accesses - S-mode can never fetch from a U page.
+    if (priv_mode == PRIV_S && pte_u) {
+        if (is_fetch || sum == 0u) {
+            return false;
+        }
+    }
+
+    // RWX rules.
+    if (is_fetch) {
+        return (pte & PTE_X_MASK) != 0u;
+    }
+    if (is_store) {
+        return (pte & PTE_W_MASK) != 0u;
+    }
+    // Load: R=1 suffices, or X=1 when MXR=1 (executable-as-readable).
+    let readable = (pte & PTE_R_MASK) != 0u || (mxr == 1u && (pte & PTE_X_MASK) != 0u);
+    return readable;
+}
+
+fn translate_va(cpu: ptr<function, RiscvCPU>, va: vec2<u32>, is_fetch: bool, is_store: bool) -> vec2<u32> {
+    var use_mmu = mmu_enabled((*cpu).satp);
+    let cur_priv = (*cpu).priv_mode;
+
+    if (cur_priv == PRIV_M) {
+        use_mmu = false;
+        if (!is_fetch) {
+            let ms = (*cpu).mstatus.x;
+            if ((ms & (1u << 17u)) != 0u) { // MPRV is bit 17
+                let mpp = (ms >> MSTATUS_MPP_SHIFT) & 3u;
+                if (mpp < PRIV_M) {
+                    use_mmu = mmu_enabled((*cpu).satp);
+                }
+            }
+        }
+    }
+    
+    if (!use_mmu) {
         return va;
     }
 
@@ -891,6 +942,9 @@ fn translate_va(cpu: ptr<function, RiscvCPU>, va: vec2<u32>) -> vec2<u32> {
     
     if (pte_is_leaf(l1_pte.x)) {
         // L1 is a gigapage (1GB mapping)
+        if (!check_pte_permission(cpu, l1_pte.x, is_fetch, is_store)) {
+            return vec2<u32>(0xFFFFFFFFu, 0xFFFFFFFFu);
+        }
         let l1_ppn = pte_to_ppn(l1_pte);
         // Offset = VA[29:0]
         let offset = va.x & 0x3FFFFFFFu;
@@ -911,6 +965,9 @@ fn translate_va(cpu: ptr<function, RiscvCPU>, va: vec2<u32>) -> vec2<u32> {
     
     if (pte_is_leaf(l2_pte.x)) {
         // L2 is a megapage (2MB mapping)
+        if (!check_pte_permission(cpu, l2_pte.x, is_fetch, is_store)) {
+            return vec2<u32>(0xFFFFFFFFu, 0xFFFFFFFFu);
+        }
         let l2_ppn_leaf = pte_to_ppn(l2_pte);
         // Offset = VA[20:0]
         let offset = va.x & 0x1FFFFFu;
@@ -930,6 +987,9 @@ fn translate_va(cpu: ptr<function, RiscvCPU>, va: vec2<u32>) -> vec2<u32> {
     }
     
     // L3 is a leaf page (4KB mapping)
+    if (!check_pte_permission(cpu, l3_pte.x, is_fetch, is_store)) {
+        return vec2<u32>(0xFFFFFFFFu, 0xFFFFFFFFu);
+    }
     let l3_ppn_leaf = pte_to_ppn(l3_pte);
     let offset = extract_offset(va);
     return make_pa(l3_ppn_leaf, offset);
@@ -939,7 +999,19 @@ fn translate_va(cpu: ptr<function, RiscvCPU>, va: vec2<u32>) -> vec2<u32> {
 // INSTRUCTION FETCH
 // ============================================================================
 
-// A fetched instruction word (e.g. 0xFFFFFFFF, a syntactically valid, if
+
+fn read_phys_halfword(pa: vec2<u32>) -> u32 {
+    let word_pa = pa.x & ~3u;
+    let word = read_phys_word(vec2<u32>(word_pa, pa.y));
+    if ((pa.x & 2u) != 0u) {
+        return (word >> 16u) & 0xFFFFu;
+    } else {
+        return word & 0xFFFFu;
+    }
+}
+
+// A fetched instruction word
+// (e.g. 0xFFFFFFFF, a syntactically valid, if
 // currently unrecognized, opcode) is a legitimate value that must not be
 // confused with "fetch failed" - hence a struct instead of an overloaded
 // sentinel return, which previously misfired take_trap(PAGE_FAULT) on any
@@ -947,27 +1019,381 @@ fn translate_va(cpu: ptr<function, RiscvCPU>, va: vec2<u32>) -> vec2<u32> {
 struct FetchResult {
     instr: u32,
     faulted: bool,
+    len: u32,   // 2 (RVC) or 4 — set by fetch_instruction's RVC length detection
 }
 
 fn fetch_instruction(cpu: ptr<function, RiscvCPU>, pc: vec2<u32>) -> FetchResult {
+    // Phase 2: Support 2-byte aligned PC for RVC compressed instructions.
+    // Returns len=2 for 16-bit C instructions, len=4 for 32-bit instructions.
+
     // Translate virtual PC to physical address
-    let pa = translate_va(cpu, pc);
+    let pa = translate_va(cpu, pc, true, false);
 
     // Check for translation fault
     if (pa.x == 0xFFFFFFFFu) {
-        return FetchResult(0u, true);
+        return FetchResult(0u, true, 4u);
     }
 
     // Handle physical memory at 0x80000000+ (xv6 M-mode boot)
     let pa_base = select(0u, PHYS_BASE, pa.x >= PHYS_BASE);
     let pa_offset = pa.x - pa_base;
     let pixel_idx = pa_offset / 4u;
+    let byte_off = pa_offset & 3u;   // 0 or 2 (PC is 2-byte aligned)
 
     if (pixel_idx >= arrayLength(&memory)) {
-        return FetchResult(0u, true);
+        return FetchResult(0u, true, 4u);
     }
     let px = memory[pixel_idx];
-    return FetchResult(pixel_to_instruction(px), false);
+
+    // Extract first halfword at the 2-byte boundary within this pixel.
+    // byte_off == 0: low 16 bits (r, g). byte_off == 2: high 16 bits (b, a).
+    let hw0 = select(
+        px.r | (px.g << 8u),     // byte_off == 0: bytes 0-1
+        px.b | (px.a << 8u),     // byte_off == 2: bytes 2-3
+        byte_off == 2u
+    );
+
+    // RVC detection: if low 2 bits != 0b11, it's a 16-bit compressed instruction.
+    if ((hw0 & 3u) != 3u) {
+        return FetchResult(hw0, false, 2u);
+    }
+
+    // 32-bit instruction: get second halfword.
+    var hw1: u32;
+    if (byte_off == 0u) {
+        // Second halfword is upper 16 bits of the same pixel (b, a).
+        hw1 = px.b | (px.a << 8u);
+    } else {
+        // byte_off == 2: second halfword is at pa_offset + 2, the low 16 bits
+        // of the next pixel. Check if the access crosses a 4 KiB page boundary.
+        if ((pa_offset & 0xFFFu) >= 0xFFEu) {
+            // Cross-page: re-translate PC+2 for the second halfword.
+            let pa2 = translate_va(cpu, add64(pc, vec2<u32>(2u, 0u)), true, false);
+            if (pa2.x == 0xFFFFFFFFu) {
+                return FetchResult(0u, true, 4u);
+            }
+            let pa2_base = select(0u, PHYS_BASE, pa2.x >= PHYS_BASE);
+            let pa2_offset = pa2.x - pa2_base;
+            let pa2_idx = pa2_offset / 4u;
+            if (pa2_idx >= arrayLength(&memory)) {
+                return FetchResult(0u, true, 4u);
+            }
+            let px2 = memory[pa2_idx];
+            hw1 = px2.r | (px2.g << 8u);
+        } else {
+            // Same page: next pixel is contiguous in physical memory.
+            let next_idx = pixel_idx + 1u;
+            if (next_idx >= arrayLength(&memory)) {
+                return FetchResult(0u, true, 4u);
+            }
+            let px2 = memory[next_idx];
+            hw1 = px2.r | (px2.g << 8u);
+        }
+    }
+
+    let instr = hw0 | (hw1 << 16u);
+    return FetchResult(instr, false, 4u);
+}
+
+// ============================================================================
+// RVC DECOMPRESSOR — Map 16-bit compressed instructions to 32-bit equivalents
+// ============================================================================
+// When fetch_instruction returns len=2, the instruction is a 16-bit RVC
+// instruction stored in the low 16 bits of `instr`. This function expands it
+// to its standard 32-bit form so that the existing execute_* dispatch handles
+// it without modification.
+
+fn decompress_rvc(instr: u32) -> u32 {
+    let op = instr & 3u;
+    let f3 = (instr >> 13u) & 7u;
+    // ── Quadrant 0: register-based, compressed regs (x8..x15) ──────────────
+    if (op == 0u) {
+        let rd_c  = 8u + ((instr >> 2u) & 7u);
+        let rs2_c = 8u + ((instr >> 7u) & 7u);
+
+        // C.ADDI4SPN → ADDI rd', sp, nzuimm[9:2]
+        if (f3 == 0u) {
+            let imm9_6 = (instr >> 7u) & 15u;
+            let imm5_4 = (instr >> 11u) & 3u;
+            let imm3 = (instr >> 5u) & 1u;
+            let imm2 = (instr >> 6u) & 1u;
+            let offset = (imm9_6 << 6u) | (imm5_4 << 4u) | (imm3 << 3u) | (imm2 << 2u);
+            if (offset != 0u) {
+                return (offset << 20u) | (2u << 15u) | (rd_c << 7u) | 0x13u;
+            }
+        }
+        
+        // C.LW → LW rd', offset[6:2](rs1')
+        if (f3 == 2u) {
+            let imm6 = (instr >> 5u) & 1u;
+            let imm5_3 = (instr >> 10u) & 7u;
+            let imm2 = (instr >> 6u) & 1u;
+            let offset = (imm6 << 6u) | (imm5_3 << 3u) | (imm2 << 2u);
+            return (offset << 20u) | (rs2_c << 15u) | (2u << 12u) | (rd_c << 7u) | 0x03u;
+        }
+        
+        // C.LD → LD rd', offset[7:3](rs1')
+        if (f3 == 3u) {
+            let imm7_6 = (instr >> 5u) & 3u;
+            let imm5_3 = (instr >> 10u) & 7u;
+            let offset = (imm7_6 << 6u) | (imm5_3 << 3u);
+            return (offset << 20u) | (rs2_c << 15u) | (3u << 12u) | (rd_c << 7u) | 0x03u;
+        }
+        
+        // C.SW → SW rs2', offset[6:2](rs1')
+        if (f3 == 6u) {
+            let imm6 = (instr >> 5u) & 1u;
+            let imm5_3 = (instr >> 10u) & 7u;
+            let imm2 = (instr >> 6u) & 1u;
+            let offset = (imm6 << 6u) | (imm5_3 << 3u) | (imm2 << 2u);
+            let imm_hi = offset >> 5u;
+            let imm_lo = offset & 0x1Fu;
+            return (imm_hi << 25u) | (rd_c << 20u) | (rs2_c << 15u) | (2u << 12u) | (imm_lo << 7u) | 0x23u;
+        }
+        
+        // C.SD → SD rs2', offset[7:3](rs1')
+        if (f3 == 7u) {
+            let imm7_6 = (instr >> 5u) & 3u;
+            let imm5_3 = (instr >> 10u) & 7u;
+            let offset = (imm7_6 << 6u) | (imm5_3 << 3u);
+            let imm_hi = offset >> 5u;
+            let imm_lo = offset & 0x1Fu;
+            return (imm_hi << 25u) | (rd_c << 20u) | (rs2_c << 15u) | (3u << 12u) | (imm_lo << 7u) | 0x23u;
+        }
+        return 0u;
+    }
+
+
+    // ── Quadrant 1: CI/CJ/CB with standard register numbers ───────────────
+    if (op == 1u) {
+        let rd = (instr >> 7u) & 0x1Fu;
+        let rs2 = (instr >> 2u) & 0x1Fu;
+
+        // C.ADDI → ADDI rd, rd, imm[5:0]
+        if (f3 == 0u) {
+            let imm6 = ((instr >> 12u) & 1u) << 5u | ((instr >> 2u) & 0x1Fu);
+            let imm_sx = select(imm6, imm6 | 0xFFFFFFC0u, (imm6 & 0x20u) != 0u);
+            return ((imm_sx & 0xFFFu) << 20u) | (rd << 15u) | (rd << 7u) | 0x13u;
+        }
+        
+        // C.ADDIW → ADDIW rd, rd, imm[5:0] (RV64)
+        if (f3 == 1u) {
+            let imm6 = ((instr >> 12u) & 1u) << 5u | ((instr >> 2u) & 0x1Fu);
+            let imm_sx = select(imm6, imm6 | 0xFFFFFFC0u, (imm6 & 0x20u) != 0u);
+            return ((imm_sx & 0xFFFu) << 20u) | (rd << 15u) | (rd << 7u) | 0x1Bu;
+        }
+        
+        // C.LI → ADDI rd, x0, imm[5:0]
+        if (f3 == 2u) {
+            let imm6 = ((instr >> 12u) & 1u) << 5u | ((instr >> 2u) & 0x1Fu);
+            let imm_sx = select(imm6, imm6 | 0xFFFFFFC0u, (imm6 & 0x20u) != 0u);
+            return ((imm_sx & 0xFFFu) << 20u) | (rd << 7u) | 0x13u;
+        }
+        
+        // C.LUI / C.ADDI16SP
+        if (f3 == 3u) {
+            if (rd == 2u) {
+                // C.ADDI16SP → ADDI x2, x2, nzimm[9:4]
+                let nzimm9 = ((instr >> 12u) & 1u) << 9u
+                           | ((instr >> 3u) & 3u) << 7u
+                           | ((instr >> 5u) & 1u) << 6u
+                           | ((instr >> 2u) & 1u) << 5u
+                           | ((instr >> 6u) & 1u) << 4u;
+                let imm_sx = select(nzimm9, nzimm9 | 0xFFFFFC00u, (nzimm9 & 0x200u) != 0u);
+                return ((imm_sx & 0xFFFu) << 20u) | (2u << 15u) | (2u << 7u) | 0x13u;
+            } else {
+                // C.LUI → LUI rd, nzimm[17:12]
+                let nzimm17 = ((instr >> 12u) & 1u) << 17u | ((instr >> 2u) & 0x1Fu) << 12u;
+                let imm_sx = select(nzimm17, nzimm17 | 0xFFFC0000u, (nzimm17 & 0x20000u) != 0u);
+                return (imm_sx & 0xFFFFF000u) | (rd << 7u) | 0x37u;
+            }
+        }
+        // C.SRLI, C.SRAI, C.ANDI, C.SUB, C.XOR, C.OR, C.AND, C.SUBW, C.ADDW
+        if (f3 == 4u) {
+            let func2 = (instr >> 10u) & 3u;
+            let rs1_c = 8u + ((instr >> 7u) & 7u);
+            
+            if (func2 == 0u || func2 == 1u || func2 == 2u) {
+                // C.SRLI (00), C.SRAI (01), C.ANDI (10)
+                let shamt = ((instr >> 12u) & 1u) << 5u | ((instr >> 2u) & 0x1Fu);
+                if (func2 == 0u) {
+                    // C.SRLI → SRLI rd', rd', shamt
+                    return (shamt << 20u) | (rs1_c << 15u) | (5u << 12u) | (rs1_c << 7u) | 0x13u;
+                } else if (func2 == 1u) {
+                    // C.SRAI → SRAI rd', rd', shamt
+                    return (0x40000000u) | (shamt << 20u) | (rs1_c << 15u) | (5u << 12u) | (rs1_c << 7u) | 0x13u;
+                } else {
+                    // C.ANDI → ANDI rd', rd', imm
+                    let imm_sx = select(shamt, shamt | 0xFFFFFFC0u, (shamt & 0x20u) != 0u);
+                    return ((imm_sx & 0xFFFu) << 20u) | (rs1_c << 15u) | (7u << 12u) | (rs1_c << 7u) | 0x13u;
+                }
+            } else {
+                // func2 == 3
+                let func1 = (instr >> 12u) & 1u;
+                let func3 = (instr >> 5u) & 3u;
+                let rs2_c = 8u + ((instr >> 2u) & 7u);
+                
+                if (func1 == 0u) {
+                    if (func3 == 0u) {
+                        // C.SUB → SUB rd', rd', rs2'
+                        return (0x40000000u) | (rs2_c << 20u) | (rs1_c << 15u) | (0u << 12u) | (rs1_c << 7u) | 0x33u;
+                    } else if (func3 == 1u) {
+                        // C.XOR → XOR rd', rd', rs2'
+                        return (rs2_c << 20u) | (rs1_c << 15u) | (4u << 12u) | (rs1_c << 7u) | 0x33u;
+                    } else if (func3 == 2u) {
+                        // C.OR → OR rd', rd', rs2'
+                        return (rs2_c << 20u) | (rs1_c << 15u) | (6u << 12u) | (rs1_c << 7u) | 0x33u;
+                    } else {
+                        // C.AND → AND rd', rd', rs2'
+                        return (rs2_c << 20u) | (rs1_c << 15u) | (7u << 12u) | (rs1_c << 7u) | 0x33u;
+                    }
+                } else {
+                    if (func3 == 0u) {
+                        // C.SUBW → SUBW rd', rd', rs2'
+                        return (0x40000000u) | (rs2_c << 20u) | (rs1_c << 15u) | (0u << 12u) | (rs1_c << 7u) | 0x3Bu;
+                    } else if (func3 == 1u) {
+                        // C.ADDW → ADDW rd', rd', rs2'
+                        return (rs2_c << 20u) | (rs1_c << 15u) | (0u << 12u) | (rs1_c << 7u) | 0x3Bu;
+                    }
+                }
+            }
+        }
+        // C.J → JAL x0, offset
+        if (f3 == 5u) {
+            let imm11 = (instr >> 12u) & 1u;
+            let imm10 = (instr >> 8u) & 1u;
+            let imm9_8 = (instr >> 9u) & 3u;
+            let imm7 = (instr >> 6u) & 1u;
+            let imm6 = (instr >> 7u) & 1u;
+            let imm5 = (instr >> 2u) & 1u;
+            let imm4 = (instr >> 11u) & 1u;
+            let imm3_1 = (instr >> 3u) & 7u;
+            
+            let s = imm11;
+            let imm10_1 = (imm10 << 9u) | (imm9_8 << 7u) | (imm7 << 6u) | (imm6 << 5u) | (imm5 << 4u) | (imm4 << 3u) | imm3_1;
+            let imm19_12 = select(0u, 0xFFu, s == 1u);
+            
+            return (s << 31u) | (imm10_1 << 21u) | (s << 20u) | (imm19_12 << 12u) | 0x6Fu;
+        }
+
+        // C.BEQZ rs1', offset → BEQ rs1', x0, offset
+        if (f3 == 6u) {
+            let rs1_c = 8u + ((instr >> 7u) & 7u);
+            let s = (instr >> 12u) & 1u; // imm[8] and sign extension
+            let imm7_6 = (instr >> 5u) & 3u; // imm[7:6]
+            let imm5 = (instr >> 2u) & 1u; // imm[5]
+            let imm4_3 = (instr >> 10u) & 3u; // imm[4:3]
+            let imm2_1 = (instr >> 3u) & 3u; // imm[2:1]
+            
+            // For B-type:
+            // instr[31] = imm[12] (s)
+            // instr[30:25] = imm[10:5] (s, s, s, imm7_6, imm5)
+            // instr[11:8] = imm[4:1] (imm4_3, imm2_1)
+            // instr[7] = imm[11] (s)
+            
+            return (s << 31u) | (s << 30u) | (s << 29u) | (s << 28u) | (imm7_6 << 26u) | (imm5 << 25u)
+                 | (rs1_c << 15u) 
+                 | (imm4_3 << 10u) | (imm2_1 << 8u)
+                 | (s << 7u)
+                 | 0x63u;
+        }
+        // C.BNEZ rs1', offset → BNE rs1', x0, offset
+        if (f3 == 7u) {
+            let rs1_c = 8u + ((instr >> 7u) & 7u);
+            let s = (instr >> 12u) & 1u; // imm[8] and sign extension
+            let imm7_6 = (instr >> 5u) & 3u; // imm[7:6]
+            let imm5 = (instr >> 2u) & 1u; // imm[5]
+            let imm4_3 = (instr >> 10u) & 3u; // imm[4:3]
+            let imm2_1 = (instr >> 3u) & 3u; // imm[2:1]
+            
+            return (s << 31u) | (s << 30u) | (s << 29u) | (s << 28u) | (imm7_6 << 26u) | (imm5 << 25u)
+                 | (rs1_c << 15u) | (1u << 12u)
+                 | (imm4_3 << 10u) | (imm2_1 << 8u)
+                 | (s << 7u)
+                 | 0x63u;
+        }
+        return 0u;
+    }
+    // ── Quadrant 2: stack-relative / CJ type ──────────────────────────────
+    if (op == 2u) {
+        let rd = (instr >> 7u) & 0x1Fu;
+        let rs2 = (instr >> 2u) & 0x1Fu;
+
+        // C.SLLI → SLLI rd, rd, shamt[5:0]
+        if (f3 == 0u) {
+            let shamt6 = ((instr >> 12u) & 1u) << 5u | ((instr >> 2u) & 0x1Fu);
+            return (shamt6 << 20u) | (rd << 15u) | (1u << 12u) | (rd << 7u) | 0x13u;
+        }
+        
+        // C.LWSP → LW rd, offset[7:2](sp)
+        if (f3 == 2u) {
+            if (rd != 0u) {
+                let off7_6 = (instr >> 2u) & 3u;
+                let off5 = (instr >> 12u) & 1u;
+                let off4_2 = (instr >> 4u) & 7u;
+                let offset = (off7_6 << 6u) | (off5 << 5u) | (off4_2 << 2u);
+                return (offset << 20u) | (2u << 15u) | (2u << 12u) | (rd << 7u) | 0x03u;
+            }
+        }
+        
+        // C.LDSP → LD rd, offset[8:3](sp)
+        if (f3 == 3u) {
+            if (rd != 0u) {
+                let off8_6 = (instr >> 2u) & 7u;
+                let off5 = (instr >> 12u) & 1u;
+                let off4_3 = (instr >> 5u) & 3u;
+                let offset = (off8_6 << 6u) | (off5 << 5u) | (off4_3 << 3u);
+                return (offset << 20u) | (2u << 15u) | (3u << 12u) | (rd << 7u) | 0x03u;
+            }
+        }
+        
+        // CJ/CB instructions (C.JR, C.MV, C.EBREAK, C.JALR, C.ADD)
+        if (f3 == 4u) {
+            let bit12 = (instr >> 12u) & 1u;
+            if (bit12 == 0u && rs2 == 0u) {
+                // C.JR → JALR x0, rs1, 0
+                return (rd << 15u) | 0x67u;
+            }
+            if (bit12 == 0u && rs2 != 0u) {
+                // C.MV → ADD rd, x0, rs2
+                return (rs2 << 20u) | (rd << 7u) | 0x33u;
+            }
+            if (bit12 != 0u && rs2 == 0u) {
+                if (rd == 0u) {
+                    // C.EBREAK → EBREAK
+                    return 0x00100073u;
+                } else {
+                    // C.JALR → JALR x1, rs1, 0
+                    return (rd << 15u) | (1u << 7u) | 0x67u;
+                }
+            }
+            // C.ADD → ADD rd, rd, rs2
+            return (rs2 << 20u) | (rd << 15u) | (rd << 7u) | 0x33u;
+        }
+        
+        // C.SWSP → SW rs2, offset[7:2](sp)
+        if (f3 == 6u) {
+            let off7_6 = (instr >> 7u) & 3u;
+            let off5_2 = (instr >> 9u) & 15u;
+            let offset = (off7_6 << 6u) | (off5_2 << 2u);
+            let imm_hi = offset >> 5u;
+            let imm_lo = offset & 0x1Fu;
+            return (imm_hi << 25u) | (rs2 << 20u) | (2u << 15u) | (2u << 12u) | (imm_lo << 7u) | 0x23u;
+        }
+        
+        // C.SDSP → SD rs2, offset[8:3](sp)
+        if (f3 == 7u) {
+            let off8_6 = (instr >> 7u) & 7u;
+            let off5_3 = (instr >> 10u) & 7u;
+            let offset = (off8_6 << 6u) | (off5_3 << 3u);
+            let imm_hi = offset >> 5u;
+            let imm_lo = offset & 0x1Fu;
+            return (imm_hi << 25u) | (rs2 << 20u) | (2u << 15u) | (3u << 12u) | (imm_lo << 7u) | 0x23u;
+        }
+        return 0u;
+    }
+
+    return 0u;
 }
 
 // ============================================================================
@@ -1106,7 +1532,7 @@ fn process_virtqueue(cpu: ptr<function, RiscvCPU>) {
     let is_write = (desc1_flags & 2u) == 0u; // VRING_DESC_F_WRITE is 2 (device writable = read from disk). If NOT writable, it's a disk WRITE.
     
     let buf_pa = vec2<u32>(desc1_addr_low, desc1_addr_high);
-    let disk_pa = vec2<u32>(0x02000000u + sector * 512u, 0u);  // Disk at 32MB (within 64MB pixel memory)
+    let disk_pa = vec2<u32>(0x81000000u + sector * 512u, 0u);  // Disk loaded at 0x81000000 by boot_xv6_gpu.py
     
     // copy
     let words_to_copy = desc1_len / 4u;
@@ -1191,7 +1617,7 @@ fn execute_lui(cpu: ptr<function, RiscvCPU>, instr: u32) {
     if (rd != 0u) {
         (*cpu).regs[rd] = sext32_to_64(imm << 12u);
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // ADDI (Add Immediate)
@@ -1200,7 +1626,7 @@ fn execute_addi(cpu: ptr<function, RiscvCPU>, instr: u32) {
     if (decoded.rd != 0u) {
         (*cpu).regs[decoded.rd] = add64((*cpu).regs[decoded.rs1], sext32_to_64(decoded.imm));
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // AUIPC (Add Upper Immediate to PC)
@@ -1212,7 +1638,7 @@ fn execute_auipc(cpu: ptr<function, RiscvCPU>, instr: u32) {
     if (rd != 0u) {
         (*cpu).regs[rd] = pc_plus_imm;
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // ANDI (AND Immediate)
@@ -1223,7 +1649,7 @@ fn execute_andi(cpu: ptr<function, RiscvCPU>, instr: u32) {
         (*cpu).regs[decoded.rd].x = (*cpu).regs[decoded.rs1].x & imm64.x;
         (*cpu).regs[decoded.rd].y = (*cpu).regs[decoded.rs1].y & imm64.y;
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // ORI (OR Immediate)
@@ -1234,7 +1660,7 @@ fn execute_ori(cpu: ptr<function, RiscvCPU>, instr: u32) {
         (*cpu).regs[decoded.rd].x = (*cpu).regs[decoded.rs1].x | imm64.x;
         (*cpu).regs[decoded.rd].y = (*cpu).regs[decoded.rs1].y | imm64.y;
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // XORI (XOR Immediate)
@@ -1245,7 +1671,7 @@ fn execute_xori(cpu: ptr<function, RiscvCPU>, instr: u32) {
         (*cpu).regs[decoded.rd].x = (*cpu).regs[decoded.rs1].x ^ imm64.x;
         (*cpu).regs[decoded.rd].y = (*cpu).regs[decoded.rs1].y ^ imm64.y;
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // SLTI (Set Less Than Immediate - signed)
@@ -1275,7 +1701,7 @@ fn execute_slti(cpu: ptr<function, RiscvCPU>, instr: u32) {
 
         (*cpu).regs[decoded.rd] = vec2<u32>(select(0u, 1u, is_less), 0u);
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // SLTIU (Set Less Than Immediate - unsigned)
@@ -1287,7 +1713,7 @@ fn execute_sltiu(cpu: ptr<function, RiscvCPU>, instr: u32) {
         let is_less = lt64(rs1_val, imm_val);
         (*cpu).regs[decoded.rd] = vec2<u32>(select(0u, 1u, is_less), 0u);
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // SLLI (Shift Left Logical Immediate)
@@ -1299,7 +1725,7 @@ fn execute_slli(cpu: ptr<function, RiscvCPU>, instr: u32) {
     if (rd != 0u) {
         (*cpu).regs[rd] = shl64((*cpu).regs[rs1], shamt);
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // SRLI (Shift Right Logical Immediate)
@@ -1311,7 +1737,7 @@ fn execute_srli(cpu: ptr<function, RiscvCPU>, instr: u32) {
     if (rd != 0u) {
         (*cpu).regs[rd] = shr64u((*cpu).regs[rs1], shamt);
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // SRAI (Shift Right Arithmetic Immediate)
@@ -1323,7 +1749,7 @@ fn execute_srai(cpu: ptr<function, RiscvCPU>, instr: u32) {
     if (rd != 0u) {
         (*cpu).regs[rd] = shr64s((*cpu).regs[rs1], shamt);
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // JAL (Jump and Link)
@@ -1335,14 +1761,14 @@ fn execute_jal(cpu: ptr<function, RiscvCPU>, instr: u32) {
     let imm = (imm_20 << 20u) | (imm_19_12 << 12u) | (imm_11 << 11u) | (imm_10_1 << 1u);
     let signed_imm = sign_extend_21(imm);
     let rd = (instr >> 7u) & 31u;
-    if (rd != 0u) { (*cpu).regs[rd] = add64((*cpu).pc, vec2<u32>(4u, 0u)); }
+    if (rd != 0u) { (*cpu).regs[rd] = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u)); }
     (*cpu).pc = add64((*cpu).pc, sext32_to_64(signed_imm));
 }
 
 // JALR (Jump and Link Register)
 fn execute_jalr(cpu: ptr<function, RiscvCPU>, instr: u32) {
     let decoded = decode_i_type(instr);
-    if (decoded.rd != 0u) { (*cpu).regs[decoded.rd] = add64((*cpu).pc, vec2<u32>(4u, 0u)); }
+    if (decoded.rd != 0u) { (*cpu).regs[decoded.rd] = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u)); }
     let target_addr = add64((*cpu).regs[decoded.rs1], sext32_to_64(decoded.imm));
     (*cpu).pc = vec2<u32>(target_addr.x & 4294967294u, target_addr.y);
 }
@@ -1374,7 +1800,7 @@ fn execute_branch(cpu: ptr<function, RiscvCPU>, instr: u32) {
     if (take_branch) {
         (*cpu).pc = add64((*cpu).pc, sext32_to_64(signed_imm));
     } else {
-        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
     }
 }
 
@@ -1388,7 +1814,7 @@ fn execute_add(cpu: ptr<function, RiscvCPU>, instr: u32) {
         (*cpu).regs[rd] = add64((*cpu).regs[rs1], (*cpu).regs[rs2]);
     }
 
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // SUB (Subtract Register)
@@ -1401,7 +1827,7 @@ fn execute_sub(cpu: ptr<function, RiscvCPU>, instr: u32) {
         (*cpu).regs[rd] = sub64((*cpu).regs[rs1], (*cpu).regs[rs2]);
     }
 
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // AND (AND Register)
@@ -1415,7 +1841,7 @@ fn execute_and(cpu: ptr<function, RiscvCPU>, instr: u32) {
         (*cpu).regs[rd].y = (*cpu).regs[rs1].y & (*cpu).regs[rs2].y;
     }
 
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // OR (OR Register)
@@ -1429,7 +1855,7 @@ fn execute_or(cpu: ptr<function, RiscvCPU>, instr: u32) {
         (*cpu).regs[rd].y = (*cpu).regs[rs1].y | (*cpu).regs[rs2].y;
     }
 
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // XOR (XOR Register)
@@ -1443,7 +1869,7 @@ fn execute_xor(cpu: ptr<function, RiscvCPU>, instr: u32) {
         (*cpu).regs[rd].y = (*cpu).regs[rs1].y ^ (*cpu).regs[rs2].y;
     }
 
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // SLL (Shift Left Logical)
@@ -1456,7 +1882,7 @@ fn execute_sll(cpu: ptr<function, RiscvCPU>, instr: u32) {
     if (rd != 0u) {
         (*cpu).regs[rd] = shl64((*cpu).regs[rs1], shamt);
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // SRL (Shift Right Logical)
@@ -1469,7 +1895,7 @@ fn execute_srl(cpu: ptr<function, RiscvCPU>, instr: u32) {
     if (rd != 0u) {
         (*cpu).regs[rd] = shr64u((*cpu).regs[rs1], shamt);
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // SRA (Shift Right Arithmetic)
@@ -1482,7 +1908,7 @@ fn execute_sra(cpu: ptr<function, RiscvCPU>, instr: u32) {
     if (rd != 0u) {
         (*cpu).regs[rd] = shr64s((*cpu).regs[rs1], shamt);
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // SLT (Set Less Than - signed)
@@ -1515,7 +1941,7 @@ fn execute_slt(cpu: ptr<function, RiscvCPU>, instr: u32) {
 
         (*cpu).regs[rd] = vec2<u32>(select(0u, 1u, is_less), 0u);
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // SLTU (Set Less Than - unsigned)
@@ -1528,7 +1954,7 @@ fn execute_sltu(cpu: ptr<function, RiscvCPU>, instr: u32) {
         let is_less = lt64((*cpu).regs[rs1], (*cpu).regs[rs2]);
         (*cpu).regs[rd] = vec2<u32>(select(0u, 1u, is_less), 0u);
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // ============================================================================
@@ -1543,7 +1969,7 @@ fn execute_addiw(cpu: ptr<function, RiscvCPU>, instr: u32) {
         let result_32 = (*cpu).regs[decoded.rs1].x + decoded.imm;
         (*cpu).regs[decoded.rd] = sext32_to_64(result_32);
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // SLLIW (Shift Left Logical Immediate Word)
@@ -1556,7 +1982,7 @@ fn execute_slliw(cpu: ptr<function, RiscvCPU>, instr: u32) {
         let result_32 = (*cpu).regs[rs1].x << shamt;
         (*cpu).regs[rd] = sext32_to_64(result_32);
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // SRLIW (Shift Right Logical Immediate Word)
@@ -1569,7 +1995,7 @@ fn execute_srliw(cpu: ptr<function, RiscvCPU>, instr: u32) {
         let result_32 = (*cpu).regs[rs1].x >> shamt;
         (*cpu).regs[rd] = sext32_to_64(result_32);
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // SRAIW (Shift Right Arithmetic Immediate Word)
@@ -1584,7 +2010,7 @@ fn execute_sraiw(cpu: ptr<function, RiscvCPU>, instr: u32) {
         let result_i32 = val_i32 >> shamt;
         (*cpu).regs[rd] = sext32_to_64(bitcast<u32>(result_i32));
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // ADDW (Add Word)
@@ -1597,7 +2023,7 @@ fn execute_addw(cpu: ptr<function, RiscvCPU>, instr: u32) {
         let result_32 = (*cpu).regs[rs1].x + (*cpu).regs[rs2].x;
         (*cpu).regs[rd] = sext32_to_64(result_32);
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // SUBW (Subtract Word)
@@ -1610,7 +2036,7 @@ fn execute_subw(cpu: ptr<function, RiscvCPU>, instr: u32) {
         let result_32 = (*cpu).regs[rs1].x - (*cpu).regs[rs2].x;
         (*cpu).regs[rd] = sext32_to_64(result_32);
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // SLLW (Shift Left Logical Word)
@@ -1624,7 +2050,7 @@ fn execute_sllw(cpu: ptr<function, RiscvCPU>, instr: u32) {
         let result_32 = (*cpu).regs[rs1].x << shamt;
         (*cpu).regs[rd] = sext32_to_64(result_32);
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // SRLW (Shift Right Logical Word)
@@ -1638,7 +2064,7 @@ fn execute_srlw(cpu: ptr<function, RiscvCPU>, instr: u32) {
         let result_32 = (*cpu).regs[rs1].x >> shamt;
         (*cpu).regs[rd] = sext32_to_64(result_32);
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // SRAW (Shift Right Arithmetic Word)
@@ -1654,7 +2080,7 @@ fn execute_sraw(cpu: ptr<function, RiscvCPU>, instr: u32) {
         let result_i32 = val_i32 >> shamt;
         (*cpu).regs[rd] = sext32_to_64(bitcast<u32>(result_i32));
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // ============================================================================
@@ -1691,7 +2117,7 @@ fn execute_muldiv(cpu: ptr<function, RiscvCPU>, instr: u32) {
         }
         (*cpu).regs[rd] = result;
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // 32-bit signed divide following RISC-V semantics (result before sign-extension)
@@ -1742,7 +2168,7 @@ fn execute_muldiv_w(cpu: ptr<function, RiscvCPU>, instr: u32) {
         }
         (*cpu).regs[rd] = sext32_to_64(result32);
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // ============================================================================
@@ -1837,13 +2263,19 @@ fn csr_write(cpu: ptr<function, RiscvCPU>, addr: u32, val: vec2<u32>) {
         case CSR_SCAUSE: { (*cpu).scause = val; }
         case CSR_STVAL: { (*cpu).stval = val; }
         case CSR_SATP: { (*cpu).satp = val; }
+        case CSR_STIMECMP: {
+            (*cpu).mtimecmp_low = val.x;
+            (*cpu).mtimecmp_high = val.y;
+            (*cpu).timer_fired = 0u;
+            (*cpu).mip.x = (*cpu).mip.x & ~(MIP_MTIP | MIP_STIP);
+        }
         default: { }
     }
 }
 
 // Enter a trap handler. Exceptions raised in S/U mode whose cause bit is set
 // in medeleg vector to S-mode (stvec); everything else goes to M-mode (mtvec).
-fn take_trap(cpu: ptr<function, RiscvCPU>, cause: vec2<u32>, tval: vec2<u32>) {
+fn take_trap(cpu: ptr<function, RiscvCPU>, cause: vec2<u32>, tval: vec2<u32>, cpu_id: u32) {
     let code = cause.x & 31u;
     let is_interrupt = (cause.y & 0x80000000u) != 0u;
     let deleg_mask = select((*cpu).medeleg.x, (*cpu).mideleg.x, is_interrupt);
@@ -1875,6 +2307,7 @@ fn take_trap(cpu: ptr<function, RiscvCPU>, cause: vec2<u32>, tval: vec2<u32>) {
         let target_pc = vec2<u32>((*cpu).stvec.x & 0xFFFFFFFCu, (*cpu).stvec.y);
         if (target_pc.x == 0u && target_pc.y == 0u) {
             (*cpu).running = 0u; // Halt on unhandled S-mode trap
+            output[cpu_id * 256u + 1u] = 0xFACEu; // diag: S-trap
             return;
         }
         (*cpu).pc = target_pc;
@@ -1894,6 +2327,7 @@ fn take_trap(cpu: ptr<function, RiscvCPU>, cause: vec2<u32>, tval: vec2<u32>) {
         let target_pc = vec2<u32>((*cpu).mtvec.x & 0xFFFFFFFCu, (*cpu).mtvec.y);
         if (target_pc.x == 0u && target_pc.y == 0u) {
             (*cpu).running = 0u; // Halt on unhandled M-mode trap
+            output[cpu_id * 256u + 1u] = 0xCAFEu; // diag: M-trap
             return;
         }
         (*cpu).pc = target_pc;
@@ -1908,9 +2342,10 @@ fn handle_illegal(cpu: ptr<function, RiscvCPU>, instr: u32, cpu_id: u32) {
     let handler_x = select((*cpu).mtvec.x, (*cpu).stvec.x, delegated);
     let handler_y = select((*cpu).mtvec.y, (*cpu).stvec.y, delegated);
     if (handler_x != 0u || handler_y != 0u) {
-        take_trap(cpu, vec2<u32>(CAUSE_ILLEGAL_INSTR, 0u), vec2<u32>(instr, 0u));
+        take_trap(cpu, vec2<u32>(CAUSE_ILLEGAL_INSTR, 0u), vec2<u32>(instr, 0u), cpu_id);
     } else {
         output[cpu_id * 256u] = instr;
+        output[cpu_id * 256u + 1u] = 0xBEEFu; // diag: illegal
         (*cpu).running = 0u;
     }
 }
@@ -1959,7 +2394,7 @@ fn execute_csr(cpu: ptr<function, RiscvCPU>, instr: u32, cpu_id: u32) {
     if (rd != 0u) {
         (*cpu).regs[rd] = old;
     }
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // MRET: return from M-mode trap handler
@@ -1993,16 +2428,16 @@ fn execute_sret(cpu: ptr<function, RiscvCPU>) {
 }
 
 // OP_LOAD (LB, LH, LW, LBU, LHU, LD, LWU)
-fn execute_load(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32) {
+fn execute_load(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32, cpu_id: u32) {
     let decoded = decode_i_type(instr);
     let va = add64((*cpu).regs[decoded.rs1], sext32_to_64(decoded.imm));
     
     // Translate virtual address
-    let pa = translate_va(cpu, va);
+    let pa = translate_va(cpu, va, false, false);
     
     // Check for page fault
     if (pa.x == 0xFFFFFFFFu) {
-        take_trap(cpu, vec2<u32>(CAUSE_LOAD_PAGE_FAULT, 0u), va);
+        take_trap(cpu, vec2<u32>(CAUSE_LOAD_PAGE_FAULT, 0u), va, cpu_id);
         return;
     }
     // Check if this is a UART read
@@ -2035,7 +2470,7 @@ fn execute_load(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32) {
                 (*cpu).regs[decoded.rd] = vec2<u32>(0u, 0u);
             }
         }
-        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
         return;
     }
 
@@ -2055,7 +2490,7 @@ fn execute_load(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32) {
         if (decoded.rd != 0u) {
             (*cpu).regs[decoded.rd] = val;
         }
-        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
         return;
     }
 
@@ -2099,7 +2534,7 @@ fn execute_load(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32) {
         if (decoded.rd != 0u) {
             (*cpu).regs[decoded.rd] = vec2<u32>(val, 0u);
         }
-        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
         return;
     }
 
@@ -2120,7 +2555,7 @@ fn execute_load(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32) {
         if (decoded.rd != 0u) {
             (*cpu).regs[decoded.rd] = vec2<u32>(val, 0u);
         }
-        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
         return;
     }
     
@@ -2167,7 +2602,7 @@ fn execute_load(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32) {
         (*cpu).regs[decoded.rd] = value;
     }
 
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // OP_STORE (SB, SH, SW, SD)
@@ -2176,11 +2611,11 @@ fn execute_store(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32, cpu_
     let va = add64((*cpu).regs[decoded.rs1], sext32_to_64(decoded.imm));
     
     // Translate virtual address
-    let pa = translate_va(cpu, va);
+    let pa = translate_va(cpu, va, false, true);
     
     // Check for page fault
     if (pa.x == 0xFFFFFFFFu) {
-        take_trap(cpu, vec2<u32>(CAUSE_STORE_PAGE_FAULT, 0u), va);
+        take_trap(cpu, vec2<u32>(CAUSE_STORE_PAGE_FAULT, 0u), va, cpu_id);
         return;
     }
     
@@ -2190,11 +2625,11 @@ fn execute_store(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32, cpu_
             let char = (*cpu).regs[decoded.rs2].x & 0xFFu;
             (*cpu).output_ptr = uart_write_char(cpu_id, char, (*cpu).output_ptr);
             (*cpu).uart_irq_delay = 5000u; // Raise IRQ after 5000 cycles
-            (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+            (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
             return;
         }
         // UART LSR - ignore writes
-        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
         return;
     }
 
@@ -2210,7 +2645,7 @@ fn execute_store(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32, cpu_
             (*cpu).mip.x = (*cpu).mip.x & ~(MIP_MTIP | MIP_STIP);
         }
         // Ignore writes to mtime (read-only)
-        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
         return;
     }
 
@@ -2245,7 +2680,7 @@ fn execute_store(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32, cpu_
             }
         }
 
-        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
         return;
     }
 
@@ -2294,7 +2729,7 @@ fn execute_store(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32, cpu_
             process_virtqueue(cpu);
             plic_raise_irq(cpu, VIRTIO_IRQ);
         }
-        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
         return;
     }
     
@@ -2323,7 +2758,7 @@ fn execute_store(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32, cpu_
     }
 
     write_phys_word(pa, new_word);
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // ============================================================================
@@ -2332,18 +2767,18 @@ fn execute_store(satp: vec2<u32>, cpu: ptr<function, RiscvCPU>, instr: u32, cpu_
 
 // Load Reserved (LR.W/LR.D) - on single hart, trivially succeeds.
 // funct3: 2 = .W (32-bit, sign-extended into rd), 3 = .D (64-bit)
-fn execute_lr(cpu: ptr<function, RiscvCPU>, instr: u32, funct3: u32) {
+fn execute_lr(cpu: ptr<function, RiscvCPU>, instr: u32, funct3: u32, cpu_id: u32) {
     let rd = (instr >> 7u) & 31u;
     let rs1 = (instr >> 15u) & 31u;
     let va = (*cpu).regs[rs1];
 
-    let pa = translate_va(cpu, va);
+    let pa = translate_va(cpu, va, false, false);
     if (pa.x == 0xFFFFFFFFu) {
-        take_trap(cpu, vec2<u32>(CAUSE_LOAD_PAGE_FAULT, 0u), va);
+        take_trap(cpu, vec2<u32>(CAUSE_LOAD_PAGE_FAULT, 0u), va, cpu_id);
         return;
     }
     if (is_uart_addr(pa)) {
-        take_trap(cpu, vec2<u32>(CAUSE_LOAD_PAGE_FAULT, 0u), va);
+        take_trap(cpu, vec2<u32>(CAUSE_LOAD_PAGE_FAULT, 0u), va, cpu_id);
         return;
     }
 
@@ -2361,24 +2796,24 @@ fn execute_lr(cpu: ptr<function, RiscvCPU>, instr: u32, funct3: u32) {
     }
 
     // Reservation set (single hart: always valid on the matching SC)
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // Store Conditional (SC.W/SC.D) - on single hart, trivially succeeds.
-fn execute_sc(cpu: ptr<function, RiscvCPU>, instr: u32, funct3: u32) {
+fn execute_sc(cpu: ptr<function, RiscvCPU>, instr: u32, funct3: u32, cpu_id: u32) {
     let rd = (instr >> 7u) & 31u;
     let rs1 = (instr >> 15u) & 31u;
     let rs2 = (instr >> 20u) & 31u;
     let va = (*cpu).regs[rs1];
     let store_val = (*cpu).regs[rs2];
 
-    let pa = translate_va(cpu, va);
+    let pa = translate_va(cpu, va, false, true);
     if (pa.x == 0xFFFFFFFFu) {
-        take_trap(cpu, vec2<u32>(CAUSE_STORE_PAGE_FAULT, 0u), va);
+        take_trap(cpu, vec2<u32>(CAUSE_STORE_PAGE_FAULT, 0u), va, cpu_id);
         return;
     }
     if (is_uart_addr(pa)) {
-        take_trap(cpu, vec2<u32>(CAUSE_STORE_PAGE_FAULT, 0u), va);
+        take_trap(cpu, vec2<u32>(CAUSE_STORE_PAGE_FAULT, 0u), va, cpu_id);
         return;
     }
 
@@ -2394,26 +2829,26 @@ fn execute_sc(cpu: ptr<function, RiscvCPU>, instr: u32, funct3: u32) {
         (*cpu).regs[rd] = vec2<u32>(0u, 0u);
     }
 
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // AMO.W/AMO.D: atomic read-modify-write.
 // funct5 (real RISC-V encoding, instr[31:27]):
 //   0=ADD 1=SWAP 2=LR 4=XOR 8=OR 12=AND 16=MIN 20=MAX 24=MINU 28=MAXU
 // funct3: 2 = .W (32-bit, sign-extended into rd), 3 = .D (64-bit)
-fn execute_amo(cpu: ptr<function, RiscvCPU>, instr: u32, funct3: u32, funct5: u32) {
+fn execute_amo(cpu: ptr<function, RiscvCPU>, instr: u32, funct3: u32, funct5: u32, cpu_id: u32) {
     let rd = (instr >> 7u) & 31u;
     let rs1 = (instr >> 15u) & 31u;
     let rs2 = (instr >> 20u) & 31u;
 
     let va = (*cpu).regs[rs1];
-    let pa = translate_va(cpu, va);
+    let pa = translate_va(cpu, va, false, true);
     if (pa.x == 0xFFFFFFFFu) {
-        take_trap(cpu, vec2<u32>(CAUSE_LOAD_PAGE_FAULT, 0u), va);
+        take_trap(cpu, vec2<u32>(CAUSE_LOAD_PAGE_FAULT, 0u), va, cpu_id);
         return;
     }
     if (is_uart_addr(pa)) {
-        take_trap(cpu, vec2<u32>(CAUSE_LOAD_PAGE_FAULT, 0u), va);
+        take_trap(cpu, vec2<u32>(CAUSE_LOAD_PAGE_FAULT, 0u), va, cpu_id);
         return;
     }
 
@@ -2439,7 +2874,7 @@ fn execute_amo(cpu: ptr<function, RiscvCPU>, instr: u32, funct3: u32, funct5: u3
         } else if (funct5 == 28u) {
             if (src32 > mem_val32) { new_val32 = src32; }
         } else {
-            (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+            (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
             return;
         }
 
@@ -2467,7 +2902,7 @@ fn execute_amo(cpu: ptr<function, RiscvCPU>, instr: u32, funct3: u32, funct5: u3
         } else if (funct5 == 28u) {
             if (lt64(mem_val, src)) { new_val = src; }
         } else {
-            (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+            (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
             return;
         }
 
@@ -2478,12 +2913,12 @@ fn execute_amo(cpu: ptr<function, RiscvCPU>, instr: u32, funct3: u32, funct5: u3
         }
     }
 
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // ECALL Handling
 fn read_byte_from_memory(cpu: ptr<function, RiscvCPU>, addr: vec2<u32>) -> u32 {
-    let pa = translate_va(cpu, addr);
+    let pa = translate_va(cpu, addr, false, false);
     if (pa.x == 0xFFFFFFFFu) {
         return 0u;
     }
@@ -2526,17 +2961,21 @@ fn execute_sbi(cpu: ptr<function, RiscvCPU>, cpu_id: u32) {
         // only a0 (0 on success); a1 is preserved.
         (*cpu).output_ptr = uart_write_char(cpu_id, arg0.x & 0xFFu, (*cpu).output_ptr);
         (*cpu).regs[10] = vec2<u32>(0u, 0u);
-        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
         return;
     } else if (eid == SBI_EXT_LEGACY_GETCHAR) {
         // No input device: legacy getchar returns -1
         (*cpu).regs[10] = vec2<u32>(0xFFFFFFFFu, 0xFFFFFFFFu);
-        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
         return;
     } else if (eid == SBI_EXT_LEGACY_SET_TIMER) {
-        // No timer interrupts yet: accept and ignore
+        // Legacy SBI set_timer: program mtimecmp from a0 (32-bit value)
+        (*cpu).mtimecmp_low = arg0.x;
+        (*cpu).mtimecmp_high = 0u;
+        (*cpu).timer_fired = 0u;
+        (*cpu).mip.x = (*cpu).mip.x & ~(MIP_MTIP | MIP_STIP);
         (*cpu).regs[10] = vec2<u32>(0u, 0u);
-        (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+        (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
         return;
     } else if (eid == SBI_EXT_BASE) {
         if (fid == 0u) {        // sbi_get_spec_version: v2.0 (major in [30:24])
@@ -2558,8 +2997,11 @@ fn execute_sbi(cpu: ptr<function, RiscvCPU>, cpu_id: u32) {
             err = vec2<u32>(SBI_ERR_NOT_SUPPORTED, 0xFFFFFFFFu);
         }
     } else if (eid == SBI_EXT_TIME) {
-        if (fid == 0u) {        // sbi_set_timer: no timer interrupts yet
-            // success, no-op
+        if (fid == 0u) {        // sbi_set_timer (modern SBI): program mtimecmp
+            (*cpu).mtimecmp_low = arg0.x;
+            (*cpu).mtimecmp_high = arg0.y;
+            (*cpu).timer_fired = 0u;
+            (*cpu).mip.x = (*cpu).mip.x & ~(MIP_MTIP | MIP_STIP);
         } else {
             err = vec2<u32>(SBI_ERR_NOT_SUPPORTED, 0xFFFFFFFFu);
         }
@@ -2592,7 +3034,7 @@ fn execute_sbi(cpu: ptr<function, RiscvCPU>, cpu_id: u32) {
 
     (*cpu).regs[10] = err;
     (*cpu).regs[11] = val;
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 fn execute_ecall(cpu: ptr<function, RiscvCPU>, cpu_id: u32) {
@@ -2605,7 +3047,7 @@ fn execute_ecall(cpu: ptr<function, RiscvCPU>, cpu_id: u32) {
     // U-mode ECALL = system call to the S-mode kernel: real trap (cause 8).
     // pc is NOT advanced - sepc/mepc must point at the ECALL itself.
     if ((*cpu).priv_mode == PRIV_U) {
-        take_trap(cpu, vec2<u32>(CAUSE_ECALL_U, 0u), vec2<u32>(0u, 0u));
+        take_trap(cpu, vec2<u32>(CAUSE_ECALL_U, 0u), vec2<u32>(0u, 0u), cpu_id);
         return;
     }
 
@@ -2640,7 +3082,7 @@ fn execute_ecall(cpu: ptr<function, RiscvCPU>, cpu_id: u32) {
         (*cpu).running = 0u;
     }
 
-    (*cpu).pc = add64((*cpu).pc, vec2<u32>(4u, 0u));
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
 }
 
 // ============================================================================
@@ -2754,16 +3196,16 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let should_trap_s_timer = (s_pending_enabled & MIP_STIP) != 0u && s_ie;
 
         if (should_trap_m_ext) {
-            take_trap(&cpu, vec2<u32>(11u, 0x80000000u), cpu.pc); // Machine external interrupt
+            take_trap(&cpu, vec2<u32>(11u, 0x80000000u), cpu.pc, cpu_id); // Machine external interrupt
             continue;
         } else if (should_trap_m_timer) {
-            take_trap(&cpu, vec2<u32>(7u, 0x80000000u), cpu.pc); // Machine timer interrupt
+            take_trap(&cpu, vec2<u32>(7u, 0x80000000u), cpu.pc, cpu_id); // Machine timer interrupt
             continue;
         } else if (should_trap_s_ext) {
-            take_trap(&cpu, vec2<u32>(9u, 0x80000000u), cpu.pc); // Supervisor external interrupt
+            take_trap(&cpu, vec2<u32>(9u, 0x80000000u), cpu.pc, cpu_id); // Supervisor external interrupt
             continue;
         } else if (should_trap_s_timer) {
-            take_trap(&cpu, vec2<u32>(5u, 0x80000000u), cpu.pc); // Supervisor timer interrupt
+            take_trap(&cpu, vec2<u32>(5u, 0x80000000u), cpu.pc, cpu_id); // Supervisor timer interrupt
             continue;
         }
 
@@ -2772,10 +3214,16 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     // Check for instruction page fault
     if (fetch.faulted) {
-        take_trap(&cpu, vec2<u32>(CAUSE_INSTR_PAGE_FAULT, 0u), cpu.pc);
+        take_trap(&cpu, vec2<u32>(CAUSE_INSTR_PAGE_FAULT, 0u), cpu.pc, cpu_id);
         continue;  // Trap changes pc, re-fetch next iteration
     }
-    let instr = fetch.instr;
+    var instr = fetch.instr;
+    cpu.current_instr_len = fetch.len;
+
+    // Phase 3: decompress 16-bit RVC instructions to 32-bit equivalents
+    if (fetch.len == 2u) {
+        instr = decompress_rvc(instr);
+    }
 
     let opcode = instr & 127u;
 
@@ -2900,14 +3348,14 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let funct3 = (instr >> 12u) & 7u;
         let funct5 = (instr >> 27u) & 31u;
         if (funct5 == 2u) {
-            execute_lr(&cpu, instr, funct3);
+            execute_lr(&cpu, instr, funct3, cpu_id);
         } else if (funct5 == 3u) {
-            execute_sc(&cpu, instr, funct3);
+            execute_sc(&cpu, instr, funct3, cpu_id);
         } else {
-            execute_amo(&cpu, instr, funct3, funct5);
+            execute_amo(&cpu, instr, funct3, funct5, cpu_id);
         }
     } else if (opcode == OP_LOAD) {
-        execute_load(cpu.satp, &cpu, instr);
+        execute_load(cpu.satp, &cpu, instr, cpu_id);
     } else if (opcode == OP_STORE) {
         execute_store(cpu.satp, &cpu, instr, cpu_id);
     } else if (opcode == OP_SYSTEM) {
@@ -2935,10 +3383,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
                 }
             } else if (funct12 == F12_WFI) {
                 // WFI: no interrupt sources yet - treat as NOP
-                cpu.pc = add64(cpu.pc, vec2<u32>(4u, 0u));
+                cpu.pc = add64(cpu.pc, vec2<u32>(cpu.current_instr_len, 0u));
             } else if (funct7 == F7_SFENCE_VMA) {
                 // SFENCE.VMA: no TLB to flush - NOP
-                cpu.pc = add64(cpu.pc, vec2<u32>(4u, 0u));
+                cpu.pc = add64(cpu.pc, vec2<u32>(cpu.current_instr_len, 0u));
             } else {
                 handle_illegal(&cpu, instr, cpu_id);
             }
@@ -2950,7 +3398,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         }
     } else if (opcode == 15u) {
         // MISC-MEM: FENCE / FENCE.I - single-hart in-order execution, NOP
-        cpu.pc = add64(cpu.pc, vec2<u32>(4u, 0u));
+        cpu.pc = add64(cpu.pc, vec2<u32>(cpu.current_instr_len, 0u));
     } else {
         // Unknown opcode
         handle_illegal(&cpu, instr, cpu_id);

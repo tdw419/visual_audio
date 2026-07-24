@@ -423,6 +423,11 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
     running = 1
     instr_count = 0
 
+    # Periodic UART dump: read & print the output buffer every N iterations
+    # during the command grace period so we can monitor usertests progress.
+    uart_dump_interval = 100       # every 100 iterations (~200M instructions)
+    last_uart_dump_iter = 0
+
     try:
         while True:
             encoder = device.create_command_encoder()
@@ -518,6 +523,30 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
                         print(f"    [{i}] 0x{p:016x}")
                     break
 
+            # Periodic UART dump during command execution phase (after injection).
+            # Read the output buffer every uart_dump_interval iterations and print
+            # any new content so we can monitor long-running commands like usertests.
+            if command_injected and running == 1 and iteration - last_uart_dump_iter >= uart_dump_interval:
+                output_data = np.frombuffer(
+                    device.queue.read_buffer(harness['output_buffer']),
+                    dtype=np.uint8
+                )
+                output_str = ''
+                for i in range(0, 16384, 4):
+                    word = struct.unpack_from('<I', output_data[i:i+4])[0]
+                    for b in word.to_bytes(4, 'little'):
+                        if b == 0:
+                            break
+                        if 32 <= b < 127 or b == ord('\n') or b == ord('\r'):
+                            output_str += chr(b)
+                if len(output_str) > len(getattr(boot_xv6_on_gpu, 'last_out', '')):
+                    new_portion = output_str[len(getattr(boot_xv6_on_gpu, 'last_out', '')):]
+                    # Only print if there's substantial new content (avoid tiny dribbles)
+                    if len(new_portion) > 10:
+                        print(f"\n[UART @iter {iteration} ~{instr_count}B inst +{timer_irq_count}t {total_irq_count}irq]\n{new_portion}")
+                    boot_xv6_on_gpu.last_out = output_str
+                last_uart_dump_iter = iteration
+
             # Inject a command once a fresh "$ " prompt appears. Single-command
             # mode injects exactly once; autonomous mode re-arms after every
             # prompt and keeps going (up to autonomous_turns).
@@ -542,9 +571,9 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
                             break
                         if 32 <= b < 127 or b == ord('\n') or b == ord('\r'):
                             output_str += chr(b)
-                if len(output_str) > command_scan_start and output_str != getattr(boot_xv6_on_gpu, 'last_out', ''):
-                    print(f"\\nOutput so far:\\n{output_str}\\n")
-                    boot_xv6_on_gpu.last_out = output_str
+                # Set last_out from the pre-injection read so periodic dumps
+                # can track progress from here.
+                boot_xv6_on_gpu.last_out = output_str
                 if '$ ' in output_str[command_scan_start:]:
                     if autonomous:
                         recent = output_str[max(0, command_scan_start - 500):]

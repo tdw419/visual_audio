@@ -159,6 +159,28 @@ def main():
 
         if running == 0:
             print(f"\n  Halted after {instr_count} instructions")
+            # Dump register state
+            reg_names = ['zero','ra','sp','gp','tp','t0','t1','t2','s0','s1','a0','a1','a2','a3','a4','a5',
+                         'a6','a7','s2','s3','s4','s5','s6','s7','s8','s9','s10','s11','t3','t4','t5','t6']
+            print(f"  Output ptr: {cpu_readback['output_ptr']}")
+            mcause_low = cpu_readback['mcause'][0]
+            mcause_high = cpu_readback['mcause'][1]
+            mtval_low = cpu_readback['mtval'][0]
+            mtval_high = cpu_readback['mtval'][1]
+            mcause = (mcause_high << 32) | mcause_low
+            mtval = (mtval_high << 32) | mtval_low
+            print(f"  mcause=0x{mcause:016x} mtval=0x{mtval:016x}")
+            print(f"  mstatus=0x{cpu_readback['mstatus'][0]:08x} mie=0x{cpu_readback['mie'][0]:08x}")
+            print(f"  Registers:")
+            for i in range(0, 32, 4):
+                regs_str = []
+                for j in range(4):
+                    r = i + j
+                    v_low = cpu_readback['regs'][r][0]
+                    v_high = cpu_readback['regs'][r][1]
+                    v = (v_high << 32) | v_low
+                    regs_str.append(f"  {reg_names[r]:4s}=0x{v:016x}")
+                print(''.join(regs_str))
             break
 
     # Read output

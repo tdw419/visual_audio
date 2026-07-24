@@ -59,8 +59,12 @@ void build_page_table(void) {
     l2[2] = (l1_ppn << 10) | branch_flags;
     l2[0] = (l1_ppn << 10) | branch_flags;
 
-    l1[0]   = ((0x80000000ULL >> 21) << 10) | leaf_flags;
-    l1[128] = ((0x10000000ULL >> 21) << 10) | leaf_flags;
+    /* PTE PPN field is always PA>>12 (page-number granularity), even for
+     * a megapage leaf - only the low 9 bits of PPN must be zero for the
+     * mapping to be 2MB-aligned. PA>>21 here was off by 9 bits, pointing
+     * translations at a physical address ~512x too low. */
+    l1[0]   = ((0x80000000ULL >> 12) << 10) | leaf_flags;
+    l1[128] = ((0x10000000ULL >> 12) << 10) | leaf_flags;
 
     print_str("Page table built (2 pages, 2MB leaf entries).\n");
 }

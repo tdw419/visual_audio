@@ -74,6 +74,13 @@ def main():
         usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC,
     )
 
+    # Dummy input buffer (binding 4 - UART input, needed by shader)
+    input_buffer = device.create_buffer(
+        size=1024,
+        usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST,
+        mapped_at_creation=False,
+    )
+
     # Max instructions uniform
     max_instructions = np.array([100000], dtype=np.uint32)
     uniform_buffer = device.create_buffer(
@@ -89,6 +96,7 @@ def main():
         {'binding': 1, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'storage'}},
         {'binding': 2, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'storage'}},
         {'binding': 3, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'uniform'}},
+        {'binding': 4, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'read-only-storage'}},
     ])
 
     bind_group = device.create_bind_group(
@@ -98,8 +106,12 @@ def main():
             {'binding': 1, 'resource': {'buffer': cpu_buffer, 'offset': 0, 'size': cpu_state.nbytes}},
             {'binding': 2, 'resource': {'buffer': output_buffer, 'offset': 0, 'size': 65536}},
             {'binding': 3, 'resource': {'buffer': uniform_buffer, 'offset': 0, 'size': max_instructions.nbytes}},
+            {'binding': 4, 'resource': {'buffer': input_buffer, 'offset': 0, 'size': 1024}},
         ]
     )
+
+    # Init input buffer with zeros
+    queue.write_buffer(input_buffer, 0, np.zeros(256, dtype=np.uint32).tobytes())
 
     # Create compute pipeline
     print("\n[4] Creating compute pipeline...")

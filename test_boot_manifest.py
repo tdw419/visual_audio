@@ -135,6 +135,42 @@ def test_drive_option():
     return True
 
 
+def test_gui_option():
+    print("Test: gui option (disk-boot + VNC, x86_64 only)")
+    with tempfile.TemporaryDirectory() as d:
+        _make_image(d, name='desktop.qcow2')
+        argv = launch_boot(
+            ["boot", "x86_64", "desktop.qcow2", {"gui": True}],
+            d, dry_run=True)
+        assert "-vnc" in argv and ":1" in argv, argv
+        assert "-kernel" not in argv, argv  # gui boots the image as a disk, not a kernel
+        assert any(a.startswith("file=") and "format=qcow2" in a and "snapshot=on" in a
+                   for a in argv), argv
+        assert "-M" in argv and "pc" in argv, argv
+        assert "-m" in argv and "2048" in argv, argv
+
+        # gui is riscv-incompatible
+        try:
+            launch_boot(["boot", "riscv64", "desktop.qcow2", {"gui": True}], d, dry_run=True)
+            print("  FAIL: gui accepted for riscv64"); return False
+        except BootManifestError:
+            pass
+        # gui cannot combine with bios/drive
+        try:
+            launch_boot(["boot", "x86_64", "desktop.qcow2", {"gui": True, "bios": "none"}], d, dry_run=True)
+            print("  FAIL: gui+bios accepted"); return False
+        except BootManifestError:
+            pass
+        # gui must be a bool
+        try:
+            launch_boot(["boot", "x86_64", "desktop.qcow2", {"gui": "yes"}], d, dry_run=True)
+            print("  FAIL: non-bool gui accepted"); return False
+        except BootManifestError:
+            pass
+    print("  PASS")
+    return True
+
+
 def test_daemon_refuses_unsigned_boot():
     print("Test: daemon refuses boot without provenance/enable")
     with tempfile.TemporaryDirectory() as d:
@@ -211,6 +247,7 @@ if __name__ == '__main__':
         ("manifest validation", test_manifest_validation()),
         ("bios option", test_bios_option()),
         ("drive option", test_drive_option()),
+        ("gui option", test_gui_option()),
         ("refuse unsigned boot", test_daemon_refuses_unsigned_boot()),
         ("signed boot end-to-end", test_signed_boot_end_to_end()),
         ("mixed op routing", test_mixed_ops_route_correctly()),
