@@ -1247,17 +1247,17 @@ VAMP provides three core capabilities that the Spatial Execution Engine consumes
 - Formant synthesis: https://en.wikipedia.org/wiki/Formant_synthesis
 - Reed-Solomon: https://en.wikipedia.org/wiki/Reed%E2%80%93Solomon_error_correction
 
-- [ ] **TASK_COV_UTILS**: Add test coverage for utils module
+- [x] **TASK_COV_UTILS**: Add test coverage for utils module
   - Priority: MEDIUM
   - Dependencies: None
   - Test: `python3 -m pytest tests/test_utils.py -v`
-  - Receipt: All utils functionality tested
+  - Receipt: All utils functionality tested (20/20 pass)
 
-- [ ] **TASK_COV_PHONEMES**: Add test coverage for phonemes module
+- [x] **TASK_COV_PHONEMES**: Add test coverage for phonemes module
   - Priority: MEDIUM
   - Dependencies: None
   - Test: `python3 -m pytest tests/test_phonemes.py -v`
-  - Receipt: All phonemes functionality tested
+  - Receipt: All phonemes functionality tested (43/43 pass)
 - [x] **TASK_C037**: Wire PhyECC into audio transmit path ✅ COMPLETE
   - Priority: HIGH
   - Dependencies: TASK_E001 (PhyECC implementation)
