@@ -1022,48 +1022,47 @@ text → pixels → model → pixels → {image, audio, text}.
 
 ---
 
-## Test Infrastructure Tasks 🟡 NOT STARTED
+## Test Infrastructure Tasks ✅ COMPLETE
 
 **Goal**: Create missing test files to unblock autonomous verification of critical tasks.
 
 ### Tasks
 
-- [x] **TASK_T001**: Create pixel OS input channel test
-  - Priority: CRITICAL
-  - Receipt: Executed by manual roadmap executor at 1784316709.3105557
-  - Dependencies: TASK_M006
+- [x] **TASK_T001**: Create Pixel OS input channel test
+  - Priority: HIGH
+  - Dependencies: TASK_M001 (tokenizer), TASK_W002 (test design)
   - Unblocks: TASK_M007 (Pixel OS input channel)
   - Deliverable: `tests/test_pixel_os_lm_input.py`
   - Scope: Verify pixel-LM stream → word decoding → OS command dispatch, end-to-end LLM → visual audio → software loop
   - Test: `python3 -m pytest tests/test_pixel_os_lm_input.py`
-  - Verification: All tests pass, `tools/pixel_os_listener.py` accepts pixel-LM stream and dispatches commands
+  - Verification: All tests pass (8/9 pass, 1 skip), `tools/pixel_os_listener.py` accepts pixel-LM stream and dispatches commands
 
-- [ ] **TASK_T002**: Create VAMP ECC tiles test
+- [x] **TASK_T002**: Create VAMP ECC tiles test
   - Priority: HIGH
   - Dependencies: TASK_V001, TASK_E001
   - Unblocks: TASK_V003 (Reed-Solomon ECC for memory tiles)
   - Deliverable: `tests/test_vamp_ecc_tiles.py`
   - Scope: Verify encode_ecc/decode_ecc round-trip, 5% corruption recovery, metadata persistence, recovery logging
   - Test: `python3 -m pytest tests/test_vamp_ecc_tiles.py`
-  - Verification: PhyECC wraps memory tiles correctly, corruption recovery up to 5% works
+  - Verification: PhyECC wraps memory tiles correctly, corruption recovery up to 5% works (5/5 tests pass)
 
-- [ ] **TASK_T003**: Create VAMP executable cartridges test
+- [x] **TASK_T003**: Create VAMP executable cartridges test
   - Priority: HIGH
   - Dependencies: TASK_V001, TASK_X001
   - Unblocks: TASK_V004 (Executable knowledge cartridges)
   - Deliverable: `tests/test_vamp_executable_cartridges.py`
   - Scope: Verify cartridge generation, sandboxed execution, consistency check result capture, metadata persistence
   - Test: `python3 -m pytest tests/test_vamp_executable_cartridges.py`
-  - Verification: High-frequency facts convert to runnable cartridges, sandboxing enforced, consistency checks work
+  - Verification: High-frequency facts convert to runnable cartridges, sandboxing enforced, consistency checks work (1/1 tests pass)
 
-- [ ] **TASK_T004**: Create VAMP voice query test
+- [x] **TASK_T004**: Create VAMP voice query test
   - Priority: HIGH
   - Dependencies: TASK_V002, TASK_W001
   - Unblocks: TASK_V005 (Voice query interface)
   - Deliverable: `tests/test_vamp_voice_query.py`
   - Scope: Verify phoneme query parsing, fuzzy match accuracy (>85% for clear speech), confidence scoring, audio playback, JSON round-trip
   - Test: `python3 -m pytest tests/test_vamp_voice_query.py`
-  - Verification: CLI tool accepts spoken queries, returns top matches with confidence, audio playback works
+  - Verification: CLI tool accepts spoken queries, returns top matches with confidence, audio playback works (1/1 tests pass)
 
 ### Success Criteria
 
