@@ -359,7 +359,7 @@ def ascii_spectrogram(wav_path: str, width: int = 100, bands: int = 16):
     return '\n'.join(lines)
 
 
-def say_text(text: str, wav_path: str, project_path: str = None, verbose: bool = False, lang: str = 'en-us'):
+def say_text(text: str, wav_path: str, project_path: str = None, verbose: bool = False, lang: str = 'en-us', use_neural: bool = True):
     """
     Speak text using phoneme-based word synthesis.
     
@@ -369,6 +369,7 @@ def say_text(text: str, wav_path: str, project_path: str = None, verbose: bool =
         project_path: Optional UPIC project file path
         verbose: Print detailed output
         lang: Language code (e.g., 'en-us', 'es-es', 'de-de')
+        use_neural: Use neural model for coarticulation (default: True)
     
     Returns:
         Audio array
@@ -400,7 +401,7 @@ def say_text(text: str, wav_path: str, project_path: str = None, verbose: bool =
         cmudict_path = ensure_cmudict()
         cmudict = parse_cmudict(cmudict_path)
         
-        word_audios = compile_text(text, cmudict, force=False, verbose=verbose)
+        word_audios = compile_text(text, cmudict, force=False, verbose=verbose, use_neural=use_neural)
         
     except ImportError:
         print(f"WARNING: phonemizer not installed, falling back to CMUdict (English only)")
@@ -408,7 +409,7 @@ def say_text(text: str, wav_path: str, project_path: str = None, verbose: bool =
         cmudict_path = ensure_cmudict()
         cmudict = parse_cmudict(cmudict_path)
         
-        word_audios = compile_text(text, cmudict, force=False, verbose=verbose)
+        word_audios = compile_text(text, cmudict, force=False, verbose=verbose, use_neural=use_neural)
     
     if not word_audios:
         raise ValueError("No words could be compiled from text")
@@ -470,6 +471,7 @@ def main():
     p_say.add_argument('-f', '--file', action='store_true', help='treat argument as file path, not text')
     p_say.add_argument('-v', '--verbose', action='store_true', help='print detailed output')
     p_say.add_argument('--lang', default='en-us', help='language code (e.g., en-us, es-es, de-de)')
+    p_say.add_argument('--no-neural', action='store_true', help='disable neural coarticulation, use static envelopes')
 
     # Dual-band encoding commands
     p_enc_dual = sub.add_parser('encode_dual', help='encode text + software to dual-band WAV')
@@ -512,7 +514,8 @@ def main():
         else:
             text = args.text
         
-        audio = say_text(text, args.wav, args.project, verbose=args.verbose, lang=args.lang)
+        use_neural = not args.no_neural
+        audio = say_text(text, args.wav, args.project, verbose=args.verbose, lang=args.lang, use_neural=use_neural)
         print(f"Spoke text -> {args.wav}")
         print(f"  Duration: {len(audio) / SAMPLE_RATE:.2f}s")
 

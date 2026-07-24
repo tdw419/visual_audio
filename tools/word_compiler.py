@@ -28,6 +28,23 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 from upic_engine import UPICProject, UPICVoice, UPICWaveformTable, UPICEnvelope, create_basic_waveform
 import phonemes
 
+# TASK_R008: Neural synthesis integration
+_neural_model = None
+_PhonemeEnvelopeMLP = None
+_predict_envelope = None
+_DEFAULT_WEIGHTS_PATH = None
+_NEURAL_SYNTHESIS_AVAILABLE = False
+
+try:
+    from neural_synthesis import PhonemeEnvelopeMLP, predict_envelope, DEFAULT_WEIGHTS_PATH
+    _PhonemeEnvelopeMLP = PhonemeEnvelopeMLP
+    _predict_envelope = predict_envelope
+    _DEFAULT_WEIGHTS_PATH = DEFAULT_WEIGHTS_PATH
+    _NEURAL_SYNTHESIS_AVAILABLE = True
+except ImportError:
+    _NEURAL_SYNTHESIS_AVAILABLE = False
+    print("WARNING: neural_synthesis module not available, falling back to static envelopes")
+
 SAMPLE_RATE = 44100
 CMUDICT_URL = "https://raw.githubusercontent.com/cmusphinx/cmudict/master/cmudict.dict"
 CMUDICT_PATH = os.path.expanduser("~/.cmudict/cmudict.dict")
@@ -75,6 +92,66 @@ def crossfade_audio(a: np.ndarray, b: np.ndarray, fade_samples: int) -> np.ndarr
     ])
     
     return result
+
+
+def get_neural_model():
+    """
+    Lazy-load the neural phoneme-to-envelope model.
+    
+    Returns:
+        PhonemeEnvelopeMLP instance or None if not available
+    """
+    global _neural_model
+    
+    if _neural_model is not None:
+        return _neural_model
+    
+    if not _NEURAL_SYNTHESIS_AVAILABLE or _PhonemeEnvelopeMLP is None or _DEFAULT_WEIGHTS_PATH is None:
+        return None
+    
+    if os.path.exists(_DEFAULT_WEIGHTS_PATH):
+        try:
+            _neural_model = _PhonemeEnvelopeMLP.load(_DEFAULT_WEIGHTS_PATH)
+            print(f"Loaded neural synthesis model from {_DEFAULT_WEIGHTS_PATH}")
+            return _neural_model
+        except Exception as e:
+            print(f"WARNING: Failed to load neural synthesis model: {e}")
+            return None
+    else:
+        print(f"WARNING: Neural synthesis weights not found at {_DEFAULT_WEIGHTS_PATH}")
+        return None
+
+
+def get_envelope_for_phoneme(phoneme: str, prev_phoneme: str = 'SIL', 
+                             next_phoneme: str = 'SIL', use_neural: bool = True) -> UPICEnvelope:
+    """
+    Get an envelope for a phoneme, with optional coarticulation via neural model.
+    
+    Args:
+        phoneme: The target phoneme (e.g., 'AA', 'T', 'SH')
+        prev_phoneme: Preceding phoneme (default: 'SIL')
+        next_phoneme: Following phoneme (default: 'SIL')
+        use_neural: Use neural model if available (default: True)
+    
+    Returns:
+        UPICEnvelope for the phoneme
+    """
+    # Try neural synthesis first
+    if use_neural and _NEURAL_SYNTHESIS_AVAILABLE and _predict_envelope is not None:
+        model = get_neural_model()
+        if model is not None:
+            try:
+                env = _predict_envelope(model, prev_phoneme, phoneme, next_phoneme)
+                return env
+            except Exception as e:
+                print(f"  Warning: Neural prediction failed for '{phoneme}': {e}, falling back")
+    
+    # Fallback to static envelope
+    all_envelopes = phonemes.create_phoneme_envelopes()
+    if phoneme in all_envelopes:
+        return all_envelopes[phoneme]
+    else:
+        raise ValueError(f"Unknown phoneme '{phoneme}'")
 
 
 def ensure_cmudict() -> str:
@@ -223,16 +300,20 @@ def get_phonemes_for_word(word: str, cmudict: Dict[str, List[str]]) -> List[str]
     return fallback_phonemes
 
 
-def build_word_project_with_crossfade(word: str, phonemes_list: List[str]) -> np.ndarray:
+def build_word_project_with_crossfade(word: str, phonemes_list: List[str], use_neural: bool = True) -> np.ndarray:
     """
     Build a word from phonemes with crossfade between adjacent phonemes.
     
     TASK_P001: Synthesizes each phoneme individually and applies 5ms crossfade
     between adjacent phonemes to eliminate clicking artifacts.
     
+    TASK_R008: Uses coarticulated phoneme envelopes when neural model is available.
+    Each phoneme's envelope is predicted based on its left and right neighbors.
+    
     Args:
         word: The word being synthesized
         phonemes_list: List of ARPAbet phonemes
+        use_neural: Use neural model for coarticulation (default: True)
     
     Returns:
         Audio array with crossfaded phonemes
@@ -240,20 +321,22 @@ def build_word_project_with_crossfade(word: str, phonemes_list: List[str]) -> np
     if not phonemes_list:
         return np.array([])
     
-    # Create phoneme envelopes
-    all_envelopes = phonemes.create_phoneme_envelopes()
-    
     # Calculate crossfade length in samples
     crossfade_samples = int(CROSSFADE_DURATION_MS / 1000.0 * SAMPLE_RATE)
     
-    # Synthesize each phoneme individually
+    # Synthesize each phoneme individually with coarticulation
     phoneme_audios = []
-    for ph in phonemes_list:
-        if ph not in all_envelopes:
+    for i, ph in enumerate(phonemes_list):
+        # Determine neighbors for coarticulation
+        prev_ph = phonemes_list[i - 1] if i > 0 else 'SIL'
+        next_ph = phonemes_list[i + 1] if i < len(phonemes_list) - 1 else 'SIL'
+        
+        # Get envelope (neural or fallback to static)
+        try:
+            ph_envelope = get_envelope_for_phoneme(ph, prev_ph, next_ph, use_neural=use_neural)
+        except ValueError:
             print(f"  Warning: Unknown phoneme '{ph}', skipping")
             continue
-        
-        ph_envelope = all_envelopes[ph]
         
         # Create project for single phoneme
         project = UPICProject(f"phoneme_{ph}")
@@ -336,17 +419,19 @@ def build_word_project(word: str, phonemes_list: List[str]) -> UPICProject:
 
 
 def compile_word(word: str, cmudict: Dict[str, List[str]], 
-                 force: bool = False, verbose: bool = False) -> Tuple[str, np.ndarray]:
+                 force: bool = False, verbose: bool = False, use_neural: bool = True) -> Tuple[str, np.ndarray]:
     """
     Compile a single word: synthesize audio and cache it.
     
     TASK_P001: Uses crossfade between phonemes for smooth transitions.
+    TASK_R008: Uses neural coarticulation when model is available.
     
     Args:
         word: The word to compile
         cmudict: Parsed CMUdict mapping
         force: Re-compile even if cached
         verbose: Print detailed output
+        use_neural: Use neural model for coarticulation (default: True)
     
     Returns:
         Tuple of (wav_path, audio_array)
@@ -359,8 +444,11 @@ def compile_word(word: str, cmudict: Dict[str, List[str]],
     # Truncate to prevent path length issues on filesystem
     if len(safe_word) > 48:
         safe_word = safe_word[:48]
-    wav_path = os.path.join(VOICEBOOK_DIR, f"{safe_word}_{word_hash}.wav")
-    upic_path = os.path.join(VOICEBOOK_DIR, f"{safe_word}_{word_hash}.upic.json")
+    
+    # Add neural suffix to cache path if using neural model
+    neural_suffix = '_neural' if use_neural and _NEURAL_SYNTHESIS_AVAILABLE else ''
+    wav_path = os.path.join(VOICEBOOK_DIR, f"{safe_word}_{word_hash}{neural_suffix}.wav")
+    upic_path = os.path.join(VOICEBOOK_DIR, f"{safe_word}_{word_hash}{neural_suffix}.upic.json")
     
     # Check cache
     if os.path.exists(wav_path) and not force:
@@ -370,7 +458,8 @@ def compile_word(word: str, cmudict: Dict[str, List[str]],
         return wav_path, audio
     
     if verbose:
-        print(f"  Compiling '{word}'...")
+        mode_str = "neural coarticulation" if use_neural and _NEURAL_SYNTHESIS_AVAILABLE else "static envelopes"
+        print(f"  Compiling '{word}' using {mode_str}...")
     
     # Get phonemes
     phonemes_list = get_phonemes_for_word(word, cmudict)
@@ -381,8 +470,8 @@ def compile_word(word: str, cmudict: Dict[str, List[str]],
     if verbose:
         print(f"    Phonemes: {' '.join(phonemes_list)}")
     
-    # TASK_P001: Build word with crossfade
-    audio = build_word_project_with_crossfade(word, phonemes_list)
+    # TASK_P001 + TASK_R008: Build word with crossfade and optional neural coarticulation
+    audio = build_word_project_with_crossfade(word, phonemes_list, use_neural=use_neural)
     
     # Save
     sf.write(wav_path, audio, SAMPLE_RATE)
@@ -393,13 +482,14 @@ def compile_word(word: str, cmudict: Dict[str, List[str]],
     project.save_project(upic_path)
     
     if verbose:
-        print(f"    Saved: {wav_path} ({len(audio)/SAMPLE_RATE*1000:.0f}ms with {CROSSFADE_DURATION_MS}ms crossfade)")
+        mode_str = "neural" if use_neural and _NEURAL_SYNTHESIS_AVAILABLE else "static"
+        print(f"    Saved: {wav_path} ({len(audio)/SAMPLE_RATE*1000:.0f}ms, {mode_str} envelopes, {CROSSFADE_DURATION_MS}ms crossfade)")
     
     return wav_path, audio
 
 
 def compile_text(text: str, cmudict: Dict[str, List[str]], 
-                 force: bool = False, verbose: bool = False) -> List[Tuple[str, np.ndarray]]:
+                 force: bool = False, verbose: bool = False, use_neural: bool = True) -> List[Tuple[str, np.ndarray]]:
     """
     Compile text by splitting into words and compiling each.
     
@@ -408,6 +498,7 @@ def compile_text(text: str, cmudict: Dict[str, List[str]],
         cmudict: Parsed CMUdict mapping
         force: Re-compile even if cached
         verbose: Print detailed output
+        use_neural: Use neural model for coarticulation (default: True)
     
     Returns:
         List of (wav_path, audio_array) tuples for each word
@@ -416,12 +507,13 @@ def compile_text(text: str, cmudict: Dict[str, List[str]],
     words = [w.strip() for w in text.split() if w.strip()]
     
     if verbose:
-        print(f"Compiling {len(words)} words...")
+        mode_str = "neural coarticulation" if use_neural and _NEURAL_SYNTHESIS_AVAILABLE else "static envelopes"
+        print(f"Compiling {len(words)} words using {mode_str}...")
     
     results = []
     for word in words:
         try:
-            wav_path, audio = compile_word(word, cmudict, force=force, verbose=verbose)
+            wav_path, audio = compile_word(word, cmudict, force=force, verbose=verbose, use_neural=use_neural)
             results.append((wav_path, audio))
         except ValueError as e:
             print(f"  Error compiling '{word}': {e}")
@@ -468,6 +560,7 @@ def main():
     p_word.add_argument('word', help='word to compile')
     p_word.add_argument('-f', '--force', action='store_true', help='re-compile even if cached')
     p_word.add_argument('-v', '--verbose', action='store_true', help='print detailed output')
+    p_word.add_argument('--no-neural', action='store_true', help='disable neural coarticulation, use static envelopes')
     
     # Compile text
     p_text = sub.add_parser('text', help='compile text')
@@ -476,6 +569,7 @@ def main():
     p_text.add_argument('-p', '--project', help='output UPIC project file')
     p_text.add_argument('-f', '--force', action='store_true', help='re-compile even if cached')
     p_text.add_argument('-v', '--verbose', action='store_true', help='print detailed output')
+    p_text.add_argument('--no-neural', action='store_true', help='disable neural coarticulation, use static envelopes')
     
     # Cache stats
     p_stats = sub.add_parser('stats', help='show voicebook cache statistics')
@@ -487,7 +581,8 @@ def main():
     cmudict = parse_cmudict(cmudict_path)
     
     if args.cmd == 'word':
-        wav_path, audio = compile_word(args.word, cmudict, force=args.force, verbose=args.verbose)
+        use_neural = not args.no_neural
+        wav_path, audio = compile_word(args.word, cmudict, force=args.force, verbose=args.verbose, use_neural=use_neural)
         print(f"Compiled '{args.word}' -> {wav_path}")
         print(f"  Duration: {len(audio) / SAMPLE_RATE * 1000:.0f}ms")
     
@@ -500,7 +595,8 @@ def main():
                 text = f.read()
         
         # Compile words
-        word_audios = compile_text(text, cmudict, force=args.force, verbose=args.verbose)
+        use_neural = not args.no_neural
+        word_audios = compile_text(text, cmudict, force=args.force, verbose=args.verbose, use_neural=use_neural)
         
         if not word_audios:
             print("No words compiled")
@@ -512,14 +608,17 @@ def main():
         # Save
         sf.write(args.output, audio, SAMPLE_RATE)
         duration = len(audio) / SAMPLE_RATE
+        mode_str = "neural" if use_neural and _NEURAL_SYNTHESIS_AVAILABLE else "static"
         print(f"Compiled {len(word_audios)} words -> {args.output}")
         print(f"  Duration: {duration:.2f}s ({len(word_audios) / duration:.1f} words/sec)")
+        print(f"  Mode: {mode_str} envelopes")
         
         # Optionally save project
         if args.project:
             # Create a simple project file with all word references
             project_data = {
                 'name': os.path.basename(args.output).replace('.wav', ''),
+                'mode': 'neural' if use_neural and _NEURAL_SYNTHESIS_AVAILABLE else 'static',
                 'words': [{'word': os.path.basename(p), 'path': p} for p, _ in word_audios]
             }
             with open(args.project, 'w') as f:
