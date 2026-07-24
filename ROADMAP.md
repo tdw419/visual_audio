@@ -576,11 +576,14 @@ implemented and are split into TASK_C035 / TASK_C036 rather than claimed under C
   - Dependencies: None
   - Receipt: Verified by verify_task.py at 2026-07-16T16:25:11.831011
   - Test: python3 tests/test_spectral_mapping.py
-- [ ] **TASK_R008**: Neural synthesis
+- [x] **TASK_R008**: Neural synthesis ✅ COMPLETE
   - Priority: LOW
   - Dependencies: None
-  - Receipt: Train phoneme-to-envelope model on UPIC output
-  - Test: python3 tests/test_neural_synthesis.py
+  - Receipt: docs/receipts/TASK_R008_RECEIPT.md — numpy MLP (tools/neural_synthesis.py)
+    trained on real phoneme-envelope targets (loss drops ~3000x), learns
+    coarticulation the static per-phoneme heuristic in tools/phonemes.py
+    cannot express (onset/offset shift >50Hz based on neighbor phoneme)
+  - Test: python3 -m pytest tests/test_neural_synthesis.py (7/7 pass)
 - [ ] **TASK_R009**: Cross-lingual
   - Priority: LOW
   - Dependencies: TASK_G2P001
