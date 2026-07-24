@@ -1,26 +1,35 @@
 #!/usr/bin/env python3
 """
 Fountain Code Tests - TASK_R018
-Tests for Wirehair fountain code error correction on lossy channels.
+Tests for LT fountain code error correction on lossy channels.
+
+Uses src.codec.fountain for Luby Transform (LT) fountain codes with CRC-32
+packet integrity, Gaussian elimination fallback for trapped symbols, and
+optional XChaCha20-Poly1305 encryption.
 
 Reference: /home/jericho/zion/docs/research/Video Container Virtual Machines.md
-- Wirehair fountain codes: endless repair packets, decode from N > original_size
+- Wirehair-like LT fountain codes: endless repair packets, decode from N > K
 - XChaCha20-Poly1305 encryption for authenticated packets
-- CRC-32 packet validation
-- Bit-exact recovery after lossy transcoding (YouTube VP9)
+- CRC-32 packet validation (built into packet format)
+- Bit-exact recovery after lossy transcoding (YouTube VP9 simulation)
 """
 
 import pytest
 import hashlib
 import zlib
 import os
-from pathlib import Path
+import struct
+from typing import List, Optional
 
-try:
-    import wirehair
-    HAS_WIREHAIR = True
-except ImportError:
-    HAS_WIREHAIR = False
+from src.codec.fountain import (
+    Encoder,
+    Decoder,
+    encode_packets,
+    decode_from_packets,
+    PACKET_HEADER_FMT,
+    PACKET_FLAG_EXT,
+    CRC_LEN,
+)
 
 try:
     from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
@@ -32,14 +41,14 @@ except ImportError:
 class TestFountainCodeBasics:
     """Test basic fountain code encoding/decoding."""
 
-    @pytest.mark.skipif(not HAS_WIREHAIR, reason="wirehair not installed")
     def test_generate_repair_packets(self):
-        """Generate endless repair packets from source data."""
+        """Generate repair packets from source data."""
         source = b"hello world this is test data" * 10  # 270 bytes
 
         # Create encoder
-        encoder = wirehair.Encoder(b"test_seed", len(source))
+        encoder = Encoder(source)
         assert encoder is not None
+        assert encoder.K >= 1
 
         # Generate repair packets
         packets = []
@@ -56,31 +65,25 @@ class TestFountainCodeBasics:
 
         assert len(packets) == 100
 
-    @pytest.mark.skipif(not HAS_WIREHAIR, reason="wirehair not installed")
     def test_decode_from_subset(self):
         """Decode original data from subset of packets."""
         source = b"hello world this is test data" * 10  # 270 bytes
         source_hash = hashlib.sha256(source).hexdigest()
 
         # Create encoder
-        encoder = wirehair.Encoder(b"test_seed", len(source))
+        encoder = Encoder(source)
 
         # Generate repair packets
-        packets = []
-        for i in range(50):
-            packets.append(encoder.encode(i))
+        packets = [encoder.encode(i) for i in range(50)]
 
         # Simulate packet loss: drop 40% of packets
         import random
         random.seed(42)
-        surviving_packets = [p for p in packets if random.random() > 0.4]
-
-        # Verify we have enough packets (should need slightly more than original)
-        assert len(surviving_packets) > len(source)
+        surviving = [p for p in packets if random.random() > 0.4]
 
         # Decode
-        decoder = wirehair.Decoder(b"test_seed", len(source))
-        for packet_id, packet in enumerate(surviving_packets):
+        decoder = Decoder(encoder.K, encoder.symbol_size)
+        for packet_id, packet in enumerate(surviving):
             decoder.decode(packet_id, packet)
 
         # Recover data
@@ -90,7 +93,6 @@ class TestFountainCodeBasics:
         # Verify bit-exact recovery
         recovered_hash = hashlib.sha256(recovered).hexdigest()
         assert recovered_hash == source_hash
-
         assert recovered == source
 
 
@@ -114,89 +116,45 @@ class TestEncryptionIntegration:
         decrypted = cipher.decrypt(nonce, ciphertext, None)
         assert decrypted == packet_data
 
-    @pytest.mark.skipif(not HAS_WIREHAIR or not HAS_CRYPTO, reason="missing dependencies")
+    @pytest.mark.skipif(not HAS_CRYPTO, reason="cryptography not installed")
     def test_encrypted_fountain_recovery(self):
-        """Full pipeline: encode → encrypt → lose packets → decrypt → recover."""
+        """Full pipeline: encode -> encrypt -> lose packets -> decrypt -> recover."""
         source = b"hello world this is test data" * 10  # 270 bytes
         source_hash = hashlib.sha256(source).hexdigest()
 
         key = ChaCha20Poly1305.generate_key()
         cipher = ChaCha20Poly1305(key)
 
-        # Encode
-        encoder = wirehair.Encoder(b"test_seed", len(source))
-        encrypted_packets = []
+        # Encode using our fountain code
+        from src.codec.fountain import encrypt_packets, decrypt_packets
 
-        for i in range(50):
-            packet = encoder.encode(i)
-            nonce = os.urandom(12)
-            encrypted = cipher.encrypt(nonce, packet, None)
-            encrypted_packets.append((nonce, encrypted))
+        encoder = Encoder(source)
+        packets = [encoder.encode(i) for i in range(50)]
+
+        # Encrypt
+        encrypted = encrypt_packets(packets, key)
 
         # Simulate loss: drop 50%
         import random
         random.seed(42)
-        surviving = [(n, p) for n, p in encrypted_packets if random.random() > 0.5]
+        surviving = [(n, p) for n, p in encrypted if random.random() > 0.5]
 
         # Decrypt
-        decrypted_packets = []
-        for nonce, enc_p in surviving:
-            dec_p = cipher.decrypt(nonce, enc_p, None)
-            decrypted_packets.append(dec_p)
+        decrypted = decrypt_packets(surviving, key)
 
         # Recover
-        decoder = wirehair.Decoder(b"test_seed", len(source))
-        for packet_id, packet in enumerate(decrypted_packets):
-            decoder.decode(packet_id, packet)
-
-        recovered = decoder.recover()
+        recovered = decode_from_packets(decrypted, encoder.K, encoder.symbol_size)
         assert recovered is not None
 
         # Verify bit-exact
         recovered_hash = hashlib.sha256(recovered).hexdigest()
         assert recovered_hash == source_hash
-
-
-class TestCRCValidation:
-    """Test CRC-32 packet validation for fountain codes."""
-
-    def test_crc_packet_integrity(self):
-        """Add CRC-32 to packets and validate."""
-        packet = b"test fountain packet data"
-
-        # Calculate CRC
-        crc = zlib.crc32(packet) & 0xFFFFFFFF
-        crc_bytes = crc.to_bytes(4, 'big')
-
-        # Append CRC to packet
-        packet_with_crc = packet + crc_bytes
-
-        # Validate
-        received_data = packet_with_crc[:-4]
-        received_crc = int.from_bytes(packet_with_crc[-4:], 'big')
-
-        calculated_crc = zlib.crc32(received_data) & 0xFFFFFFFF
-        assert calculated_crc == received_crc
-
-    def test_crc_corruption_detection(self):
-        """Detect corruption in fountain packets using CRC."""
-        import zlib
-
-        packet = b"test fountain packet data"
-        crc = zlib.crc32(packet) & 0xFFFFFFFF
-
-        # Corrupt packet
-        corrupted = packet[:-1] + bytes([(packet[-1] + 1) % 256])
-
-        # CRC should mismatch
-        corrupted_crc = zlib.crc32(corrupted) & 0xFFFFFFFF
-        assert corrupted_crc != crc
+        assert recovered == source
 
 
 class TestLossyChannelSimulation:
     """Simulate YouTube VP9 transcoding and verify recovery."""
 
-    @pytest.mark.skipif(not HAS_WIREHAIR, reason="wirehair not installed")
     def test_simulate_youtube_transcoding(self):
         """Simulate aggressive lossy transcoding and recover."""
         # Original data: 1KB payload
@@ -204,50 +162,38 @@ class TestLossyChannelSimulation:
         source_hash = hashlib.sha256(source).hexdigest()
 
         # Encode with fountain codes
-        encoder = wirehair.Encoder(b"test_seed", len(source))
+        encoder = Encoder(source)
         packets = [encoder.encode(i) for i in range(100)]
 
         # Simulate YouTube transcoding: 70% packet loss + 10% corruption
         import random
         random.seed(42)
 
-        surviving_packets = []
+        surviving_raw = []
         for i, packet in enumerate(packets):
             if random.random() > 0.7:  # 30% survive
                 # 10% corruption chance
                 if random.random() < 0.1:
                     # Corrupt a random byte
                     packet = bytearray(packet)
-                    packet[random.randint(0, len(packet) - 1)] ^= 0xFF
+                    if len(packet) > 1:
+                        packet[random.randint(0, len(packet) - 1)] ^= 0xFF
                     packet = bytes(packet)
+                surviving_raw.append(packet)
 
-                # Add CRC for corruption detection
-                import zlib
-                crc = zlib.crc32(packet) & 0xFFFFFFFF
-                packet = packet + crc.to_bytes(4, 'big')
-
-                surviving_packets.append(packet)
-
-        # Strip CRC and validate
-        valid_packets = []
-        for packet_with_crc in surviving_packets:
-            data = packet_with_crc[:-4]
-            crc_received = int.from_bytes(packet_with_crc[-4:], 'big')
-
-            crc_calculated = zlib.crc32(data) & 0xFFFFFFFF
-            if crc_calculated == crc_received:
-                valid_packets.append(data)
-
-        # Verify we have enough valid packets
-        assert len(valid_packets) > len(source)
+        # Decode (CRC validation is built into Decoder.decode)
+        decoder = Decoder(encoder.K, encoder.symbol_size)
+        valid_count = 0
+        for packet_id, packet in enumerate(surviving_raw):
+            if decoder.decode(packet_id, packet):
+                valid_count += 1
 
         # Recover
-        decoder = wirehair.Decoder(b"test_seed", len(source))
-        for packet_id, packet in enumerate(valid_packets):
-            decoder.decode(packet_id, packet)
-
         recovered = decoder.recover()
-        assert recovered is not None
+        assert recovered is not None, (
+            f"Failed to recover from {len(surviving_raw)} packets "
+            f"({valid_count} valid after CRC filtering)"
+        )
 
         # Verify bit-exact recovery
         recovered_hash = hashlib.sha256(recovered).hexdigest()
@@ -257,33 +203,32 @@ class TestLossyChannelSimulation:
 class TestLargeFileRecovery:
     """Test fountain codes with realistic container file sizes."""
 
-    @pytest.mark.skipif(not HAS_WIREHAIR, reason="wirehair not installed")
-    def test_recover_large_container(self):
+    def test_recover_large_file(self):
         """Recover large file (~100KB) with aggressive packet loss."""
-        # Simulate visual_audio.mkv size
         source = os.urandom(100 * 1024)  # 100KB
         source_hash = hashlib.sha256(source).hexdigest()
 
-        # Encode
-        encoder = wirehair.Encoder(b"test_seed", len(source))
+        # Encode with 1KB symbols
+        encoder = Encoder(source, symbol_size=1024)
 
-        # Generate 200 repair packets
-        packets = [encoder.encode(i) for i in range(200)]
+        # Generate enough packets for 80% loss with LT code overhead
+        packets = [encoder.encode(i) for i in range(800)]
 
         # Simulate 80% loss (aggressive)
         import random
         random.seed(42)
         surviving = [p for p in packets if random.random() > 0.8]
 
-        assert len(surviving) > len(source), "Enough packets survived"
-
         # Recover
-        decoder = wirehair.Decoder(b"test_seed", len(source))
+        decoder = Decoder(encoder.K, encoder.symbol_size)
         for packet_id, packet in enumerate(surviving):
             decoder.decode(packet_id, packet)
 
         recovered = decoder.recover()
-        assert recovered is not None
+        assert recovered is not None, (
+            f"Only recovered {sum(1 for s in decoder._recovered if s is not None)}/"
+            f"{encoder.K} symbols from {len(surviving)} packets"
+        )
 
         # Verify bit-exact
         recovered_hash = hashlib.sha256(recovered).hexdigest()

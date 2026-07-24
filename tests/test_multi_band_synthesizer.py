@@ -32,7 +32,7 @@ def sample_rgb_spectrogram():
     rgb_data[height//3:2*height//3, :, 1] = 0.6 + 0.4 * np.random.rand(height//3, width)
     
     # Blue channel (high frequencies) - sine wave
-    rgb_data[2*height//3:, :, 2] = 0.4 + 0.6 * np.random.rand(height//3, width)
+    rgb_data[2*height//3:, :, 2] = 0.4 + 0.6 * np.random.rand(height - 2*height//3, width)
     
     return rgb_data
 
@@ -282,11 +282,12 @@ class TestMultiBandSynthesizer:
     
     def test_normalize_audio(self, synthesizer):
         """Test audio normalization."""
-        audio = np.random.rand(1000) * 10  # Large amplitude
+        rng = np.random.RandomState(42)
+        audio = rng.rand(1000) * 10  # Large amplitude
         normalized = synthesizer._normalize_audio(audio, target_level=0.95)
         
-        assert normalized.max() <= 0.95
-        assert normalized.min() >= -0.95
+        assert normalized.max() <= 0.95 + 1e-10
+        assert normalized.min() >= -0.95 - 1e-10
     
     def test_normalize_audio_zero_input(self, synthesizer):
         """Test normalizing zero audio."""

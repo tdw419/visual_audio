@@ -209,5 +209,3 @@ with tempfile.TemporaryDirectory() as tmpdir:
     print("  - Visual Audio (speech + bytes)")
     print("  - Manifest (metadata + checksums)")
     print("All in one standard Matroska container.")
-
-EOF
