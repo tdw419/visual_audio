@@ -45,8 +45,7 @@ class SpatialRV32ICore:
         
         # CPUState struct: [pc (u32), halted (u32)]
         self.state_buffer = self.device.create_buffer(
-            size=8,
-            usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.COPY_SRC
+            size=12, usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.COPY_SRC
         )
         
         self.pipeline = None
@@ -128,8 +127,8 @@ class SpatialRV32ICore:
             
         self.memory.write_data(self.queue, spatial_arr.tobytes())
         
-        # Reset state (PC=entry_point, halted=0)
-        state_data = np.array([entry_point, 0], dtype=np.uint32).tobytes()
+        # Reset state (PC=entry_point, halted=0, steps_remaining=0)
+        state_data = np.array([entry_point, 0, 0], dtype=np.uint32).tobytes()
         self.queue.write_buffer(self.state_buffer, 0, state_data)
         
     def get_state(self) -> dict:
@@ -142,11 +141,19 @@ class SpatialRV32ICore:
         return {
             'pc': state_arr[0],
             'halted': state_arr[1],
+            'steps_remaining': state_arr[2],
             'regs': regs_arr
         }
         
-    def step(self):
-        """Dispatch a single compute pass"""
+    def step(self, steps: int = 1):
+        """Execute `steps` instructions in a single WGSL dispatch"""
+        # First, read the current state to preserve PC and halted status
+        state = self.get_state()
+        
+        # Write state with the requested number of steps
+        state_data = np.array([state['pc'], state['halted'], steps], dtype=np.uint32).tobytes()
+        self.queue.write_buffer(self.state_buffer, 0, state_data)
+        
         encoder = self.device.create_command_encoder()
         compute_pass = encoder.begin_compute_pass()
         compute_pass.set_pipeline(self.pipeline)
@@ -157,22 +164,15 @@ class SpatialRV32ICore:
 
     def run_until_halt(self, max_cycles: int = 100_000, chunk_size: int = 256) -> dict:
         """
-        Dispatch compute passes in batches until the CPU halts or max_cycles
-        is exhausted. Batching avoids a GPU readback after every single
-        instruction. Returns the final state; raises TimeoutError if the
-        program never halts within max_cycles.
+        Dispatch batched compute passes (each running up to `chunk_size`
+        instructions inside the shader's inner loop) until the CPU halts or
+        max_cycles is exhausted. Returns the final state; raises TimeoutError
+        if the program never halts within max_cycles.
         """
         cycles_run = 0
         while cycles_run < max_cycles:
             n = min(chunk_size, max_cycles - cycles_run)
-            encoder = self.device.create_command_encoder()
-            for _ in range(n):
-                compute_pass = encoder.begin_compute_pass()
-                compute_pass.set_pipeline(self.pipeline)
-                compute_pass.set_bind_group(0, self.bind_group)
-                compute_pass.dispatch_workgroups(1)
-                compute_pass.end()
-            self.queue.submit([encoder.finish()])
+            self.step(steps=n)
             cycles_run += n
 
             state = self.get_state()

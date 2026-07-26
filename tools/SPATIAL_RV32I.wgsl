@@ -5,6 +5,7 @@ struct RegisterFile {
 struct CPUState {
     pc: u32,
     halted: u32,
+    steps_remaining: u32,
 };
 
 @group(0) @binding(0) var<storage, read_write> memory: array<u32>;
@@ -367,10 +368,27 @@ fn decode_and_execute(instr: u32) {
 
 @compute @workgroup_size(1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    if (state.halted != 0u) {
-        return;
+    var steps = state.steps_remaining;
+    
+    // We add a safety cap of 65535 instructions per dispatch to avoid GPU timeouts
+    if (steps > 65535u) {
+        steps = 65535u;
     }
     
-    let instr = fetch();
-    decode_and_execute(instr);
+    var i = 0u;
+    while (i < steps) {
+        if (state.halted != 0u) {
+            break;
+        }
+        
+        let instr = fetch();
+        if (state.halted != 0u) {
+            break;
+        }
+        
+        decode_and_execute(instr);
+        i = i + 1u;
+    }
+    
+    state.steps_remaining = state.steps_remaining - i;
 }
