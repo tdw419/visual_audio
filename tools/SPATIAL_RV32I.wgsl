@@ -82,6 +82,87 @@ fn sign_extend_21(imm: u32) -> u32 {
     return imm;
 }
 
+// --- M extension helpers: 32x32->64 unsigned multiply, two's complement negate ---
+
+fn negate32(a: u32) -> u32 {
+    return (~a) + 1u;
+}
+
+// Returns (low, high) of a * b, both treated as unsigned 32-bit.
+fn umul64(a: u32, b: u32) -> vec2<u32> {
+    let a_lo = a & 0xFFFFu;
+    let a_hi = a >> 16u;
+    let b_lo = b & 0xFFFFu;
+    let b_hi = b >> 16u;
+
+    let t0 = a_lo * b_lo;
+    let t1 = a_hi * b_lo + (t0 >> 16u);
+    let t2 = a_lo * b_hi + (t1 & 0xFFFFu);
+    let lo = (t2 << 16u) | (t0 & 0xFFFFu);
+    let hi = a_hi * b_hi + (t1 >> 16u) + (t2 >> 16u);
+    return vec2<u32>(lo, hi);
+}
+
+fn negate64(lo: u32, hi: u32) -> vec2<u32> {
+    let inv_lo = ~lo;
+    let inv_hi = ~hi;
+    let new_lo = inv_lo + 1u;
+    let carry = select(0u, 1u, new_lo < inv_lo);
+    let new_hi = inv_hi + carry;
+    return vec2<u32>(new_lo, new_hi);
+}
+
+// signed_a/signed_b select whether each operand's sign bit should be honored.
+fn mul_high(a: u32, b: u32, signed_a: bool, signed_b: bool) -> u32 {
+    let neg_a = signed_a && ((a >> 31u) != 0u);
+    let neg_b = signed_b && ((b >> 31u) != 0u);
+    let abs_a = select(a, negate32(a), neg_a);
+    let abs_b = select(b, negate32(b), neg_b);
+    var prod = umul64(abs_a, abs_b);
+    if (neg_a != neg_b) {
+        prod = negate64(prod.x, prod.y);
+    }
+    return prod.y;
+}
+
+fn div_signed(a: u32, b: u32) -> u32 {
+    if (b == 0u) {
+        return 0xFFFFFFFFu;
+    }
+    if (a == 0x80000000u && b == 0xFFFFFFFFu) {
+        return a; // overflow: MIN_INT / -1 = MIN_INT
+    }
+    return bitcast<u32>(bitcast<i32>(a) / bitcast<i32>(b));
+}
+
+fn rem_signed(a: u32, b: u32) -> u32 {
+    if (b == 0u) {
+        return a;
+    }
+    if (a == 0x80000000u && b == 0xFFFFFFFFu) {
+        return 0u;
+    }
+    // Derive remainder from the (verified-correct) truncating division
+    // rather than relying on WGSL's % operator sign semantics for i32.
+    let q = bitcast<i32>(a) / bitcast<i32>(b);
+    return bitcast<u32>(bitcast<i32>(a) - q * bitcast<i32>(b));
+}
+
+fn div_unsigned(a: u32, b: u32) -> u32 {
+    if (b == 0u) {
+        return 0xFFFFFFFFu;
+    }
+    return a / b;
+}
+
+fn rem_unsigned(a: u32, b: u32) -> u32 {
+    if (b == 0u) {
+        return a;
+    }
+    let q = a / b;
+    return a - q * b;
+}
+
 fn decode_and_execute(instr: u32) {
     let opcode = instr & 0x7Fu;
     let rd = (instr >> 7u) & 0x1Fu;
@@ -122,6 +203,30 @@ fn decode_and_execute(instr: u32) {
             result = rs1_val >> shamt; // srli
         } else if (funct3 == 5u && funct7 == 0x20u) {
             result = bitcast<u32>(bitcast<i32>(rs1_val) >> shamt); // srai
+        } else {
+            valid = false;
+        }
+        if (valid && rd != 0u) { registers.x[rd] = result; }
+
+    } else if (opcode == 0x33u && funct7 == 0x01u) {
+        // M extension (mul, mulh, mulhsu, mulhu, div, divu, rem, remu)
+        var result = 0u;
+        if (funct3 == 0u) {
+            result = rs1_val * rs2_val; // mul (low 32 bits, wraps naturally)
+        } else if (funct3 == 1u) {
+            result = mul_high(rs1_val, rs2_val, true, true); // mulh
+        } else if (funct3 == 2u) {
+            result = mul_high(rs1_val, rs2_val, true, false); // mulhsu
+        } else if (funct3 == 3u) {
+            result = mul_high(rs1_val, rs2_val, false, false); // mulhu
+        } else if (funct3 == 4u) {
+            result = div_signed(rs1_val, rs2_val); // div
+        } else if (funct3 == 5u) {
+            result = div_unsigned(rs1_val, rs2_val); // divu
+        } else if (funct3 == 6u) {
+            result = rem_signed(rs1_val, rs2_val); // rem
+        } else if (funct3 == 7u) {
+            result = rem_unsigned(rs1_val, rs2_val); // remu
         } else {
             valid = false;
         }

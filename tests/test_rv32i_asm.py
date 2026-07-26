@@ -98,6 +98,82 @@ def test_run_program_until_halt():
     assert state['regs'][11] == 7
 
 
+def u32(v):
+    return v & 0xFFFFFFFF
+
+
+def test_m_extension_mul_and_div():
+    core = SpatialRV32ICore(1024)
+    src = """
+        li   x1, 6
+        li   x2, 7
+        mul  x3, x1, x2      # 42
+        li   x4, 100
+        li   x5, 9
+        div  x6, x4, x5      # 100/9 = 11
+        rem  x7, x4, x5      # 100%9 = 1
+        ecall
+    """
+    state = core.run_program(src)
+    assert state['regs'][3] == 42
+    assert state['regs'][6] == 11
+    assert state['regs'][7] == 1
+
+
+def test_m_extension_signed_negative():
+    core = SpatialRV32ICore(1024)
+    src = """
+        li   x1, -20
+        li   x2, 3
+        div  x3, x1, x2      # -20/3 = -6 (truncate toward zero)
+        rem  x4, x1, x2      # -20%3 = -2 (sign follows dividend)
+        mul  x5, x1, x2      # -60
+        ecall
+    """
+    state = core.run_program(src)
+    assert state['regs'][3] == u32(-6)
+    assert state['regs'][4] == u32(-2)
+    assert state['regs'][5] == u32(-60)
+
+
+def test_m_extension_div_by_zero_and_overflow():
+    core = SpatialRV32ICore(1024)
+    src = """
+        li   x1, 5
+        li   x2, 0
+        div  x3, x1, x2      # div by zero -> -1
+        rem  x4, x1, x2      # rem by zero -> dividend (5)
+        divu x5, x1, x2      # unsigned div by zero -> 0xFFFFFFFF
+        lui  x6, 0x80000
+        li   x7, -1
+        div  x8, x6, x7      # MIN_INT / -1 overflow -> MIN_INT
+        rem  x9, x6, x7      # overflow rem -> 0
+        ecall
+    """
+    state = core.run_program(src)
+    assert state['regs'][3] == u32(-1)
+    assert state['regs'][4] == 5
+    assert state['regs'][5] == 0xFFFFFFFF
+    assert state['regs'][8] == 0x80000000
+    assert state['regs'][9] == 0
+
+
+def test_m_extension_mulh_variants():
+    core = SpatialRV32ICore(1024)
+    src = """
+        lui  x1, 0x80000     # x1 = 0x80000000 (-2147483648 signed / large unsigned)
+        li   x2, 2
+        mulh   x3, x1, x2    # signed*signed high: (-2^31 * 2) = -2^32, high word = -1
+        mulhu  x4, x1, x2    # unsigned*unsigned high: 0x80000000*2 = 0x100000000, high=1
+        mulhsu x5, x1, x2    # x1 signed(-2^31) * x2 unsigned(2) = -2^32, high=-1
+        ecall
+    """
+    state = core.run_program(src)
+    assert state['regs'][3] == u32(-1)
+    assert state['regs'][4] == 1
+    assert state['regs'][5] == u32(-1)
+
+
 def test_run_until_halt_times_out_on_infinite_loop():
     core = SpatialRV32ICore(1024)
     src = """
