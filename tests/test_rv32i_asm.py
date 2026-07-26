@@ -79,3 +79,30 @@ def test_end_to_end_abi_names_and_jalr_ret():
     assert state['regs'][10] == 42  # a0
     assert state['regs'][11] == 7   # a1
     assert state['halted'] == 1
+
+
+def test_run_program_until_halt():
+    core = SpatialRV32ICore(1024)
+    src = """
+        addi sp, zero, 16
+        jal  ra, func
+        addi a1, zero, 7
+        ecall
+    func:
+        addi a0, zero, 42
+        ret
+    """
+    state = core.run_program(src, chunk_size=4)
+    assert state['halted'] == 1
+    assert state['regs'][10] == 42
+    assert state['regs'][11] == 7
+
+
+def test_run_until_halt_times_out_on_infinite_loop():
+    core = SpatialRV32ICore(1024)
+    src = """
+    loop:
+        jal x0, loop
+    """
+    with pytest.raises(TimeoutError):
+        core.run_program(src, max_cycles=50, chunk_size=10)

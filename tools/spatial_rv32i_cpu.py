@@ -155,6 +155,38 @@ class SpatialRV32ICore:
         compute_pass.end()
         self.queue.submit([encoder.finish()])
 
+    def run_until_halt(self, max_cycles: int = 100_000, chunk_size: int = 256) -> dict:
+        """
+        Dispatch compute passes in batches until the CPU halts or max_cycles
+        is exhausted. Batching avoids a GPU readback after every single
+        instruction. Returns the final state; raises TimeoutError if the
+        program never halts within max_cycles.
+        """
+        cycles_run = 0
+        while cycles_run < max_cycles:
+            n = min(chunk_size, max_cycles - cycles_run)
+            encoder = self.device.create_command_encoder()
+            for _ in range(n):
+                compute_pass = encoder.begin_compute_pass()
+                compute_pass.set_pipeline(self.pipeline)
+                compute_pass.set_bind_group(0, self.bind_group)
+                compute_pass.dispatch_workgroups(1)
+                compute_pass.end()
+            self.queue.submit([encoder.finish()])
+            cycles_run += n
+
+            state = self.get_state()
+            if state['halted']:
+                return state
+
+        raise TimeoutError(f"Program did not halt within {max_cycles} cycles")
+
+    def run_program(self, source: str, entry_point: int = 0,
+                     max_cycles: int = 100_000, chunk_size: int = 256) -> dict:
+        """Assemble, load, and run RV32I source to completion. Returns final state."""
+        self.load_asm(source, entry_point)
+        return self.run_until_halt(max_cycles=max_cycles, chunk_size=chunk_size)
+
 if __name__ == "__main__":
     print("Testing SpatialRV32ICore initialization...")
     core = SpatialRV32ICore(1024)
