@@ -81,9 +81,52 @@ class SpatialRV32ICore:
             compute={'module': shader_module, 'entry_point': 'main'},
         )
         
+    def _d2xy(self, n: int, d: int):
+        t = d
+        x = 0
+        y = 0
+        s = 1
+        while s < n:
+            rx = (t // 2) & 1
+            ry = (t ^ rx) & 1
+            if ry == 0:
+                if rx == 1:
+                    x = s - 1 - x
+                    y = s - 1 - y
+                x, y = y, x
+            x += s * rx
+            y += s * ry
+            t //= 4
+            s *= 2
+        return x, y
+        
+    def load_asm(self, source: str, entry_point: int = 0):
+        """Assemble RV32I source and load it, preserving Hilbert mapping."""
+        from rv32i_asm import assemble
+        self.load_program(assemble(source), entry_point)
+
     def load_program(self, binary_data: bytes, entry_point: int = 0):
-        """Load binary into memory and set PC"""
-        self.memory.write_data(self.queue, binary_data)
+        """Load binary into memory and set PC, preserving Hilbert mapping"""
+        # Convert to u32 array
+        # Pad with 0 to make it multiple of 4
+        padded_data = binary_data + b'\x00' * ((4 - len(binary_data) % 4) % 4)
+        linear_arr = np.frombuffer(padded_data, dtype=np.uint32)
+        
+        # Create full VRAM array
+        mem_len = self.memory.buffer.size // 4
+        spatial_arr = np.zeros(mem_len, dtype=np.uint32)
+        
+        # N = sqrt(mem_len)
+        N = int(np.sqrt(mem_len))
+        if N * N != mem_len:
+            raise ValueError("Memory length must be a perfect square for Hilbert mapping")
+            
+        for i, val in enumerate(linear_arr):
+            x, y = self._d2xy(N, i)
+            idx = y * N + x
+            spatial_arr[idx] = val
+            
+        self.memory.write_data(self.queue, spatial_arr.tobytes())
         
         # Reset state (PC=entry_point, halted=0)
         state_data = np.array([entry_point, 0], dtype=np.uint32).tobytes()
