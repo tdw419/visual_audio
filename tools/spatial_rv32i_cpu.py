@@ -2,6 +2,7 @@ import wgpu
 import wgpu.utils
 import numpy as np
 from pathlib import Path
+from typing import Optional
 
 class MemoryRegion:
     """
@@ -36,21 +37,43 @@ class SpatialRV32ICore:
     """
     GPU-native RV32I core without CPU-side instruction emulation.
     """
-    def __init__(self, memory_size_bytes: int = 1024 * 1024):
+    def __init__(self, memory_size_bytes: int = 1024 * 1024, trace_file: Optional[str] = None):
         self.device = wgpu.utils.get_default_device()
         self.queue = self.device.queue
-        
+
         self.memory = MemoryRegion(self.device, memory_size_bytes)
         self.registers = RegisterFile(self.device)
-        
+
         # CPUState struct: [pc (u32), halted (u32)]
         self.state_buffer = self.device.create_buffer(
             size=12, usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.COPY_SRC
         )
-        
+
         self.pipeline = None
         self.bind_group = None
         self._init_pipeline()
+
+        # Optional trace file for diff_qemu_gpu_traces.py
+        self.trace_file = trace_file
+        self.trace_fd = None
+        if trace_file:
+            self.trace_fd = open(trace_file, 'w')
+
+    def __del__(self):
+        if self.trace_fd:
+            self.trace_fd.close()
+
+    def _trace_state(self, pc, regs):
+        if not self.trace_fd:
+            return
+
+        import json
+        entry = {
+            'pc': int(pc),
+            'regs': {f'x{i}': int(regs[i]) for i in range(32)},
+        }
+        self.trace_fd.write(json.dumps(entry) + '\n')
+        self.trace_fd.flush()  # Ensure immediate write for debugging
         
     def _init_pipeline(self):
         """Load SPATIAL_RV32I.wgsl and initialize pipeline"""
@@ -110,26 +133,29 @@ class SpatialRV32ICore:
         # Pad with 0 to make it multiple of 4
         padded_data = binary_data + b'\x00' * ((4 - len(binary_data) % 4) % 4)
         linear_arr = np.frombuffer(padded_data, dtype=np.uint32)
-        
+
         # Create full VRAM array
         mem_len = self.memory.buffer.size // 4
         spatial_arr = np.zeros(mem_len, dtype=np.uint32)
-        
+
         # N = sqrt(mem_len)
         N = int(np.sqrt(mem_len))
         if N * N != mem_len:
             raise ValueError("Memory length must be a perfect square for Hilbert mapping")
-            
+
         for i, val in enumerate(linear_arr):
             x, y = self._d2xy(N, i)
             idx = y * N + x
             spatial_arr[idx] = val
-            
+
         self.memory.write_data(self.queue, spatial_arr.tobytes())
-        
+
         # Reset state (PC=entry_point, halted=0, steps_remaining=0)
         state_data = np.array([entry_point, 0, 0], dtype=np.uint32).tobytes()
         self.queue.write_buffer(self.state_buffer, 0, state_data)
+
+        # Trace initial state
+        self._trace_state(entry_point, np.zeros(32, dtype=np.uint32))
         
     def get_state(self) -> dict:
         state_bytes = self.queue.read_buffer(self.state_buffer)
@@ -149,11 +175,11 @@ class SpatialRV32ICore:
         """Execute `steps` instructions in a single WGSL dispatch"""
         # First, read the current state to preserve PC and halted status
         state = self.get_state()
-        
+
         # Write state with the requested number of steps
         state_data = np.array([state['pc'], state['halted'], steps], dtype=np.uint32).tobytes()
         self.queue.write_buffer(self.state_buffer, 0, state_data)
-        
+
         encoder = self.device.create_command_encoder()
         compute_pass = encoder.begin_compute_pass()
         compute_pass.set_pipeline(self.pipeline)
@@ -161,6 +187,10 @@ class SpatialRV32ICore:
         compute_pass.dispatch_workgroups(1)
         compute_pass.end()
         self.queue.submit([encoder.finish()])
+
+        # Trace the new state after execution
+        new_state = self.get_state()
+        self._trace_state(new_state['pc'], new_state['regs'])
 
     def run_until_halt(self, max_cycles: int = 100_000, chunk_size: int = 256) -> dict:
         """
