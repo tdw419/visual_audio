@@ -134,7 +134,9 @@ class FDTWriter:
 
 
 def build_device_tree(ram_base: int, ram_size: int, uart_base: int,
-                      isa: str, timebase: int, bootargs: str) -> bytes:
+                      isa: str, timebase: int, bootargs: str,
+                      kernel_addr: int | None = None, initrd_addr: int | None = None,
+                      initrd_size: int | None = None) -> bytes:
     uart_path = f'/soc/serial@{uart_base:x}'
 
     root = Node('')
@@ -146,6 +148,14 @@ def build_device_tree(ram_base: int, ram_size: int, uart_base: int,
     chosen = root.child('chosen')
     chosen.prop_str('bootargs', bootargs)
     chosen.prop_str('stdout-path', uart_path)
+    
+    # Add kernel/initrd addresses for fw_jump.bin
+    # fw_jump.bin looks for 'riscv,kernel' and 'riscv,initrd-start' in /chosen
+    if kernel_addr is not None:
+        chosen.prop_u64('riscv,kernel', kernel_addr)
+    if initrd_addr is not None and initrd_size is not None:
+        chosen.prop_u64('riscv,initrd-start', initrd_addr)
+        chosen.prop_u64('riscv,initrd-end', initrd_addr + initrd_size)
 
     mem = root.child(f'memory@{ram_base:x}')
     mem.prop_str('device_type', 'memory')
@@ -182,6 +192,11 @@ def build_device_tree(ram_base: int, ram_size: int, uart_base: int,
     uart.prop_u32('clock-frequency', 3686400)
     # No 'interrupts' property: there is no PLIC yet, so the 8250 driver
     # runs without an IRQ; earlycon output is unaffected.
+
+    clint = soc.child('clint@11000000')
+    clint.prop_str('compatible', 'sifive,clint0', 'riscv,clint0')
+    clint.prop_u64('reg', 0x11000000, 0x10000)
+    clint.prop_u32('interrupts-extended', 1, 3, 1, 7)
 
     return FDTWriter(root).serialize()
 

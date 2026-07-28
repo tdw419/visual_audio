@@ -1,0 +1,39 @@
+31-    // Now 64-bit to support >4GB address space.
+32:    ram_base_low: u32,
+33-    ram_base_high: u32,
+--
+548-fn read_word_phys(byte_addr: u32) -> u32 {
+549:    if (byte_addr < state.ram_base_low) {
+550-        return 0u;
+551-    }
+552:    let phys = byte_addr - state.ram_base_low;
+553-    let d = phys / 4u;
+--
+885-
+886:    if (translated.x < state.ram_base_low) {
+887-        state.halted = 1u; // fetching from a device/unmapped hole below RAM base
+--
+889-    }
+890:    let phys = translated.x - state.ram_base_low;
+891-    let half0 = phys_read_u16(phys);
+--
+1339-                next_pc = raise_trap(13u, addr, vec2<u32>(state.pc_low, state.pc_high)); // load page fault
+1340:            } else if (translated.x < state.ram_base_low) {
+1341-                valid = false; // unmapped hole below RAM base
+1342-            } else {
+1343:                let phys = translated.x - state.ram_base_low;
+1344-                var result = vec2<u32>(0u, 0u);
+--
+1398-                next_pc = raise_trap(15u, addr, vec2<u32>(state.pc_low, state.pc_high)); // store/AMO page fault
+1399:            } else if (translated.x < state.ram_base_low) {
+1400-                valid = false;
+1401-            } else {
+1402:                let phys = translated.x - state.ram_base_low;
+1403-                var ok = false;
+--
+1431-                next_pc = raise_trap(select(15u, 13u, is_lr), rs1_val, vec2<u32>(state.pc_low, state.pc_high));
+1432:            } else if (translated.x < state.ram_base_low) {
+1433-                valid = false;
+1434-            } else {
+1435:                let phys = translated.x - state.ram_base_low;
+1436-                let d = phys / 4u;

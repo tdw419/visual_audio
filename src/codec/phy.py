@@ -185,22 +185,33 @@ TIMESTAMP_MAX_AGE_SECONDS = 300  # Reject signatures older than 5 minutes
 def frame(payload: bytes) -> bytes:
     """
     Frame payload with magic, length, and CRC (unauthenticated).
+    Large payloads are chunked into multiple frames.
 
     Args:
         payload: Data bytes to frame
 
     Returns:
-        Framed bytes
+        Framed bytes (concatenated frames)
     """
-    if len(payload) > 0xFFFF:
-        raise ValueError("payload too large for uint16 length field")
-    crc = binascii.crc32(payload) & 0xFFFFFFFF
-    return MAGIC_UNAUTH + struct.pack('>H', len(payload)) + payload + struct.pack('>I', crc)
+    # Max payload per frame (uint16) minus any needed overhead
+    MAX_CHUNK = 0xFFFF
+    chunks = []
+    offset = 0
+
+    while offset < len(payload):
+        chunk = payload[offset:offset + MAX_CHUNK]
+        crc = binascii.crc32(chunk) & 0xFFFFFFFF
+        frame_data = MAGIC_UNAUTH + struct.pack('>H', len(chunk)) + chunk + struct.pack('>I', crc)
+        chunks.append(frame_data)
+        offset += len(chunk)
+
+    return b''.join(chunks)
 
 
 def frame_authenticated(payload: bytes, signature: bytes, timestamp: Optional[int] = None) -> bytes:
     """
     Frame payload with Ed25519 signature and timestamp for provenance.
+    Large payloads are chunked into multiple frames.
 
     Frame format: 'VA' | total_len | payload_len | payload | signature | timestamp | crc
 
@@ -210,7 +221,7 @@ def frame_authenticated(payload: bytes, signature: bytes, timestamp: Optional[in
         timestamp: Unix timestamp (default: current time)
 
     Returns:
-        Authenticated framed bytes
+        Authenticated framed bytes (concatenated frames)
 
     Raises:
         ValueError: If signature is not 64 bytes
@@ -222,68 +233,92 @@ def frame_authenticated(payload: bytes, signature: bytes, timestamp: Optional[in
         import time
         timestamp = int(time.time())
 
-    if len(payload) > 0xFFFF:
-        raise ValueError("payload too large for uint16 length field")
-
     # Pack timestamp as big-endian int64
     timestamp_bytes = struct.pack('>Q', timestamp)
 
-    # Build authenticated frame
-    total_len = len(payload) + SIGNATURE_LENGTH + TIMESTAMP_LENGTH
-    frame_data = (
-        MAGIC_AUTH +
-        struct.pack('>H', total_len) +
-        struct.pack('>H', len(payload)) +
-        payload +
-        signature +
-        timestamp_bytes
-    )
+    # Max payload per frame (uint16) minus any needed overhead
+    MAX_CHUNK = 0xFFFF
+    chunks = []
+    offset = 0
 
-    # CRC covers everything except the CRC itself
-    crc = binascii.crc32(frame_data) & 0xFFFFFFFF
-    return frame_data + struct.pack('>I', crc)
+    while offset < len(payload):
+        chunk = payload[offset:offset + MAX_CHUNK]
+
+        # Build authenticated frame
+        total_len = len(chunk) + SIGNATURE_LENGTH + TIMESTAMP_LENGTH
+        frame_data = (
+            MAGIC_AUTH +
+            struct.pack('>H', total_len) +
+            struct.pack('>H', len(chunk)) +
+            chunk +
+            signature +
+            timestamp_bytes
+        )
+
+        # CRC covers everything except the CRC itself
+        crc = binascii.crc32(frame_data) & 0xFFFFFFFF
+        chunks.append(frame_data + struct.pack('>I', crc))
+        offset += len(chunk)
+
+    return b''.join(chunks)
 
 
 def unframe(framed: bytes) -> Tuple[bytes, bool]:
     """
-    Unframe payload, validate magic and CRC (unauthenticated mode).
+    Unframe payload(s), validate magic and CRC (unauthenticated mode).
+    Handles multiple concatenated frames.
 
     Args:
-        framed: Framed bytes
+        framed: Framed bytes (possibly multiple frames concatenated)
 
     Returns:
-        Tuple of (payload, is_valid)
+        Tuple of (concatenated_payloads, is_valid)
     """
     if len(framed) < 8:  # magic(2) + len(2) + crc(4) min
         return bytes(), False
 
-    if framed[:2] != MAGIC_UNAUTH:
-        return bytes(), False
+    payloads = []
+    offset = 0
+    valid = True
 
-    try:
-        (length,) = struct.unpack('>H', framed[2:4])
-        if len(framed) < 8 + length:
+    while offset + 8 <= len(framed):
+        # Check magic
+        if framed[offset:offset + 2] != MAGIC_UNAUTH:
             return bytes(), False
 
-        payload = framed[4:4 + length]
-        (crc,) = struct.unpack('>I', framed[4 + length:8 + length])
-        actual = binascii.crc32(payload) & 0xFFFFFFFF
+        try:
+            (length,) = struct.unpack('>H', framed[offset + 2:offset + 4])
+            if offset + 8 + length > len(framed):
+                # Incomplete frame
+                break
 
-        return payload, (crc == actual)
-    except (struct.error, IndexError):
-        return bytes(), False
+            payload = framed[offset + 4:offset + 4 + length]
+            (crc,) = struct.unpack('>I', framed[offset + 4 + length:offset + 8 + length])
+            actual = binascii.crc32(payload) & 0xFFFFFFFF
+
+            if crc != actual:
+                valid = False
+
+            payloads.append(payload)
+            offset += 8 + length
+        except (struct.error, IndexError):
+            valid = False
+            break
+
+    return b''.join(payloads), valid and len(payloads) > 0
 
 
 def unframe_authenticated(framed: bytes, public_key_path: str) -> Tuple[bytes, bool, str]:
     """
     Unframe and verify authenticated payload with Ed25519 signature.
+    Handles multiple concatenated frames.
 
     Args:
-        framed: Authenticated framed bytes
+        framed: Authenticated framed bytes (possibly multiple frames concatenated)
         public_key_path: Path to Ed25519 public key for verification
 
     Returns:
-        Tuple of (payload, is_valid, error_message)
+        Tuple of (concatenated_payloads, is_valid, error_message)
 
     error_message is empty string on success, contains reason on failure.
     """
@@ -297,65 +332,91 @@ def unframe_authenticated(framed: bytes, public_key_path: str) -> Tuple[bytes, b
     if len(framed) < min_size:
         return bytes(), False, "frame too short"
 
-    if framed[:2] != MAGIC_AUTH:
-        return bytes(), False, "invalid magic (not an authenticated frame)"
+    payloads = []
+    offset = 0
+    errors = []
+    valid = True
 
+    # Load public key once
     try:
-        # Parse frame structure
-        (total_len,) = struct.unpack('>H', framed[2:4])
-        (payload_len,) = struct.unpack('>H', framed[4:6])
-
-        # Validate length matches frame
-        expected_size = 6 + total_len + 4  # header + data + crc
-        if len(framed) != expected_size:
-            return bytes(), False, f"length mismatch: expected {expected_size}, got {len(framed)}"
-
-        if len(framed) < min_size + payload_len:
-            return bytes(), False, "frame too short for declared payload length"
-
-        # Extract components
-        payload = framed[6:6 + payload_len]
-        signature = framed[6 + payload_len:6 + payload_len + SIGNATURE_LENGTH]
-        timestamp_bytes = framed[6 + payload_len + SIGNATURE_LENGTH:6 + payload_len + SIGNATURE_LENGTH + TIMESTAMP_LENGTH]
-        received_crc_bytes = framed[6 + payload_len + SIGNATURE_LENGTH + TIMESTAMP_LENGTH:6 + payload_len + SIGNATURE_LENGTH + TIMESTAMP_LENGTH + 4]
-
-        # Verify CRC over everything except CRC itself
-        frame_data = framed[:6 + payload_len + SIGNATURE_LENGTH + TIMESTAMP_LENGTH]
-        expected_crc = binascii.crc32(frame_data) & 0xFFFFFFFF
-        (received_crc,) = struct.unpack('>I', received_crc_bytes)
-
-        if received_crc != expected_crc:
-            return bytes(), False, f"CRC mismatch: expected {expected_crc:#010x}, got {received_crc:#010x}"
-
-        # Verify timestamp freshness (replay protection)
-        (timestamp,) = struct.unpack('>Q', timestamp_bytes)
-        now = int(time.time())
-        age = now - timestamp
-
-        if age < 0:
-            return bytes(), False, f"timestamp from future: {timestamp} > {now}"
-        if age > TIMESTAMP_MAX_AGE_SECONDS:
-            return bytes(), False, f"timestamp too old: {age}s (max {TIMESTAMP_MAX_AGE_SECONDS}s)"
-
-        # Verify Ed25519 signature
-        try:
-            with open(public_key_path, 'rb') as f:
-                public_key = serialization.load_pem_public_key(f.read())
-        except FileNotFoundError:
-            return bytes(), False, f"public key not found: {public_key_path}"
-        except Exception as e:
-            return bytes(), False, f"failed to load public key: {e}"
-
-        try:
-            public_key.verify(signature, payload)
-            return payload, True, ""
-        except InvalidSignature:
-            return bytes(), False, "invalid Ed25519 signature"
-
-    except (struct.error, IndexError) as e:
-        return bytes(), False, f"frame parsing error: {e}"
+        with open(public_key_path, 'rb') as f:
+            public_key = serialization.load_pem_public_key(f.read())
+    except FileNotFoundError:
+        return bytes(), False, f"public key not found: {public_key_path}"
     except Exception as e:
-        return bytes(), False, f"verification error: {e}"
+        return bytes(), False, f"failed to load public key: {e}"
+
+    now = int(time.time())
+
+    while offset + min_size <= len(framed):
+        # Check magic
+        if framed[offset:offset + 2] != MAGIC_AUTH:
+            return bytes(), False, "invalid magic (not an authenticated frame)"
+
+        try:
+            # Parse frame structure
+            (total_len,) = struct.unpack('>H', framed[offset + 2:offset + 4])
+            (payload_len,) = struct.unpack('>H', framed[offset + 4:offset + 6])
+
+            # Calculate expected frame size
+            expected_size = offset + 6 + total_len + 4  # offset + header + data + crc
+            if expected_size > len(framed):
+                # Incomplete frame
+                break
+
+            # Extract components
+            payload = framed[offset + 6:offset + 6 + payload_len]
+            signature = framed[offset + 6 + payload_len:offset + 6 + payload_len + SIGNATURE_LENGTH]
+            timestamp_bytes = framed[offset + 6 + payload_len + SIGNATURE_LENGTH:offset + 6 + payload_len + SIGNATURE_LENGTH + TIMESTAMP_LENGTH]
+            received_crc_bytes = framed[offset + 6 + payload_len + SIGNATURE_LENGTH + TIMESTAMP_LENGTH:offset + 6 + total_len + 4]
+
+            # Verify CRC over everything except CRC itself
+            frame_data = framed[offset:offset + 6 + payload_len + SIGNATURE_LENGTH + TIMESTAMP_LENGTH]
+            expected_crc = binascii.crc32(frame_data) & 0xFFFFFFFF
+            (received_crc,) = struct.unpack('>I', received_crc_bytes)
+
+            if received_crc != expected_crc:
+                errors.append(f"CRC mismatch: expected {expected_crc:#010x}, got {received_crc:#010x}")
+                valid = False
+                offset += 6 + total_len + 4
+                continue
+
+            # Verify timestamp freshness (replay protection)
+            (timestamp,) = struct.unpack('>Q', timestamp_bytes)
+            age = now - timestamp
+
+            if age < 0:
+                errors.append(f"timestamp from future: {timestamp} > {now}")
+                valid = False
+                offset += 6 + total_len + 4
+                continue
+            if age > TIMESTAMP_MAX_AGE_SECONDS:
+                errors.append(f"timestamp too old: {age}s (max {TIMESTAMP_MAX_AGE_SECONDS}s)")
+                valid = False
+                offset += 6 + total_len + 4
+                continue
+
+            # Verify Ed25519 signature
+            try:
+                public_key.verify(signature, payload)
+                payloads.append(payload)
+            except InvalidSignature:
+                errors.append("invalid Ed25519 signature")
+                valid = False
+
+            offset += 6 + total_len + 4
+
+        except (struct.error, IndexError) as e:
+            errors.append(f"frame parsing error: {e}")
+            valid = False
+            break
+        except Exception as e:
+            errors.append(f"verification error: {e}")
+            valid = False
+            break
+
+    error_msg = "; ".join(errors) if errors else ""
+    return b''.join(payloads), valid and len(payloads) > 0, error_msg
 
 
 def encode_framed(data: bytes, wav_path: str) -> None:

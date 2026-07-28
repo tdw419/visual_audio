@@ -112,12 +112,10 @@ def parse_boot_op(op) -> BootManifest:
     if not isinstance(gui, bool):
         raise BootManifestError(f"gui must be a boolean, got {gui!r}")
     if gui:
-        # gui boots `image` itself as a qcow2 disk (BIOS/GRUB inside the
-        # image drives the rest) with a VNC display instead of -nographic -
-        # only meaningful for x86_64, and incompatible with the riscv-virt
-        # direct-kernel-boot "bios"/"drive" options.
-        if arch != "x86_64":
-            raise BootManifestError(f"gui option is only supported for x86_64, not {arch!r}")
+        # gui boots `image` itself as a disk (BIOS/GRUB inside the
+        # image drives the rest) with a VNC display instead of -nographic.
+        # x86_64 uses qcow2 disk images, RISC-V uses ISO (CDROM).
+        # Incompatible with the riscv-virt direct-kernel-boot "bios"/"drive" options.
         if bios != "default" or drive is not None:
             raise BootManifestError("gui cannot be combined with bios or drive options")
 
@@ -150,20 +148,28 @@ def build_qemu_argv(manifest: BootManifest, image_path: Path,
     binary, template = ARCH_QEMU[manifest.arch]
 
     if manifest.gui:
-        # Boot `image_path` itself as a qcow2 disk with a VNC display,
+        # gui boots `image_path` itself as a disk with a VNC display,
         # snapshot=on so the signed manifest can never persist changes to
         # the trusted image on disk. Display :1 is fixed and deterministic -
         # every gui boot is reachable the same way (127.0.0.1:5901).
-        # -M pc -m 2048 are required: QEMU's bare defaults (no explicit
-        # machine/memory) are too constrained for a real desktop image and
-        # panic with "VFS: Unable to mount root fs" before GRUB is even
-        # reached - confirmed by reproducing the panic without them.
-        return [
-            binary,
-            "-M", "pc", "-m", "2048",
-            "-drive", f"file={image_path},format=qcow2,if=virtio,snapshot=on",
-            "-vnc", ":1",
-        ]
+        # x86_64 uses qcow2 disk images, RISC-V uses ISO (CDROM).
+        # Incompatible with the riscv-virt direct-kernel-boot "bios"/"drive" options.
+        if manifest.arch == "x86_64":
+            return [
+                binary,
+                "-M", "pc", "-m", "2048",
+                "-drive", f"file={image_path},format=qcow2,if=virtio,snapshot=on",
+                "-vnc", ":1",
+            ]
+        elif manifest.arch == "riscv64":
+            return [
+                binary,
+                "-machine", "virt", "-m", "2048", "-bios", "default",
+                "-cdrom", str(image_path),
+                "-vnc", ":1",
+            ]
+        else:
+            raise BootManifestError(f"gui option is only supported for x86_64 and riscv64, not {manifest.arch!r}")
 
     bios = ["-bios", "none"] if manifest.bios == "none" else []
     # template ends with "-kernel"; splice any disk wiring in before it.
@@ -198,7 +204,10 @@ def launch_boot(
                   if manifest.drive is not None else None)
     argv = build_qemu_argv(manifest, image_path, drive_path)
 
-    if not dry_run:
-        (runner or subprocess.Popen)(argv)
+    if dry_run:
+        return argv
 
+    if runner is None:
+        runner = subprocess.Popen
+    runner(argv)
     return argv

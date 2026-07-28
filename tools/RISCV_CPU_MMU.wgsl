@@ -75,6 +75,8 @@ struct RiscvCPU {
     total_interrupt_count: u32, // Total interrupts taken
     plic_priority_irq1: u32,    // Priority for IRQ 1
     current_instr_len: u32,     // 2 (RVC) or 4 - set by fetch, consumed by every pc-advance site
+    uefi_heap_ptr: u32,         // Next free byte in the UEFI AllocatePool heap
+    uefi_heap_end: u32,         // First byte past the UEFI heap region
 }
 
 // R-type instruction decoding
@@ -456,8 +458,14 @@ const SBI_EXT_RFENCE: u32 = 0x52464E43u; // "RFNC"
 const SBI_EXT_HSM: u32 = 0x48534Du;      // "HSM"
 const SBI_EXT_SRST: u32 = 0x53525354u;   // "SRST"
 const SBI_EXT_DBCN: u32 = 0x4442434Eu;   // "DBCN" (debug console)
+const SBI_EXT_UEFI: u32 = 0x55454649u;   // "UEFI" (custom extension for UEFI boot services)
 const SBI_SUCCESS: u32 = 0u;
 const SBI_ERR_NOT_SUPPORTED: u32 = 0xFFFFFFFEu;  // -2 (low word; high = all ones)
+
+// UEFI Service IDs (FIDs for SBI_EXT_UEFI)
+const UEFI_ALLOCATE_POOL: u32 = 1u;     // AllocatePool(size, pool_ptr) -> status
+const UEFI_FREE_POOL: u32 = 2u;         // FreePool(pool) -> status
+const UEFI_OUT_OF_RESOURCES: u32 = 0x80000009u;  // EFI_OUT_OF_RESOURCES
 
 // SYSTEM funct12 encodings (funct3 == 0)
 const F12_ECALL: u32 = 0x000u;
@@ -524,7 +532,7 @@ const PHYS_BASE: u32 = 0x80000000u;
 @group(0) @binding(1) var<storage, read_write> cpus: array<RiscvCPU>;    // CPU states
 @group(0) @binding(2) var<storage, read_write> output: array<u32>;      // Output buffer
 @group(0) @binding(3) var<uniform> max_instructions: u32;               // Execution limit
-@group(0) @binding(4) var<storage, read> uart_input: array<u32>;        // UART input buffer
+@group(0) @binding(4) var<storage, read_write> uart_input: array<u32>;        // UART input buffer
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -777,9 +785,11 @@ fn divrems64(a: vec2<u32>, b: vec2<u32>) -> DivRem {
 
 // Read a 32-bit word from physical memory
 fn read_phys_word(pa: vec2<u32>) -> u32 {
-    // Handle physical memory at 0x80000000+ (xv6 M-mode boot)
-    let pa_base = select(0u, PHYS_BASE, pa.x >= PHYS_BASE);
-    let pa_offset = pa.x - pa_base;
+    // Reject addresses below PHYS_BASE to prevent NULL deref aliasing
+    if (pa.x < PHYS_BASE) {
+        return 0u;
+    }
+    let pa_offset = pa.x - PHYS_BASE;
     let word_addr = (pa_offset / 4u);
     if (word_addr >= arrayLength(&memory)) {
         return 0u;
@@ -790,9 +800,11 @@ fn read_phys_word(pa: vec2<u32>) -> u32 {
 
 // Write a 32-bit word to physical memory
 fn write_phys_word(pa: vec2<u32>, val: u32) {
-    // Handle physical memory at 0x80000000+ (xv6 M-mode boot)
-    let pa_base = select(0u, PHYS_BASE, pa.x >= PHYS_BASE);
-    let pa_offset = pa.x - pa_base;
+    // Reject addresses below PHYS_BASE to prevent NULL deref aliasing
+    if (pa.x < PHYS_BASE) {
+        return;
+    }
+    let pa_offset = pa.x - PHYS_BASE;
     let word_addr = (pa_offset / 4u);
     if (word_addr >= arrayLength(&memory)) {
         return;
@@ -1768,8 +1780,8 @@ fn execute_jal(cpu: ptr<function, RiscvCPU>, instr: u32) {
 // JALR (Jump and Link Register)
 fn execute_jalr(cpu: ptr<function, RiscvCPU>, instr: u32) {
     let decoded = decode_i_type(instr);
-    if (decoded.rd != 0u) { (*cpu).regs[decoded.rd] = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u)); }
     let target_addr = add64((*cpu).regs[decoded.rs1], sext32_to_64(decoded.imm));
+    if (decoded.rd != 0u) { (*cpu).regs[decoded.rd] = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u)); }
     (*cpu).pc = vec2<u32>(target_addr.x & 4294967294u, target_addr.y);
 }
 
@@ -2939,6 +2951,158 @@ fn read_phys_byte(pa: vec2<u32>) -> u32 {
 }
 
 // ============================================================================
+// UEFI BOOT SERVICES (AllocatePool, FreePool)
+//
+// These implement the core UEFI memory management contract used by PE32+
+// kernels during boot. The heap grows forward only (no free list tracking).
+// ============================================================================
+
+fn uefi_allocate_pool(cpu: ptr<function, RiscvCPU>, size: u32) -> vec2<u32> {
+    // Check if requested size fits in remaining heap
+    let remaining = (*cpu).uefi_heap_end - (*cpu).uefi_heap_ptr;
+    if (size > remaining) {
+        // Return (error_code, 0) in low/high
+        return vec2<u32>(UEFI_OUT_OF_RESOURCES, 0u);
+    }
+
+    // Allocate from heap
+    let addr = (*cpu).uefi_heap_ptr;
+    (*cpu).uefi_heap_ptr = (*cpu).uefi_heap_ptr + size;
+
+    // Return (SBI_SUCCESS, allocated_address) - success in low word, address in high
+    // Caller will pick this up in a1
+    return vec2<u32>(SBI_SUCCESS, addr);
+}
+
+fn uefi_free_pool(cpu: ptr<function, RiscvCPU>, pool: vec2<u32>) -> u32 {
+    // No-op for now: heap grows forward only, no free list tracking
+    // PE32+ kernels rarely free memory during boot, so this is safe
+    return SBI_SUCCESS;
+}
+
+fn handle_uefi_boot_service(cpu: ptr<function, RiscvCPU>, bs_index: u32) {
+    var status = vec2<u32>(3u, 0x80000000u); // EFI_UNSUPPORTED by default
+
+    if (bs_index == 3u) {
+        // FreePages(Memory, Pages) - a0 = Memory, a1 = Pages
+        // No-op like FreePool: we never reclaim UEFI-era allocations, and
+        // this kernel's early boot path treats EFI_UNSUPPORTED here as
+        // fatal rather than tolerating it, so it must report success.
+        status = vec2<u32>(0u, 0u); // EFI_SUCCESS
+    } else if (bs_index == 5u) {
+        // AllocatePool(PoolType, Size, **Buffer)
+        // a0 = PoolType, a1 = Size, a2 = Buffer
+        let alloc_size = (*cpu).regs[11].x;
+        let buffer_ptr_addr = (*cpu).regs[12].x;
+        
+        let result = uefi_allocate_pool(cpu, alloc_size);
+        if (result.x == 0u) {
+            status = vec2<u32>(0u, 0u); // EFI_SUCCESS
+            write_phys_word(vec2<u32>(buffer_ptr_addr, 0u), result.y);
+            write_phys_word(vec2<u32>(buffer_ptr_addr + 4u, 0u), 0u);
+        } else {
+            status = vec2<u32>(9u, 0x80000000u); // EFI_OUT_OF_RESOURCES
+        }
+    } else if (bs_index == 6u) {
+        // FreePool(*Buffer)
+        // a0 = Buffer
+        let r = uefi_free_pool(cpu, (*cpu).regs[10]);
+        if (r == 0u) { status = vec2<u32>(0u, 0u); }
+        else { status = vec2<u32>(r & 0x7FFFFFFFu, 0x80000000u); }
+    } else if (bs_index == 37u || bs_index == 16u) {
+        // LocateProtocol (37) or HandleProtocol (16)
+        // HandleProtocol(Handle, Protocol, **Interface) -> a2 = Interface
+        // LocateProtocol(Protocol, Registration, **Interface) -> a2 = Interface
+        let interface_ptr_addr = (*cpu).regs[12].x;
+        
+        // Provide ConOut (0x80000400) as a safe mock protocol interface
+        write_phys_word(vec2<u32>(interface_ptr_addr, 0u), 0x80000400u);
+        write_phys_word(vec2<u32>(interface_ptr_addr + 4u, 0u), 0u);
+        status = vec2<u32>(0u, 0u); // EFI_SUCCESS
+    } else if (bs_index == 2u) {
+        // Exit(ImageHandle, ExitStatus, ExitDataSize, ExitData)
+        // a0 = ImageHandle, a1 = ExitStatus
+        // Stub: return EFI_SUCCESS for clean boot shutdown
+        status = vec2<u32>(0u, 0u); // EFI_SUCCESS
+    } else if (bs_index == 1u) {
+        // StartImage(ImageHandle, ExitDataSize, ExitData) -> ExitStatus in a0
+        // a0 = ImageHandle, a1 = ExitDataSize ptr, a2 = ExitData ptr
+        // Stub: return EFI_SUCCESS with exit status 0 (clean exit)
+        if ((*cpu).regs[11].x != 0u) {
+            // *ExitDataSize = 0
+            write_phys_word(vec2<u32>((*cpu).regs[11].x, 0u), 0u);
+            write_phys_word(vec2<u32>((*cpu).regs[11].x + 4u, 0u), 0u);
+        }
+        status = vec2<u32>(0u, 0u); // EFI_SUCCESS
+    } else if (bs_index == 4u) {
+        // ExitBootServices(ImageHandle, MapKey)
+        // a0 = ImageHandle, a1 = MapKey (must match GetMemoryMap's MapKey)
+        // Stub: accept any MapKey, return EFI_SUCCESS for handoff
+        // In real UEFI, MapKey must match to prevent race conditions
+        status = vec2<u32>(0u, 0u); // EFI_SUCCESS
+    }
+    
+    (*cpu).regs[10] = status;
+}
+
+fn handle_uefi_call(cpu: ptr<function, RiscvCPU>) {
+    // Keep old code for SBI_EXT_UEFI compatibility if needed
+    let fid = (*cpu).regs[16].x;  // a6
+    let arg0 = (*cpu).regs[10];   // a0
+    
+    if (fid == UEFI_ALLOCATE_POOL) {
+        // AllocatePool(size=a0) -> (status, address) in (a0, a1)
+        let result = uefi_allocate_pool(cpu, arg0.x);
+        (*cpu).regs[10] = vec2<u32>(result.x, 0u);  // status
+        (*cpu).regs[11] = vec2<u32>(result.y, 0u);  // allocated address (if success)
+    } else if (fid == UEFI_FREE_POOL) {
+        // FreePool(pool=a0/a1) -> status in a0
+        let status = uefi_free_pool(cpu, arg0);
+        (*cpu).regs[10] = vec2<u32>(status, 0u);
+        (*cpu).regs[11] = vec2<u32>(0u, 0u);
+    } else if (fid == 3u) {
+        // GetMemoryMap(MemoryMapSize *a0, Buffer a1, MapKey *a2, DescriptorSize *a3, DescriptorVersion *a4)
+        let memmap_size_ptr = arg0.x;
+        let buffer_ptr = (*cpu).regs[11].x;
+        let desc_size_ptr = (*cpu).regs[13].x;
+        
+        // Write 80 to *MemoryMapSize
+        if (memmap_size_ptr != 0u) {
+            write_phys_word(vec2<u32>(memmap_size_ptr, 0u), 80u);
+            write_phys_word(vec2<u32>(memmap_size_ptr + 4u, 0u), 0u);
+        }
+        
+        if (buffer_ptr == 0u) {
+            // Buffer is NULL, return EFI_BUFFER_TOO_SMALL
+            (*cpu).regs[10] = vec2<u32>(5u, 0x80000000u);
+            (*cpu).regs[11] = vec2<u32>(0u, 0u);
+        } else {
+            // Buffer provided, copy 80 bytes from 0x82001800
+            let src_base = 0x82001800u;
+            for (var i = 0u; i < 20u; i = i + 1u) {
+                let w = read_phys_word(vec2<u32>(src_base + i * 4u, 0u));
+                write_phys_word(vec2<u32>(buffer_ptr + i * 4u, 0u), w);
+            }
+            
+            // Write 40 to *DescriptorSize
+            if (desc_size_ptr != 0u) {
+                write_phys_word(vec2<u32>(desc_size_ptr, 0u), 40u);
+                write_phys_word(vec2<u32>(desc_size_ptr + 4u, 0u), 0u);
+            }
+            
+            // Return EFI_SUCCESS
+            (*cpu).regs[10] = vec2<u32>(0u, 0u);
+            (*cpu).regs[11] = vec2<u32>(0u, 0u);
+        }
+    } else {
+        (*cpu).regs[10] = vec2<u32>(SBI_ERR_NOT_SUPPORTED, 0xFFFFFFFFu);
+        (*cpu).regs[11] = vec2<u32>(0u, 0u);
+    }
+
+    (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
+}
+
+// ============================================================================
 // SBI FIRMWARE (executed inline - the GPU emulator IS the M-mode firmware)
 //
 // An ECALL from S-mode is an "environment call to the SEE". Instead of
@@ -2988,7 +3152,8 @@ fn execute_sbi(cpu: ptr<function, RiscvCPU>, cpu_id: u32) {
             let probed = arg0.x;
             let supported = probed == SBI_EXT_BASE || probed == SBI_EXT_TIME ||
                             probed == SBI_EXT_SRST || probed == SBI_EXT_DBCN ||
-                            probed == SBI_EXT_LEGACY_PUTCHAR || probed == SBI_EXT_LEGACY_GETCHAR;
+                            probed == SBI_EXT_LEGACY_PUTCHAR || probed == SBI_EXT_LEGACY_GETCHAR ||
+                            probed == SBI_EXT_UEFI;
             val = vec2<u32>(select(0u, 1u, supported), 0u);
         } else if (fid == 4u || fid == 5u || fid == 6u) {
             // mvendorid / marchid / mimpid
@@ -3026,6 +3191,13 @@ fn execute_sbi(cpu: ptr<function, RiscvCPU>, cpu_id: u32) {
     } else if (eid == SBI_EXT_SRST) {
         // sbi_system_reset: clean shutdown of the pixel machine
         (*cpu).running = 0u;
+    } else if (eid >= 1000u && eid < 1120u) {
+        handle_uefi_boot_service(cpu, eid - 1000u);
+        return;
+    } else if (eid == SBI_EXT_UEFI) {
+        // UEFI boot services: AllocatePool, FreePool
+        handle_uefi_call(cpu);
+        return;
     } else {
         // HSM, IPI, RFENCE, everything else: not supported (single hart,
         // no TLB shootdown needed, no secondary harts to start)
@@ -3051,8 +3223,48 @@ fn execute_ecall(cpu: ptr<function, RiscvCPU>, cpu_id: u32) {
         return;
     }
 
-    // M-mode ECALL: legacy test-kernel syscall shim (sys_write/sys_exit)
+    // M-mode ECALL: legacy test-kernel syscall shim (sys_write/sys_exit),
+    // plus the SBI_EXT_UEFI trampoline target for PE32+ kernels booted
+    // directly in M-mode (no S-mode SBI firmware in that boot path).
     let syscall_num = (*cpu).regs[17].x; // a7
+
+    if (syscall_num >= 1000u && syscall_num < 1120u) {
+        handle_uefi_boot_service(cpu, syscall_num - 1000u);
+        (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
+        return;
+    }
+
+    if (syscall_num == SBI_EXT_UEFI) {
+        // handle_uefi_call() already advances pc itself (unlike
+        // handle_uefi_boot_service() above) - advancing it again here made
+        // every M-mode UEFI ecall skip the instruction right after `ecall`,
+        // which for the AllocatePool trampoline is the `sd a1,0(a3)` that
+        // stores the returned address into *Buffer. The address landed in
+        // the register but never made it to memory, so every AllocatePool
+        // caller read back Buffer==NULL despite a successful allocation.
+        handle_uefi_call(cpu);
+        return;
+    }
+
+    if (syscall_num == 2000u) {
+        let str_ptr = (*cpu).regs[11];
+        var curr_ptr = str_ptr;
+        for (var i = 0u; i < 256u; i = i + 1u) {
+            let b0 = read_byte_from_memory(cpu, curr_ptr);
+            let b1 = read_byte_from_memory(cpu, add64(curr_ptr, vec2<u32>(1u, 0u)));
+            let hw = b0 | (b1 << 8u);
+            if (hw == 0u) {
+                break;
+            }
+            if (hw != 0x0Du) { // Skip \r to avoid double newlines in simple consoles
+                (*cpu).output_ptr = uart_write_char(cpu_id, hw & 0xFFu, (*cpu).output_ptr);
+            }
+            curr_ptr = add64(curr_ptr, vec2<u32>(2u, 0u));
+        }
+        (*cpu).regs[10] = vec2<u32>(0u, 0u); // EFI_SUCCESS
+        (*cpu).pc = add64((*cpu).pc, vec2<u32>((*cpu).current_instr_len, 0u));
+        return;
+    }
 
     if (syscall_num == 64u) {
         // sys_write

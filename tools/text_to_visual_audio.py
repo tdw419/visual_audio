@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from tools.wordbase import WordbaseManager
-from tools.word_compiler import compile_word, ensure_cmudict, parse_cmudict
+from tools.word_compiler import compile_word, get_cmudict
 
 
 def convert_text_to_audio(
@@ -35,9 +35,8 @@ def convert_text_to_audio(
 
     print(f"Processing {len(words)} words...")
 
-    # Ensure CMUdict is available
-    cmudict_path = ensure_cmudict()
-    cmudict = parse_cmudict(cmudict_path)
+    # Get cached CMUdict
+    cmudict = get_cmudict()
 
     for word in words:
         word = word.strip('.,!?"\'()[]{}')

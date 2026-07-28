@@ -53,6 +53,10 @@ VOICEBOOK_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__f
 # TASK_P001: 5ms crossfade between phonemes
 CROSSFADE_DURATION_MS = 5.0
 
+# Singleton cache for CMUdict (prevents re-parsing 126k words on every call)
+_cmudict_cache: Optional[Dict[str, List[str]]] = None
+_cmudict_cache_path: Optional[str] = None
+
 
 def crossfade_audio(a: np.ndarray, b: np.ndarray, fade_samples: int) -> np.ndarray:
     """
@@ -152,6 +156,27 @@ def get_envelope_for_phoneme(phoneme: str, prev_phoneme: str = 'SIL',
         return all_envelopes[phoneme]
     else:
         raise ValueError(f"Unknown phoneme '{phoneme}'")
+
+
+def get_cmudict() -> Dict[str, List[str]]:
+    """
+    Get cached CMUdict (singleton pattern).
+
+    Returns:
+        Dict mapping lowercase word to list of phonemes
+    """
+    global _cmudict_cache, _cmudict_cache_path
+
+    cmudict_path = ensure_cmudict()
+
+    # Return cached copy if path unchanged
+    if _cmudict_cache is not None and _cmudict_cache_path == cmudict_path:
+        return _cmudict_cache
+
+    # Parse and cache
+    _cmudict_cache = parse_cmudict(cmudict_path)
+    _cmudict_cache_path = cmudict_path
+    return _cmudict_cache
 
 
 def ensure_cmudict() -> str:

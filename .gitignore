@@ -4,9 +4,6 @@ __pycache__/
 *$py.class
 *.so
 .Python
-env/
-venv/
-ENV/
 build/
 develop-eggs/
 dist/
@@ -22,44 +19,96 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
+# Virtual environments
+venv/
+ENV/
+env/
 
-# IDE
+# IDEs
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# Project specific - generated audio files
-*.upic.json
-*.wav
-*.mp3
-*.ogg
-!examples/*.upic.json
-!examples/*.wav
-
-# Documentation builds
-docs/_build/
-site/
-
 # OS
 .DS_Store
 Thumbs.db
 
+# Large generated files (exceed GitHub 100MB limit)
+alpine_gpu_pixels.npy
+*.npy
+*.npz
+
+# Trace files
+traces/*.jsonl
+traces/*.log
+*.log
+
+# Runtime artifacts
+.rts/
+scene*.png
+visual_audio.mkv
+
+# Generated audio cache (protected asset)
+voicebook/
+
+# Database
+db/*.db
+
+# Test fixtures
+tests/fixtures/*.png
+
+# Compiled binaries
+*.qcow2
+*.img
+*.iso
+*.apkovl.tar.gz
+
 # Backup files
+*.backup
 *.bak
-*.tmp
+*_backup
 
-# Secrets — never commit provenance private keys (public keys are fine)
-keys/*private*.pem
-keys/*_private.pem
+# Documentation drafts
+*_draft.md
+drafts/
 
-# Local wordbase backups/snapshots (db/wordbase.db itself is tracked)
-db/wordbase*.backup
-db/*_backup.db
-db/wordbase.sqlite
+# Auto-generated
+wordbook.png
+wordbook.meta.json
+
+# Alpine boot artifacts
+boot_images/alpine_*
+boot_images/ubuntu_*
+boot_images/*.fd
+
+# Logs and traces
+listener.log
+pixel_os_listener.log
+.update_proposals.log
+qemu_debug.log
+qemu_test.log
+
+# Generated payloads
+generate_*.py
+test_*.py
+*_manifest.json
+
+# Large models (exceed 50MB)
+models/*.pt
+models/*.pth
+models/*.bin
+
+# Trace directories
+traces/evolver*/
+traces/evolver_fix/
+traces/evolver_level5c/
+traces/evolver_test/
+traces/evolver_full/
+
+# Autonomous repo artifacts
+autonomous_repo_orchestrator/
+systems/

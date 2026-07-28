@@ -1,0 +1,16 @@
+--- a/tools/spatial_rv64i_cpu.py
++++ b/tools/spatial_rv64i_cpu.py
+@@ -347,3 +347,13 @@ class SpatialRV64ICore:
+     def set_mode(self, mode: int):
+         """Set the privilege mode (0=U, 1=S, 3=M)"""
+         self.queue.write_buffer(self.state_buffer, 20, np.array([mode], dtype=np.uint32).tobytes())
++
++    def set_ram_base(self, base_addr: int):
++        """Set the base physical address that maps to buffer word 0.
++        All physical addresses accessed by the guest are offset by this value."""
++        # ram_base_low is at offset 56 (14 * 4)
++        # ram_base_high is at offset 60 (15 * 4)
++        base_low = base_addr & 0xFFFFFFFF
++        base_high = (base_addr >> 32) & 0xFFFFFFFF
++        self.queue.write_buffer(self.state_buffer, 56, np.array([base_low], dtype=np.uint32).tobytes())
++        self.queue.write_buffer(self.state_buffer, 60, np.array([base_high], dtype=np.uint32).tobytes())

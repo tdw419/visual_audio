@@ -1,0 +1,58 @@
+-- Wordbase Database: Maps words to visual audio representations
+-- Columns: id, word, pronunciation, image_path, image_link, pos, definition, examples, frequency, created_at
+
+CREATE TABLE IF NOT EXISTS words (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    word TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    pronunciation TEXT NOT NULL,  -- CMU ARPAbet format (e.g., "HH EH L OW")
+    image_path TEXT,  -- Local path to spectrogram PNG
+    image_link TEXT,  -- URL to remote image (fallback)
+    pos TEXT NOT NULL,  -- Part of speech: noun, verb, adjective, etc.
+    definition TEXT,
+    examples TEXT,  -- JSON array of example sentences
+    frequency INTEGER DEFAULT 0,  -- Corpus frequency (for prioritization)
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_word ON words(word);
+CREATE INDEX IF NOT EXISTS idx_pos ON words(pos);
+CREATE INDEX IF NOT EXISTS idx_frequency ON words(frequency DESC);
+
+-- Phrase table for multi-word mappings (collocations, idioms)
+CREATE TABLE IF NOT EXISTS phrases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phrase TEXT NOT NULL UNIQUE,
+    pronunciation TEXT NOT NULL,
+    image_path TEXT,
+    image_link TEXT,
+    definition TEXT,
+    examples TEXT,
+    frequency INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_phrase ON phrases(phrase);
+
+-- Cache table for pre-generated spectrograms (avoids re-encoding)
+CREATE TABLE IF NOT EXISTS spectrogram_cache (
+    word_id INTEGER PRIMARY KEY,
+    spectrogram_bytes BLOB NOT NULL,  -- Encoded spectrogram PNG bytes
+    codec_version TEXT DEFAULT 'v1',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (word_id) REFERENCES words(id) ON DELETE CASCADE
+);
+
+-- Trigger to update updated_at timestamp
+CREATE TRIGGER IF NOT EXISTS update_timestamp 
+AFTER UPDATE ON words
+BEGIN
+    UPDATE words SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS update_phrase_timestamp
+AFTER UPDATE ON phrases
+BEGIN
+    UPDATE phrases SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;

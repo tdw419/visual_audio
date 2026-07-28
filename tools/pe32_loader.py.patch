@@ -1,0 +1,34 @@
+--- tools/pe32_loader.py
++++ tools/pe32_loader.py
+@@ -137,6 +137,33 @@
+         return self.data[start:end]
+ 
+ 
++class UEFIEnvironmentBuilder:
++    """
++    Skeleton for UEFI runtime environment initialization.
++    Responsible for mapping SystemTable, BootServices, RuntimeServices,
++    and required protocols into guest memory before boot.
++    """
++    def __init__(self, memory_array, phys_start=0x80000000):
++        self.memory = memory_array
++        self.phys_start = phys_start
++        self.sys_table_addr = self.phys_start
++        self.boot_services_addr = self.phys_start + 0x200
++        self.runtime_services_addr = self.phys_start + 0x100
++        
++    def allocate_struct(self, size: int) -> int:
++        """TODO: Implement simple bump allocator for UEFI structs"""
++        pass
++        
++    def build_system_table(self):
++        """TODO: Write EFI_SYSTEM_TABLE to memory"""
++        pass
++        
++    def build_boot_services(self):
++        """TODO: Map all 31 BootServices functions to WGSL trampolines"""
++        pass
++
++
+ def main():
+     import sys

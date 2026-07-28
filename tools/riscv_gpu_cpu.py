@@ -57,9 +57,11 @@ CPU_DTYPE = np.dtype([
     ('total_interrupt_count', np.uint32),  # Total interrupts taken
     ('plic_priority_irq1', np.uint32),     # Priority for IRQ 1
     ('current_instr_len', np.uint32),      # 2 (RVC) or 4 - set by fetch
+    ('uefi_heap_ptr', np.uint32),          # Next free byte in the UEFI AllocatePool heap
+    ('uefi_heap_end', np.uint32),          # First byte past the UEFI heap region
 ])
 
-assert CPU_DTYPE.itemsize == 520, f"CPU struct layout drifted: {CPU_DTYPE.itemsize}"
+assert CPU_DTYPE.itemsize == 528, f"CPU struct layout drifted: {CPU_DTYPE.itemsize}"
 
 SATP_MODE_SV39 = 8
 
@@ -149,4 +151,9 @@ def make_linux_boot_state(entry_point: int, dtb_addr: int):
     cpu[0]['regs'][11] = [dtb_addr & 0xFFFFFFFF, (dtb_addr >> 32) & 0xFFFFFFFF]  # a1 = DTB
     cpu[0]['medeleg'] = [MEDELEG_DEFAULT & 0xFFFFFFFF, 0]
     cpu[0]['mideleg'] = [MIDELEG_DEFAULT & 0xFFFFFFFF, 0]
+    # Set stvec to a non-zero trap handler to prevent early halt
+    # Use 0x80200000 as a simple trap handler region
+    cpu[0]['stvec'] = [0x80200000 & 0xFFFFFFFF, 0]
+    # Enable S-mode interrupts in mstatus
+    cpu[0]['mstatus'] = [0x00000002, 0]  # SIE bit set
     return cpu

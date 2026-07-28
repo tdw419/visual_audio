@@ -38,7 +38,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from speak import SAMPLE_RATE, say_text
 from spoken_screen import synth_data_band, decode_data_band, NARRATION_CUTOFF
 from wordbase_compat import connect, materialize, word_id, tokenize
-from word_compiler import ensure_cmudict, parse_cmudict
+from word_compiler import get_cmudict
 
 import tempfile
 
@@ -90,7 +90,7 @@ def apply_ops(fb: np.ndarray, ops) -> np.ndarray:
             _, text, x, y, c = op
             if db is None:
                 db = connect()
-                cmudict = parse_cmudict(ensure_cmudict())
+                cmudict = get_cmudict()
 
             # Look up color_hex for automatic coloring
             if c is None or c == 'auto':

@@ -45,7 +45,7 @@ from pixel_screen import load_fb, apply_ops, hex_color
 from spoken_screen import decode_data_band
 from boot_manifest import launch_boot, BootManifestError
 from wordbase_compat import connect, word_id, materialize, tokenize
-from word_compiler import ensure_cmudict, parse_cmudict
+from word_compiler import get_cmudict
 
 # Configure logging
 logging.basicConfig(
@@ -69,7 +69,9 @@ class ListenerDaemon:
         public_key_path: str = None,
         enable_boot: bool = False,
         boot_image_dir: str = None,
-        boot_dry_run: bool = False
+        boot_dry_run: bool = False,
+        enable_driver_ops: bool = False,
+        driver_output_dir: str = None
     ):
         """
         Initialize the listener daemon.
@@ -81,6 +83,8 @@ class ListenerDaemon:
             enable_boot: Allow ["boot", ...] ops to launch QEMU (opt-in)
             boot_image_dir: Trusted directory holding bootable images
             boot_dry_run: Validate/log boot ops without launching QEMU
+            enable_driver_ops: Allow ["write", ...] and ["run", ...] ops (opt-in)
+            driver_output_dir: Trusted directory for write/run operations
         """
         self.framebuffer_path = framebuffer_path
         self.provenance_required = provenance_required
@@ -88,6 +92,8 @@ class ListenerDaemon:
         self.enable_boot = enable_boot
         self.boot_image_dir = boot_image_dir
         self.boot_dry_run = boot_dry_run
+        self.enable_driver_ops = enable_driver_ops
+        self.driver_output_dir = driver_output_dir
         self.running = False
         self.op_queue = queue.Queue()
         self.processed_files: set = set()
@@ -110,7 +116,7 @@ class ListenerDaemon:
         """Initialize database and resources."""
         if self.db is None:
             self.db = connect()
-            self.cmudict = parse_cmudict(ensure_cmudict())
+            self.cmudict = get_cmudict()
             logger.info("Initialized wordbase and CMUdict")
 
     def _process_audio_file(self, wav_path: str) -> Optional[list]:
@@ -147,21 +153,23 @@ class ListenerDaemon:
 
     def _dispatch_ops(self, ops: list) -> bool:
         """
-        Route decoded ops: ["boot", ...] ops launch QEMU (gated), everything
-        else is drawn to the framebuffer.
+        Route decoded ops: ["boot", ...] ops launch QEMU (gated),
+        ["write", ...] and ["run", ...] ops execute files (gated),
+        everything else is drawn to the framebuffer.
 
-        Boot ops are only honored when provenance is required — which, given the
-        downgrade fix in decode_data_band(), guarantees every op that reached
-        here came from a signature-verified frame — and when boot has been
-        explicitly enabled by the operator. Otherwise they are refused, never
-        silently dropped into the framebuffer path.
+        Boot ops require provenance + explicit enable_boot + boot_image_dir.
+        Write/run ops require provenance + explicit enable_driver_ops + driver_output_dir.
+        Otherwise they are refused, never silently dropped into the framebuffer path.
         """
         boot_ops = [op for op in ops if isinstance(op, (list, tuple)) and op and op[0] == 'boot']
-        draw_ops = [op for op in ops if not (isinstance(op, (list, tuple)) and op and op[0] == 'boot')]
+        driver_ops = [op for op in ops if isinstance(op, (list, tuple)) and op and op[0] in ('write', 'run')]
+        draw_ops = [op for op in ops if isinstance(op, (list, tuple)) and op and op[0] not in ('boot', 'write', 'run')]
 
         ok = True
         for op in boot_ops:
             ok = self._handle_boot_op(op) and ok
+        for op in driver_ops:
+            ok = self._handle_driver_op(op) and ok
         if draw_ops:
             ok = self._apply_ops_to_framebuffer(draw_ops) and ok
         return ok
@@ -189,6 +197,101 @@ class ListenerDaemon:
         verb = "Would launch" if self.boot_dry_run else "Launched"
         logger.info(f"{verb} QEMU from signed boot op: {' '.join(argv)}")
         return True
+
+    def _handle_driver_op(self, op) -> bool:
+        """Validate and (unless testing) execute write/run ops."""
+        if not self.provenance_required:
+            logger.error("Refusing driver op: provenance not required (unsigned frames could execute)")
+            return False
+        if not self.enable_driver_ops:
+            logger.error("Refusing driver op: driver ops not enabled (pass --enable-driver-ops to opt in)")
+            return False
+        if not self.driver_output_dir:
+            logger.error("Refusing driver op: no --driver-output-dir configured")
+            return False
+
+        op_type = op[0]
+        if op_type == 'write':
+            if len(op) < 3:
+                logger.error(f"Invalid write op: {op!r}")
+                return False
+            filename, content = op[1], op[2]
+            
+            # Prevent path traversal: reject .. and absolute paths
+            if '..' in filename or filename.startswith('/'):
+                logger.error(f"Refusing write op with dangerous filename: {filename!r}")
+                return False
+            
+            output_path = Path(self.driver_output_dir) / filename
+            # Verify the resolved path is still within driver_output_dir
+            try:
+                resolved_path = output_path.resolve()
+                resolved_dir = Path(self.driver_output_dir).resolve()
+                if not str(resolved_path).startswith(str(resolved_dir)):
+                    logger.error(f"Refusing write op: path traversal attempt detected: {output_path}")
+                    return False
+            except Exception as e:
+                logger.error(f"Failed to resolve path {output_path}: {e}")
+                return False
+
+            try:
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_text(content, encoding='utf-8')
+                # Make scripts executable (Python files)
+                if filename.endswith('.py'):
+                    output_path.chmod(0o755)
+                logger.info(f"Wrote {len(content)} bytes to {output_path}")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to write {output_path}: {e}")
+                return False
+
+        elif op_type == 'run':
+            if len(op) < 2:
+                logger.error(f"Invalid run op: {op!r}")
+                return False
+            script_name = op[1]
+            
+            # Prevent path traversal
+            if '..' in script_name or script_name.startswith('/'):
+                logger.error(f"Refusing run op with dangerous filename: {script_name!r}")
+                return False
+            
+            script_path = Path(self.driver_output_dir) / script_name
+            try:
+                resolved_path = script_path.resolve()
+                resolved_dir = Path(self.driver_output_dir).resolve()
+                if not str(resolved_path).startswith(str(resolved_dir)):
+                    logger.error(f"Refusing run op: path traversal attempt detected: {script_path}")
+                    return False
+            except Exception as e:
+                logger.error(f"Failed to resolve path {script_path}: {e}")
+                return False
+
+            if not script_path.exists():
+                logger.error(f"Script not found: {script_path}")
+                return False
+            try:
+                import subprocess
+                result = subprocess.run(
+                    [sys.executable, str(script_path)],
+                    cwd=self.driver_output_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if result.returncode == 0:
+                    logger.info(f"Ran {script_name} (stdout: {result.stdout[:100] if result.stdout else ''})")
+                    return True
+                else:
+                    logger.error(f"Script {script_name} failed: {result.stderr}")
+                    return False
+            except Exception as e:
+                logger.error(f"Failed to run {script_path}: {e}")
+                return False
+
+        logger.error(f"Unknown driver op type: {op_type!r}")
+        return False
 
     def _apply_ops_to_framebuffer(self, ops: list) -> bool:
         """

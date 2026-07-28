@@ -161,15 +161,14 @@ def _get_cmudict() -> Dict[str, List[str]]:
     """Lazy load CMUdict."""
     global _cmudict, _cmudict_path
 
-    # Import here to avoid module load issues
-    from tools.word_compiler import ensure_cmudict, parse_cmudict
+    # Use word_compiler's cached version
+    from tools.word_compiler import get_cmudict
 
-    cmudict_path = ensure_cmudict()
-    if _cmudict is None or _cmudict_path != cmudict_path:
-        _cmudict = parse_cmudict(cmudict_path)
-        _cmudict_path = cmudict_path
+    cmudict = get_cmudict()
+    _cmudict = cmudict
+    _cmudict_path = ""  # get_cmudict() handles cache internally
 
-    return _cmudict
+    return cmudict
 
 
 def word_id(db: sqlite3.Connection, word: str, cmudict: Dict[str, List[str]], lang: str = 'en') -> int:

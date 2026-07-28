@@ -399,7 +399,16 @@ def create_gpu_boot_harness(pixels: np.ndarray, root_ppn: int, entry_point: int,
         {'binding': 1, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'storage'}},
         {'binding': 2, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'storage'}},
         {'binding': 3, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'uniform'}},
+        {'binding': 4, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'storage'}},
     ])
+
+    # UART input buffer (empty for now)
+    uart_input = np.array([0] * 256, dtype=np.uint32)
+    uart_buffer = device.create_buffer(
+        size=uart_input.nbytes,
+        usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST,
+    )
+    queue.write_buffer(uart_buffer, 0, uart_input.tobytes())
 
     bind_group = device.create_bind_group(
         layout=bind_group_layout,
@@ -408,6 +417,7 @@ def create_gpu_boot_harness(pixels: np.ndarray, root_ppn: int, entry_point: int,
             {'binding': 1, 'resource': {'buffer': cpu_buffer, 'offset': 0, 'size': cpu_state.nbytes}},
             {'binding': 2, 'resource': {'buffer': output_buffer, 'offset': 0, 'size': 65536}},
             {'binding': 3, 'resource': {'buffer': uniform_buffer, 'offset': 0, 'size': max_instructions.nbytes}},
+            {'binding': 4, 'resource': {'buffer': uart_buffer, 'offset': 0, 'size': uart_input.nbytes}},
         ]
     )
 
@@ -516,12 +526,33 @@ def boot_alpine_on_gpu(lnx_path: str):
             print(f"\n    Halted after {instr_count} instructions")
             break
 
-    # Read output
-    print("\n[8] Reading kernel output...")
+    # Read output buffer
+    print("\\n[8] Reading kernel output...")
     output_data = np.frombuffer(
         device.queue.read_buffer(output_buffer),
         dtype=np.uint8
     )
+    
+    # Diagnostic: check for trap markers
+    diag_words = []
+    for i in range(0, min(64, len(output_data)), 4):
+        word = struct.unpack('<I', output_data[i:i+4])[0]
+        diag_words.append(word)
+    
+    print("\\n[8.1] Diagnostic output buffer (first 16 words):")
+    for i in range(0, min(16, len(diag_words)), 8):
+        row = ' '.join(f'0x{w:08x}' for w in diag_words[i:i+8])
+        print(f"    {row}")
+    
+    # Check for known markers
+    if 0xFACE in diag_words:
+        print("    DIAG: S-mode trap (stvec=0)")
+    if 0xCAFE in diag_words:
+        print("    DIAG: M-mode trap (mtvec=0)")
+    if 0xBEEF in diag_words:
+        print("    DIAG: Illegal instruction")
+    if 0xDEADFA11 in diag_words:
+        print("    DIAG: Timeout marker")
 
     output_str = ''
     for i in range(0, len(output_data), 4):
@@ -544,6 +575,13 @@ def boot_alpine_on_gpu(lnx_path: str):
     print(f"Final PC: 0x{pc:016x}")
     print(f"Instructions executed: {instr_count}")
     print(f"CPU running: {running}")
+    
+    # Check CSRs for trap information
+    print(f"Privilege mode: {cpu_readback['priv_mode']}")
+    print(f"stvec: 0x{(cpu_readback['stvec'][1] << 32) | cpu_readback['stvec'][0]:016x}")
+    print(f"mcause: 0x{(cpu_readback['mcause'][1] << 32) | cpu_readback['mcause'][0]:016x}")
+    print(f"mtval: 0x{(cpu_readback['mtval'][1] << 32) | cpu_readback['mtval'][0]:016x}")
+    print(f"mstatus: 0x{(cpu_readback['mstatus'][1] << 32) | cpu_readback['mstatus'][0]:016x}")
     print("=" * 70)
 
 

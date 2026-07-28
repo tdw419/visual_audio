@@ -38,11 +38,11 @@ from codec.phy_ecc import encode_ecc, decode_ecc
 # For 'say' mode - phoneme word compiler
 try:
     from word_compiler import (
-        compile_text, concat_words_audio, ensure_cmudict, parse_cmudict
+        compile_text, concat_words_audio, get_cmudict
     )
 except ImportError:
     from tools.word_compiler import (
-        compile_text, concat_words_audio, ensure_cmudict, parse_cmudict
+        compile_text, concat_words_audio, get_cmudict
     )
 
 SAMPLE_RATE = 44100
@@ -398,17 +398,15 @@ def say_text(text: str, wav_path: str, project_path: str = None, verbose: bool =
         # For now, use fallback compilation for each word since phonemizer
         # gives us raw phonemes that need to be mapped to our templates
         words = text.split()
-        cmudict_path = ensure_cmudict()
-        cmudict = parse_cmudict(cmudict_path)
-        
+        cmudict = get_cmudict()
+
         word_audios = compile_text(text, cmudict, force=False, verbose=verbose, use_neural=use_neural)
-        
+
     except ImportError:
         print(f"WARNING: phonemizer not installed, falling back to CMUdict (English only)")
         # Fallback to existing CMUdict-based compilation
-        cmudict_path = ensure_cmudict()
-        cmudict = parse_cmudict(cmudict_path)
-        
+        cmudict = get_cmudict()
+
         word_audios = compile_text(text, cmudict, force=False, verbose=verbose, use_neural=use_neural)
     
     if not word_audios:

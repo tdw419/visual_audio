@@ -1,50 +1,65 @@
-
 # Session Handoff
 
 ## Metadata
-- **Source Session**: 20260723_010910_session_handoff
-- **Timestamp**: 2026-07-23
+- **Timestamp**: 2026-07-28T15:00:00
 - **Git Branch**: master
-- **Git Commit**: 3cfdd0d14cfced2bc61cd64a29b5d398911e6def
+- **Git Commit**: d6d96a1536275d77b58418fca66e9ebc0053e487
 
-## Status: Level 8 (RVC) — Complete + Verified on Real RVC Kernel
+## Session Summary
 
-All three phases of Level 8 RVC compressed instruction support are implemented and regression-verified on a real RVC-compiled xv6 kernel.
+### Completed Work
 
-### Phase 1: PC Advancement Refactor ✅
-- Added `current_instr_len: u32` to RiscvCPU struct
-- All 63 `pc = pc + 4` sites replaced with `pc = pc + current_instr_len`
-- Fixed JAL/JALR link-register computation to use variable length too
+**Critical Bug Fix:**
+- Fixed `tools/spatial_rv64i_cpu.py` `load_program()` state initialization
+- Before: `[entry_point, 0, 0, 1, ...]` - wrong 64-bit split, only 1 step
+- After: `[entry_point & 0xFFFFFFFF, entry_point >> 32, 0, 1_000_000, ...]` - correct split, 1M steps
 
-### Phase 2: Unaligned Fetching ✅
-- `fetch_instruction()` rewritten: reads halfwords, detects RVC via `(hw0 & 3) != 3`
-- Cross-page second halfword fetch with re-translation
-- Returns `len=2` for RVC, `len=4` for standard 32-bit
+**Test Infrastructure Created:**
+- `tests/level5c_qemu_test.py` - QEMU baseline verification ✓
+- `tests/level5c_minimal_test.py` - GPU verification (timeout issues)
+- `tests/level5c_50k_test.py` - Full ELF loading
+- `tests/standalone_alpine_boot.py` - Fast Alpine boot with reduced GPU sync
 
-### Phase 3: RVC Decompressor ✅
-- `decompress_rvc()` maps 16-bit compressed to 32-bit equivalents
-- Handles all Quadrant 0 instructions (C.ADDI4SPN, C.LW, etc.)
-- Wire format in main loop: if `fetch.len == 2`, call `decompress_rvc()` before dispatch
+### Verified Status
 
-### Regression Verification ✅
-- **Bare-metal levels 5b, 5c, 6a, 6b, 7a**: All PASS (identical output)
-- **RVC xv6 smoke test** (2026-07-23): Boots to `$ ` at iter 13 (28M instr), `ls` returns 23 files, shell back to `$ `, 724 timer IRQs
-- **Non-RVC xv6**: Boots to `$ ` at iter 14 (30M instr)
-- **5,162 compressed + 3,235 32-bit instructions** in the RVC kernel — all handled correctly
-- **Timer interrupts**: 724+ delivered
-- **VirtIO disk**: fs.img loaded and read successfully
+✓ All 13 RV64I unit tests pass
+✓ OpenSBI boot test passes (~145s)
+✓ Level 5c boots correctly on QEMU with all expected output
+✓ Level 5c loads and executes on GPU (PC advances normally)
+✓ `load_program()` fix verified
 
-## What's Next
+## Immediate Next Steps
 
-1. ~~**RVC xv6 smoke test**~~ ✅ DONE — Boots, `ls` works, 5K+ RVC inx instrs verified
+1. **Level 5c GPU verification timeout**
+   - Level 5c boots correctly on QEMU but GPU test times out
+   - Need to investigate if it's:
+     - More steps needed (>30k)
+     - GPU performance issue on specific code path
+     - Different behavior vs QEMU
 
-2. **Full RVC test suite** — Create test payloads that exercise all 30+ RVC instruction types (C.ADDI, C.LI, C.LUI, C.SUB, C.J, C.JR, C.BEQZ, C.BNEZ, C.SW, C.LWSP, C.SWSP, etc.) and verify they produce identical results to their 32-bit equivalents. Current decompressor only implements Quadrant 0.
+2. **Alpine Linux boot**
+   - `test_alpine_opensbi_boot.py` times out
+   - May need DTB/firmware fixes or step limit increase
+   - Use `standalone_alpine_boot.py` for faster iteration
 
-3. **usertests on GPU** — Long-running test that can take hours.
+## Files Modified
 
-## Key Files
-- `tools/RISCV_CPU_MMU.wgsl` — fetch_instruction() at ~line 1013, decompress_rvc() at ~line 1094
-- `tools/boot_gpu_execute.py` — Bare-metal payload runner
-- `tools/boot_xv6_gpu.py` — Full xv6 boot with UART I/O
-- `tools/diagnose_xv6_boot2.py` — Quick boot test (15 dispatches)
-- `tools/test_xv6_ls.py` — Boot + inject ls (120 dispatches)
+- `tools/spatial_rv64i_cpu.py` - Fixed `load_program()` state initialization
+- `tests/level5c_*_test.py` - New test infrastructure
+- `tests/standalone_alpine_boot.py` - New fast Alpine boot test
+
+## How to Reproduce
+
+```bash
+# Verify basic GPU emulator works
+python3 -m pytest tests/test_spatial_rv64i_cpu.py -xvs
+
+# Verify Level 5c on QEMU (should pass quickly)
+python3 tests/level5c_qemu_test.py
+
+# Attempt Level 5c on GPU (times out)
+python3 tests/level5c_gpu_test.py
+
+# Run full OpenSBI boot test (~145s)
+python3 -m pytest tests/test_opensbi_boot.py -xvs
+```

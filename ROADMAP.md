@@ -730,12 +730,12 @@ implemented and are split into TASK_C035 / TASK_C036 rather than claimed under C
   - Receipt: `analyze` sources words from the ACTUAL tiles (a directory of <word>_<id>.png tiles, or a PNG with a .json/.txt sidecar) — no dummy fallback — groups them by wordbase color_hex, and fails (exit 1) on missing/malformed input. Pygame explore mode adds click-to-filter legend + hover tooltips.
   - Test: `python3 -m pytest tests/test_color_explorer.py` (4/4: exit-1 on missing file, exit-1 on PNG w/o sidecar, real color groups from voicebook/tiles, JSON sidecar). NOTE: the old `analyze tiles.png` receipt was hollow — it passed via a hardcoded 9-word fallback even when tiles.png didn't exist.
   - Status: Complete - real data sourcing verified; dummy fallback removed 2026-07-17.
-- [ ] **TASK_I004**: Cross-modal translation tools
+- [x] **TASK_I004**: Cross-modal translation tools ✅ COMPLETE
   - Priority: MEDIUM
   - Dependencies: TASK_M004 (pixel LM), TASK_M001 (tokenizer)
   - Receipt: Image → tiles → audio (describe what you see); audio → tiles → image (draw what you hear); text → tiles → audio → image (full round-trip with visual feedback at each stage)
   - Test: `python3 tools/cross_modal.py from-image scene.png --output scene.wav && tools/cross_modal.py from-audio scene.wav --output scene_reconstructed.png`
-  - Status: COMPLETE
+  - Status: Complete - Standalone implementation in tools/cross_modal.py (17KB) with three modes: from-image (color/dimension analysis → text → phonemes → 16-tone MFSK), from-audio (FFT-based decode → phonemes → text → styled document render), from-text (text → audio → image round-trip). Verified end-to-end test passes (2026-07-28).
 - [ ] **TASK_I005**: Collaborative visual editing
   - Priority: LOW
   - Dependencies: TASK_I002
