@@ -94,22 +94,10 @@ def main():
 
     print("Executing...", flush=True)
     
-    steps_per_iter = 100000
-    
-    for i in range(1, 10001):
-        t0 = time.time()
-        for _ in range(20):
-            core.step(steps_per_iter)
-        
+    for i in range(1, 1000):
+        core.step(10000)
         state = core.get_state()
-        t1 = time.time()
-        
-        uart = core.read_uart_output()
-        if uart:
-            sys.stdout.buffer.write(uart)
-            sys.stdout.flush()
-
-        print(f"\n[Iter {i}] PC: 0x{state['pc_low']:08x} Mode: {state['mode']} Halted: {state['halted']} ({t1-t0:.4f}s)", flush=True)
+        print(f"[Iter {i}] PC: 0x{state['pc_low']:08x} Mode: {state['mode']} Halted: {state['halted']}", flush=True)
         if state['halted']:
             print(f"Halted. mcause: 0x{core.read_csr(0x342):08x}")
             break

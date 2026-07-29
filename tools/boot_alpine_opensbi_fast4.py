@@ -88,28 +88,22 @@ def main():
     core.write_register(11, dtb_addr)
     core.write_register(12, info_addr)
 
-    # SET MEDELEG AND MIDELEG to allow S-mode traps!
-    core.write_csr(0x302, 0xffff) # medeleg
-    core.write_csr(0x303, 0xffff) # mideleg
+    # SET MEDELEG AND MIDELEG exactly as OpenSBI does!
+    core.write_csr(0x302, 0xb109) # medeleg
+    core.write_csr(0x303, 0x0222) # mideleg
 
     print("Executing...", flush=True)
     
-    steps_per_iter = 100000
-    
-    for i in range(1, 10001):
-        t0 = time.time()
-        for _ in range(20):
-            core.step(steps_per_iter)
-        
+    for i in range(1, 10000):
+        core.step(100000)
         state = core.get_state()
-        t1 = time.time()
         
         uart = core.read_uart_output()
         if uart:
             sys.stdout.buffer.write(uart)
             sys.stdout.flush()
 
-        print(f"\n[Iter {i}] PC: 0x{state['pc_low']:08x} Mode: {state['mode']} Halted: {state['halted']} ({t1-t0:.4f}s)", flush=True)
+        print(f"[Iter {i}] PC: 0x{state['pc_low']:08x} Mode: {state['mode']} Halted: {state['halted']}", flush=True)
         if state['halted']:
             print(f"Halted. mcause: 0x{core.read_csr(0x342):08x}")
             break

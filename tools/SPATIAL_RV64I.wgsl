@@ -88,6 +88,18 @@ const CSR_MCAUSE: u32 = 0x342u;
 const CSR_MTVAL: u32 = 0x343u;
 const CSR_MIP: u32 = 0x344u;
 const CSR_SATP: u32 = 0x180u;
+// Sstc extension: lets S-mode arm its own timer directly (no SBI ecall trap-and-emulate
+// round trip through M-mode). Writes already land in `csrs[CSR_STIMECMP]` via csr_write's
+// generic fallthrough; what was missing is ever comparing it against mtime and raising STIP
+// (bit 5) — see maybe_take_interrupt(). OpenSBI reports 'sstc' as a supported Boot HART ISA
+// extension, so a kernel that prefers Sstc over the legacy SBI TIME extension would silently
+// never receive a timer interrupt without this.
+const CSR_STIMECMP: u32 = 0x14Du;
+// Read-only hardware timer CSR, read via the `rdtime` pseudo-instruction. Linux's
+// calibrate_delay()/sched_clock() read this around a busy loop to derive BogoMIPS and the
+// clocksource rate; without wiring it to state.mtime it always reads 0, elapsed-time is always
+// 0, and calibration never converges (observed as PC stuck in an infinite loop, "0.00 BogoMIPS").
+const CSR_TIME: u32 = 0xC01u;
 const CSR_MISA: u32 = 0x301u;
 // RV64 (MXL=2 in bits[63:62]) + extensions A,C,I,M,S,U (bits indexed by letter-'A'); no F/D since
 // this core has no floating point. Hardcoded/read-only: OpenSBI and Linux both probe this to decide
@@ -105,6 +117,8 @@ const MSTATUS_TRAP_MASK: u32 = 0x1888u;
 fn csr_read(addr: u32) -> vec2<u32> {
     if (addr == CSR_MISA) {
         return vec2<u32>(MISA_VALUE_LOW, MISA_VALUE_HIGH);
+    } else if (addr == CSR_TIME) {
+        return vec2<u32>(state.mtime_low, state.mtime_high);
     } else if (addr == CSR_SSTATUS) {
         return vec2<u32>(csrs[CSR_MSTATUS].x & SSTATUS_MASK, csrs[CSR_MSTATUS].y);
     } else if (addr == CSR_SIE) {
@@ -125,6 +139,11 @@ fn csr_write(addr: u32, val: vec2<u32>) {
     } else if (addr == CSR_SIP) {
         csrs[CSR_MIP].x = (csrs[CSR_MIP].x & ~csrs[CSR_MIDELEG].x) | (val.x & csrs[CSR_MIDELEG].x);
         csrs[CSR_MIP].y = (csrs[CSR_MIP].y & ~csrs[CSR_MIDELEG].y) | (val.y & csrs[CSR_MIDELEG].y);
+    } else if (addr == CSR_SATP) {
+        let mode = val.y >> 28u;
+        if (mode == 0u || mode == 8u) {
+            csrs[addr] = val;
+        }
     } else {
         csrs[addr] = val;
     }
@@ -435,6 +454,15 @@ fn do_sret() -> vec2<u32> {
 fn maybe_take_interrupt() {
     if (state.mtimecmp_low != 0u && state.mtime_low >= state.mtimecmp_low) {
         csrs[CSR_MIP].x = csrs[CSR_MIP].x | 0x80u; // MTIP
+    }
+
+    // Sstc: S-mode armed its own timer directly via the stimecmp CSR. Unlike the legacy SBI
+    // TIME extension path above (which raises MTIP so M-mode/OpenSBI can trap-and-forward to
+    // S-mode), Sstc's whole point is that hardware raises STIP (bit 5) directly — no M-mode
+    // involvement needed. Clearing is implicit: the condition goes false again once S-mode
+    // writes a larger stimecmp value, matching real Sstc semantics.
+    if (csrs[CSR_STIMECMP].x != 0u && state.mtime_low >= csrs[CSR_STIMECMP].x) {
+        csrs[CSR_MIP].x = csrs[CSR_MIP].x | 0x20u; // STIP
     }
 
     let pending_enabled = csrs[CSR_MIP].x & csrs[CSR_MIE].x;
@@ -1250,114 +1278,29 @@ fn decode_and_execute(instr: u32) {
         }
         if (valid && rd != 0u) { registers.x[rd] = result; }
 
-    } else if (opcode == 0x1Bu) {
-        // I-type ALU, 32-bit result sign-extended to 64 (addiw, slliw, srliw, sraiw)
-        let imm = sign_extend_12(instr >> 20u);
-        let shamt5 = (instr >> 20u) & 0x1Fu;
-        let top7 = instr >> 25u;
-        var result32: i32 = 0;
+    } else if (opcode == 0x63u) {
+        // Branch (beq, bne, blt, bge, bltu, bgeu)
+        let imm12 = ((instr >> 31u) << 12u) |
+                    (((instr >> 7u) & 0x1u) << 11u) |
+                    (((instr >> 25u) & 0x3Fu) << 5u) |
+                    (((instr >> 8u) & 0xFu) << 1u);
+        let imm = sign_extend_13(imm12);
+        let branch_target = u64_add(pc, sext_32_to_64(bitcast<i32>(imm)));
         if (funct3 == 0u) {
-            result32 = bitcast<i32>(rs1_val.x + imm); // addiw
-        } else if (funct3 == 1u && top7 == 0u) {
-            result32 = bitcast<i32>(rs1_val.x << shamt5); // slliw
-        } else if (funct3 == 5u && top7 == 0u) {
-            result32 = bitcast<i32>(rs1_val.x >> shamt5); // srliw
-        } else if (funct3 == 5u && top7 == 0x20u) {
-            result32 = bitcast<i32>(rs1_val.x) >> shamt5; // sraiw
-        } else {
-            valid = false;
-        }
-        if (valid && rd != 0u) { registers.x[rd] = sext_32_to_64(result32); }
-
-    } else if (opcode == 0x33u && funct7 == 0x01u) {
-        // M extension, 64-bit (mul, mulh, mulhsu, mulhu, div, divu, rem, remu)
-        var result = vec2<u32>(0u, 0u);
-        if (funct3 == 0u) {
-            result = u64_mul_low(rs1_val, rs2_val); // mul
+            if (u64_eq(rs1_val, rs2_val)) { next_pc = branch_target; } // beq
         } else if (funct3 == 1u) {
-            result = mul_high64(rs1_val, rs2_val, true, true); // mulh
-        } else if (funct3 == 2u) {
-            result = mul_high64(rs1_val, rs2_val, true, false); // mulhsu
-        } else if (funct3 == 3u) {
-            result = mul_high64(rs1_val, rs2_val, false, false); // mulhu
+            if (!u64_eq(rs1_val, rs2_val)) { next_pc = branch_target; } // bne
         } else if (funct3 == 4u) {
-            result = div_signed64(rs1_val, rs2_val); // div
+            if (u64_lt(rs1_val, rs2_val)) { next_pc = branch_target; } // blt
         } else if (funct3 == 5u) {
-            result = div_unsigned64(rs1_val, rs2_val); // divu
+            if (!u64_lt(rs1_val, rs2_val)) { next_pc = branch_target; } // bge
         } else if (funct3 == 6u) {
-            result = rem_signed64(rs1_val, rs2_val); // rem
+            if (u64_ltu(rs1_val, rs2_val)) { next_pc = branch_target; } // bltu
         } else if (funct3 == 7u) {
-            result = rem_unsigned64(rs1_val, rs2_val); // remu
+            if (!u64_ltu(rs1_val, rs2_val)) { next_pc = branch_target; } // bgeu
         } else {
             valid = false;
         }
-        if (valid && rd != 0u) { registers.x[rd] = result; }
-
-    } else if (opcode == 0x3Bu && funct7 == 0x01u) {
-        // M extension, W-suffix: mulw/divw/divuw/remw/remuw (32-bit op, sign-extended result)
-        var result32 = 0u;
-        if (funct3 == 0u) {
-            result32 = rs1_val.x * rs2_val.x; // mulw
-        } else if (funct3 == 4u) {
-            result32 = div_signed(rs1_val.x, rs2_val.x); // divw
-        } else if (funct3 == 5u) {
-            result32 = div_unsigned(rs1_val.x, rs2_val.x); // divuw
-        } else if (funct3 == 6u) {
-            result32 = rem_signed(rs1_val.x, rs2_val.x); // remw
-        } else if (funct3 == 7u) {
-            result32 = rem_unsigned(rs1_val.x, rs2_val.x); // remuw
-        } else {
-            valid = false;
-        }
-        if (valid && rd != 0u) { registers.x[rd] = sext_32_to_64(bitcast<i32>(result32)); }
-
-    } else if (opcode == 0x33u) {
-        // R-type ALU, 64-bit (add, sub, sll, slt, sltu, xor, srl, sra, or, and)
-        let shamt = rs2_val.x & 0x3Fu;
-        var result = vec2<u32>(0u, 0u);
-        if (funct3 == 0u && funct7 == 0u) {
-            result = u64_add(rs1_val, rs2_val); // add
-        } else if (funct3 == 0u && funct7 == 0x20u) {
-            result = u64_sub(rs1_val, rs2_val); // sub
-        } else if (funct3 == 1u && funct7 == 0u) {
-            result = u64_shl(rs1_val, shamt); // sll
-        } else if (funct3 == 2u && funct7 == 0u) {
-            result = vec2<u32>(select(0u, 1u, u64_lt(rs1_val, rs2_val)), 0u); // slt
-        } else if (funct3 == 3u && funct7 == 0u) {
-            result = vec2<u32>(select(0u, 1u, u64_ltu(rs1_val, rs2_val)), 0u); // sltu
-        } else if (funct3 == 4u && funct7 == 0u) {
-            result = vec2<u32>(rs1_val.x ^ rs2_val.x, rs1_val.y ^ rs2_val.y); // xor
-        } else if (funct3 == 5u && funct7 == 0u) {
-            result = u64_shr(rs1_val, shamt); // srl
-        } else if (funct3 == 5u && funct7 == 0x20u) {
-            result = u64_sar(rs1_val, shamt); // sra
-        } else if (funct3 == 6u && funct7 == 0u) {
-            result = vec2<u32>(rs1_val.x | rs2_val.x, rs1_val.y | rs2_val.y); // or
-        } else if (funct3 == 7u && funct7 == 0u) {
-            result = vec2<u32>(rs1_val.x & rs2_val.x, rs1_val.y & rs2_val.y); // and
-        } else {
-            valid = false;
-        }
-        if (valid && rd != 0u) { registers.x[rd] = result; }
-
-    } else if (opcode == 0x3Bu) {
-        // R-type ALU, W-suffix: addw, subw, sllw, srlw, sraw (32-bit op, sign-extended result)
-        let shamt5 = rs2_val.x & 0x1Fu;
-        var result32: i32 = 0;
-        if (funct3 == 0u && funct7 == 0u) {
-            result32 = bitcast<i32>(rs1_val.x + rs2_val.x); // addw
-        } else if (funct3 == 0u && funct7 == 0x20u) {
-            result32 = bitcast<i32>(rs1_val.x - rs2_val.x); // subw
-        } else if (funct3 == 1u && funct7 == 0u) {
-            result32 = bitcast<i32>(rs1_val.x << shamt5); // sllw
-        } else if (funct3 == 5u && funct7 == 0u) {
-            result32 = bitcast<i32>(rs1_val.x >> shamt5); // srlw
-        } else if (funct3 == 5u && funct7 == 0x20u) {
-            result32 = bitcast<i32>(rs1_val.x) >> shamt5; // sraw
-        } else {
-            valid = false;
-        }
-        if (valid && rd != 0u) { registers.x[rd] = sext_32_to_64(result32); }
 
     } else if (opcode == 0x03u) {
         // Load: lb/lh/lw/lbu/lhu/ld/lwu (funct3 = 0/1/2/4/5/3/6)
@@ -1370,8 +1313,15 @@ fn decode_and_execute(instr: u32) {
             valid = false;
         } else {
             let translated = translate_address(addr, false, false);
+            let mm_phys = mmio_read(translated.x);
             if (translated.y != 0u) {
                 next_pc = raise_trap(13u, addr, vec2<u32>(state.pc_low, state.pc_high)); // load page fault
+            } else if (mm_phys.y != 0u) {
+                // MMIO device reached via a translated (non-identity) virtual mapping — the
+                // check above only catches identity/raw-physical MMIO accesses. Any MMU-
+                // enabled guest OS maps devices into virtual address space once paging is on,
+                // so this path is not an edge case.
+                if (rd != 0u) { registers.x[rd] = vec2<u32>(mm_phys.x, 0u); }
             } else if (translated.x < state.ram_base_low) {
                 next_pc = raise_trap(5u, addr, vec2<u32>(state.pc_low, state.pc_high)); // load access fault
             } else {
@@ -1431,6 +1381,9 @@ fn decode_and_execute(instr: u32) {
             let translated = translate_address(addr, true, false);
             if (translated.y != 0u) {
                 next_pc = raise_trap(15u, addr, vec2<u32>(state.pc_low, state.pc_high)); // store/AMO page fault
+            } else if (mmio_write(translated.x, rs2_val.x)) {
+                // MMIO device reached via a translated (non-identity) virtual mapping — see
+                // the matching comment in the load path above.
             } else if (translated.x < state.ram_base_low) {
                 next_pc = raise_trap(7u, addr, vec2<u32>(state.pc_low, state.pc_high)); // store access fault
             } else {
@@ -1451,6 +1404,115 @@ fn decode_and_execute(instr: u32) {
                 }
             }
         }
+
+    } else if (opcode == 0x33u && funct7 == 0x01u) {
+        // M extension, 64-bit (mul, mulh, mulhsu, mulhu, div, divu, rem, remu)
+        var result = vec2<u32>(0u, 0u);
+        if (funct3 == 0u) {
+            result = u64_mul_low(rs1_val, rs2_val); // mul
+        } else if (funct3 == 1u) {
+            result = mul_high64(rs1_val, rs2_val, true, true); // mulh
+        } else if (funct3 == 2u) {
+            result = mul_high64(rs1_val, rs2_val, true, false); // mulhsu
+        } else if (funct3 == 3u) {
+            result = mul_high64(rs1_val, rs2_val, false, false); // mulhu
+        } else if (funct3 == 4u) {
+            result = div_signed64(rs1_val, rs2_val); // div
+        } else if (funct3 == 5u) {
+            result = div_unsigned64(rs1_val, rs2_val); // divu
+        } else if (funct3 == 6u) {
+            result = rem_signed64(rs1_val, rs2_val); // rem
+        } else if (funct3 == 7u) {
+            result = rem_unsigned64(rs1_val, rs2_val); // remu
+        } else {
+            valid = false;
+        }
+        if (valid && rd != 0u) { registers.x[rd] = result; }
+
+    } else if (opcode == 0x33u) {
+        // R-type ALU, 64-bit (add, sub, sll, slt, sltu, xor, srl, sra, or, and)
+        let shamt = rs2_val.x & 0x3Fu;
+        var result = vec2<u32>(0u, 0u);
+        if (funct3 == 0u && funct7 == 0u) {
+            result = u64_add(rs1_val, rs2_val); // add
+        } else if (funct3 == 0u && funct7 == 0x20u) {
+            result = u64_sub(rs1_val, rs2_val); // sub
+        } else if (funct3 == 1u && funct7 == 0u) {
+            result = u64_shl(rs1_val, shamt); // sll
+        } else if (funct3 == 2u && funct7 == 0u) {
+            result = vec2<u32>(select(0u, 1u, u64_lt(rs1_val, rs2_val)), 0u); // slt
+        } else if (funct3 == 3u && funct7 == 0u) {
+            result = vec2<u32>(select(0u, 1u, u64_ltu(rs1_val, rs2_val)), 0u); // sltu
+        } else if (funct3 == 4u && funct7 == 0u) {
+            result = vec2<u32>(rs1_val.x ^ rs2_val.x, rs1_val.y ^ rs2_val.y); // xor
+        } else if (funct3 == 5u && funct7 == 0u) {
+            result = u64_shr(rs1_val, shamt); // srl
+        } else if (funct3 == 5u && funct7 == 0x20u) {
+            result = u64_sar(rs1_val, shamt); // sra
+        } else if (funct3 == 6u && funct7 == 0u) {
+            result = vec2<u32>(rs1_val.x | rs2_val.x, rs1_val.y | rs2_val.y); // or
+        } else if (funct3 == 7u && funct7 == 0u) {
+            result = vec2<u32>(rs1_val.x & rs2_val.x, rs1_val.y & rs2_val.y); // and
+        } else {
+            valid = false;
+        }
+        if (valid && rd != 0u) { registers.x[rd] = result; }
+
+    } else if (opcode == 0x3Bu && funct7 == 0x01u) {
+        // M extension, W-suffix: mulw/divw/divuw/remw/remuw (32-bit op, sign-extended result)
+        var result32 = 0u;
+        if (funct3 == 0u) {
+            result32 = rs1_val.x * rs2_val.x; // mulw
+        } else if (funct3 == 4u) {
+            result32 = div_signed(rs1_val.x, rs2_val.x); // divw
+        } else if (funct3 == 5u) {
+            result32 = div_unsigned(rs1_val.x, rs2_val.x); // divuw
+        } else if (funct3 == 6u) {
+            result32 = rem_signed(rs1_val.x, rs2_val.x); // remw
+        } else if (funct3 == 7u) {
+            result32 = rem_unsigned(rs1_val.x, rs2_val.x); // remuw
+        } else {
+            valid = false;
+        }
+        if (valid && rd != 0u) { registers.x[rd] = sext_32_to_64(bitcast<i32>(result32)); }
+
+    } else if (opcode == 0x3Bu) {
+        // R-type ALU, W-suffix: addw, subw, sllw, srlw, sraw (32-bit op, sign-extended result)
+        let shamt5 = rs2_val.x & 0x1Fu;
+        var result32: i32 = 0;
+        if (funct3 == 0u && funct7 == 0u) {
+            result32 = bitcast<i32>(rs1_val.x + rs2_val.x); // addw
+        } else if (funct3 == 0u && funct7 == 0x20u) {
+            result32 = bitcast<i32>(rs1_val.x - rs2_val.x); // subw
+        } else if (funct3 == 1u && funct7 == 0u) {
+            result32 = bitcast<i32>(rs1_val.x << shamt5); // sllw
+        } else if (funct3 == 5u && funct7 == 0u) {
+            result32 = bitcast<i32>(rs1_val.x >> shamt5); // srlw
+        } else if (funct3 == 5u && funct7 == 0x20u) {
+            result32 = bitcast<i32>(rs1_val.x) >> shamt5; // sraw
+        } else {
+            valid = false;
+        }
+        if (valid && rd != 0u) { registers.x[rd] = sext_32_to_64(result32); }
+
+    } else if (opcode == 0x1Bu) {
+        // I-type ALU, 32-bit result sign-extended to 64 (addiw, slliw, srliw, sraiw)
+        let imm = sign_extend_12(instr >> 20u);
+        let shamt5 = (instr >> 20u) & 0x1Fu;
+        let top7 = instr >> 25u;
+        var result32: i32 = 0;
+        if (funct3 == 0u) {
+            result32 = bitcast<i32>(rs1_val.x + imm); // addiw
+        } else if (funct3 == 1u && top7 == 0u) {
+            result32 = bitcast<i32>(rs1_val.x << shamt5); // slliw
+        } else if (funct3 == 5u && top7 == 0u) {
+            result32 = bitcast<i32>(rs1_val.x >> shamt5); // srliw
+        } else if (funct3 == 5u && top7 == 0x20u) {
+            result32 = bitcast<i32>(rs1_val.x) >> shamt5; // sraiw
+        } else {
+            valid = false;
+        }
+        if (valid && rd != 0u) { registers.x[rd] = sext_32_to_64(result32); }
 
     } else if (opcode == 0x2Fu) {
         // A extension: lr.w/sc.w/amo*.w (funct3=010) and lr.d/sc.d/amo*.d (funct3=011)
@@ -1645,30 +1707,6 @@ fn decode_and_execute(instr: u32) {
         if (rd != 0u) { registers.x[rd] = next_pc; }
         next_pc = u64_add(pc, sext_32_to_64(bitcast<i32>(imm)));
 
-    } else if (opcode == 0x63u) {
-        // Branch (beq, bne, blt, bge, bltu, bgeu)
-        let imm12 = ((instr >> 31u) << 12u) |
-                    (((instr >> 7u) & 0x1u) << 11u) |
-                    (((instr >> 25u) & 0x3Fu) << 5u) |
-                    (((instr >> 8u) & 0xFu) << 1u);
-        let imm = sign_extend_13(imm12);
-        let branch_target = u64_add(pc, sext_32_to_64(bitcast<i32>(imm)));
-        if (funct3 == 0u) {
-            if (u64_eq(rs1_val, rs2_val)) { next_pc = branch_target; } // beq
-        } else if (funct3 == 1u) {
-            if (!u64_eq(rs1_val, rs2_val)) { next_pc = branch_target; } // bne
-        } else if (funct3 == 4u) {
-            if (u64_lt(rs1_val, rs2_val)) { next_pc = branch_target; } // blt
-        } else if (funct3 == 5u) {
-            if (!u64_lt(rs1_val, rs2_val)) { next_pc = branch_target; } // bge
-        } else if (funct3 == 6u) {
-            if (u64_ltu(rs1_val, rs2_val)) { next_pc = branch_target; } // bltu
-        } else if (funct3 == 7u) {
-            if (!u64_ltu(rs1_val, rs2_val)) { next_pc = branch_target; } // bgeu
-        } else {
-            valid = false;
-        }
-
     } else {
         valid = false;
     }
@@ -1705,7 +1743,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         // would otherwise cost tens to hundreds of millions of emulated instructions before
         // OpenSBI reaches its first UART write. Advance mtime by a large scale factor per
         // instruction instead of 1:1 so such waits resolve in a realistic instruction budget.
+        let mtime_low_prev = state.mtime_low;
         state.mtime_low = state.mtime_low + 1024u;
+        if (state.mtime_low < mtime_low_prev) {
+            state.mtime_high = state.mtime_high + 1u;
+        }
         maybe_take_interrupt();
         if (state.halted != 0u) {
             break;

@@ -43,17 +43,24 @@ def load_bytes_local(linear_arr, addr, data):
     linear_arr[idx:idx + len(arr)] = arr
 
 def main():
-    print("Starting fast Alpine OpenSBI boot test...", flush=True)
+    print("Starting Alpine OpenSBI boot test...", flush=True)
     kernel_path = '/home/jericho/projects/zion/apps/linux/alpine/alpine-riscv64.lnx.bin'
+    opensbi_path = '/usr/share/qemu/opensbi-riscv64-generic-fw_dynamic.bin'
     mem_size = 64 * 1024 * 1024
     mem_len = mem_size // 4
     
     lut_cache = "tools/hilbert_lut_64M.npy"
+    print("Loading Hilbert LUT from cache...", flush=True)
     lut = np.load(lut_cache)
 
     core = SpatialRV64ICore(mem_size)
     core.set_ram_base(0x80000000)
     linear_arr = np.zeros(mem_size // 4, dtype=np.uint32)
+
+    with open(opensbi_path, 'rb') as f:
+        opensbi_raw = f.read()
+    opensbi_addr = 0x80000000
+    load_bytes_local(linear_arr, opensbi_addr, opensbi_raw)
 
     with open(kernel_path, 'rb') as f:
         raw_data = f.read()
@@ -67,10 +74,6 @@ def main():
     dtb_addr = 0x82000000
     load_bytes_local(linear_arr, dtb_addr, dtb)
 
-    info_addr = 0x80100000
-    info = struct.pack('<QQQQQQ', 0x4942534f, 0x2, kernel_addr, 0x1, 0x0, 0x0)
-    load_bytes_local(linear_arr, info_addr, info)
-
     print("Mapping memory...", flush=True)
     spatial_arr = np.zeros(mem_len, dtype=np.uint32)
     for d in range(mem_len):
@@ -80,28 +83,18 @@ def main():
     core.queue.write_buffer(core.memory.buffer, 0, spatial_arr.tobytes())
 
     state_arr = np.array([
-        0x80200000, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x80000000, 0, 0, 0, 0, 0, 0, 0, 0
+        0x80000000, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x80000000, 0, 0, 0, 0, 0, 0, 0, 0
     ], dtype=np.uint32)
     core.queue.write_buffer(core.state_buffer, 0, state_arr.tobytes())
 
     core.write_register(10, 0)
     core.write_register(11, dtb_addr)
-    core.write_register(12, info_addr)
-
-    # SET MEDELEG AND MIDELEG to allow S-mode traps!
-    core.write_csr(0x302, 0xffff) # medeleg
-    core.write_csr(0x303, 0xffff) # mideleg
 
     print("Executing...", flush=True)
     
-    steps_per_iter = 100000
-    
-    for i in range(1, 10001):
+    for i in range(1, 2000):
         t0 = time.time()
-        for _ in range(20):
-            core.step(steps_per_iter)
-        
-        state = core.get_state()
+        core.step(200000)
         t1 = time.time()
         
         uart = core.read_uart_output()
@@ -109,9 +102,11 @@ def main():
             sys.stdout.buffer.write(uart)
             sys.stdout.flush()
 
-        print(f"\n[Iter {i}] PC: 0x{state['pc_low']:08x} Mode: {state['mode']} Halted: {state['halted']} ({t1-t0:.4f}s)", flush=True)
+        state = core.get_state()
         if state['halted']:
-            print(f"Halted. mcause: 0x{core.read_csr(0x342):08x}")
+            print(f"\nHalted. mcause: 0x{core.read_csr(0x342):08x}, pc: 0x{state['pc_low']:08x}")
             break
+            
+        print(f"[Iter {i}] PC: 0x{state['pc_low']:08x} Mode: {state['mode']} ({t1-t0:.4f}s)", flush=True)
 
 main()

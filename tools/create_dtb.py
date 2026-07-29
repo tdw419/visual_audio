@@ -149,13 +149,32 @@ def build_device_tree(ram_base: int, ram_size: int, uart_base: int,
     chosen.prop_str('bootargs', bootargs)
     chosen.prop_str('stdout-path', uart_path)
     
-    # Add kernel/initrd addresses for fw_jump.bin
-    # fw_jump.bin looks for 'riscv,kernel' and 'riscv,initrd-start' in /chosen
-    if kernel_addr is not None:
-        chosen.prop_u64('riscv,kernel', kernel_addr)
+    # NOTE: there is no standard DTB property for the kernel's own load address — the kernel
+    # is already executing by the time it parses this DTB (fw_jump just jumps to a fixed,
+    # compile-time offset; confirmed via `strings` on the real binary that it references no
+    # such property). kernel_addr is accepted for caller convenience/documentation only and
+    # intentionally not written here. What Linux *does* read from /chosen, per the real
+    # device-tree bindings, is 'linux,initrd-start'/'linux,initrd-end' (not a 'riscv,' prefix
+    # — that was a previous, unverified guess that doesn't match any real binding).
     if initrd_addr is not None and initrd_size is not None:
-        chosen.prop_u64('riscv,initrd-start', initrd_addr)
-        chosen.prop_u64('riscv,initrd-end', initrd_addr + initrd_size)
+        chosen.prop_u64('linux,initrd-start', initrd_addr)
+        chosen.prop_u64('linux,initrd-end', initrd_addr + initrd_size)
+
+    # OpenSBI's own firmware + RW/scratch footprint (per its printed Domain0 Region02/03:
+    # 0x80000000-0x8004ffff, PMP-protected M-mode-only, no S/U access) sits inside the RAM
+    # range declared below but the kernel has no way to know that without this node. Without
+    # it, the kernel's memblock/resource-tree init treats the whole `memory@...` range as
+    # free RAM, tries to claim/touch OpenSBI's protected region, and (observed) can spin
+    # forever in resource-conflict retry logic instead of erroring out cleanly. 320KB rounds
+    # generously past OpenSBI's reported ~317KB firmware size.
+    opensbi_reserved_size = 0x50000  # 320KB, covers Region02+Region03 (0x80000000-0x8004ffff)
+    reserved = root.child('reserved-memory')
+    reserved.prop_u32('#address-cells', 2)
+    reserved.prop_u32('#size-cells', 2)
+    reserved.prop('ranges')
+    opensbi_mem = reserved.child(f'opensbi@{ram_base:x}')
+    opensbi_mem.prop_u64('reg', ram_base, opensbi_reserved_size)
+    opensbi_mem.prop('no-map')
 
     mem = root.child(f'memory@{ram_base:x}')
     mem.prop_str('device_type', 'memory')
