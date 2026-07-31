@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 """
-va_container.py — The Visual Audio single-file container.
+va_container.py -- The Visual Audio single-file container.
 
 One lossless MKV (FFV1, RGB24, 450x450 frames) holds the whole project:
 spec docs, codec rules, state, and content. The file grows as the project
 grows, and the file IS the product.
+
+PERFORMANCE NOTE: Every add/update operation re-encodes the entire container
+via FFmpeg, which takes 55-90+ seconds at current size (~900MB, 12,597+ frames).
+This cost scales linearly with container size. Plan timeouts accordingly when
+running these operations programmatically.
 
 Layout (per docs/research/485_visual_audio_to_software123.txt):
   Frame 0:  Directory — self-describing JSON (magic, version, entry table).
@@ -71,18 +76,52 @@ def frame_to_chunk(frame_array: np.ndarray) -> bytes:
 
 
 def write_frames(frames: list, out_path: Path) -> None:
+    """Encode frames to out_path atomically: encode to a sibling temp file,
+    then rename over the target. A killed/failed encode can never leave
+    out_path truncated or partially written, since the rename is the only
+    step that touches the real path and only happens after a clean exit."""
+    out_path = Path(out_path)
+    tmp_path = out_path.with_suffix(out_path.suffix + ".tmp")
+
     cmd = [
         FFMPEG, "-y", "-loglevel", "error",
         "-f", "rawvideo", "-pix_fmt", "rgb24",
         "-s", f"{FRAME_SIZE}x{FRAME_SIZE}", "-r", "1", "-i", "-",
-        "-c:v", "ffv1", "-pix_fmt", "rgb24", str(out_path),
+        "-c:v", "ffv1", "-pix_fmt", "rgb24", "-f", "matroska", str(tmp_path),
     ]
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
-    for f in frames:
-        proc.stdin.write(f.tobytes())
-    proc.stdin.close()
+    try:
+        for f in frames:
+            proc.stdin.write(f.tobytes())
+        proc.stdin.close()
+    except BrokenPipeError:
+        proc.wait()
+        tmp_path.unlink(missing_ok=True)
+        raise RuntimeError("ffmpeg encode failed (broken pipe)")
+
     if proc.wait() != 0:
+        tmp_path.unlink(missing_ok=True)
         raise RuntimeError("ffmpeg encode failed")
+
+    # Verify the encode round-trips to the expected frame count before
+    # committing, so a silently-truncated encode never gets promoted.
+    # Uses ffprobe's frame count rather than re-decoding and buffering the
+    # full raw stream (which for a multi-GB container doubles peak memory
+    # on top of the frames already held by the caller).
+    probe = subprocess.run([
+        "ffprobe", "-v", "error", "-count_frames", "-select_streams", "v:0",
+        "-show_entries", "stream=nb_read_frames",
+        "-of", "default=nokey=1:noprint_wrappers=1", str(tmp_path),
+    ], capture_output=True, text=True)
+    actual_frames = int(probe.stdout.strip() or -1)
+    if actual_frames != len(frames):
+        tmp_path.unlink(missing_ok=True)
+        raise RuntimeError(
+            f"ffmpeg encode produced {actual_frames} frames, "
+            f"expected {len(frames)}; discarding"
+        )
+
+    tmp_path.replace(out_path)
 
 
 def read_frames(mkv_path: Path) -> list:
@@ -93,6 +132,36 @@ def read_frames(mkv_path: Path) -> list:
     raw = subprocess.run(cmd, capture_output=True, check=True).stdout
     if len(raw) % FRAME_BYTES != 0:
         raise ValueError(f"raw stream {len(raw)} bytes is not a multiple of {FRAME_BYTES}")
+    return [
+        np.frombuffer(raw[i : i + FRAME_BYTES], dtype=np.uint8).reshape(FRAME_SIZE, FRAME_SIZE, 3)
+        for i in range(0, len(raw), FRAME_BYTES)
+    ]
+
+
+def read_frame_range(mkv_path: Path, start: int, count: int) -> list:
+    """Decode only frames [start, start+count) instead of the whole container.
+
+    FFV1 here is intra-only (every frame is its own keyframe, 1 fps), so
+    placing -ss before -i does an exact, cheap keyframe seek straight to
+    `start` without decoding anything before it. This keeps memory use
+    proportional to the entry being read, not to total container size --
+    read_frames()/load_container() below scale with the whole file and
+    become the dominant cost once a container reaches a few GB.
+    """
+    if count <= 0:
+        return []
+    cmd = [
+        FFMPEG, "-loglevel", "error",
+        "-ss", str(start), "-i", str(mkv_path),
+        "-frames:v", str(count),
+        "-f", "rawvideo", "-pix_fmt", "rgb24", "-",
+    ]
+    raw = subprocess.run(cmd, capture_output=True, check=True).stdout
+    if len(raw) != count * FRAME_BYTES:
+        raise ValueError(
+            f"expected {count} frames ({count * FRAME_BYTES} bytes) starting at {start}, "
+            f"got {len(raw)} bytes"
+        )
     return [
         np.frombuffer(raw[i : i + FRAME_BYTES], dtype=np.uint8).reshape(FRAME_SIZE, FRAME_SIZE, 3)
         for i in range(0, len(raw), FRAME_BYTES)
@@ -111,6 +180,27 @@ def load_container(mkv_path: Path):
     if directory.get("magic") != DIR_MAGIC:
         raise ValueError(f"not a VAC1 container: {mkv_path}")
     return directory, frames
+
+
+def read_directory(mkv_path: Path) -> dict:
+    """Read just the directory (frame 0) without decoding the rest of the container."""
+    frames = read_frame_range(mkv_path, 0, 1)
+    directory = json.loads(frame_to_chunk(frames[0]))
+    if directory.get("magic") != DIR_MAGIC:
+        raise ValueError(f"not a VAC1 container: {mkv_path}")
+    return directory
+
+
+def read_entry_streamed(mkv_path: Path, directory: dict, name: str) -> bytes:
+    """Read a single entry by seeking straight to its frame range, without
+    decoding the rest of the container (see read_frame_range)."""
+    for e in directory["entries"]:
+        if e["name"] == name:
+            start, count = e["frames"]
+            frames = read_frame_range(mkv_path, start, count)
+            payload = b"".join(frame_to_chunk(f) for f in frames)
+            return payload[: e["length"]]
+    raise KeyError(f"no such entry: {name}")
 
 
 def save_container(directory: dict, payload_frames: list, mkv_path: Path) -> None:
@@ -174,8 +264,9 @@ def cmd_add(args):
 
 
 def cmd_cat(args):
-    directory, frames = load_container(Path(args.container))
-    payload = read_entry(directory, frames, args.name)
+    path = Path(args.container)
+    directory = read_directory(path)
+    payload = read_entry_streamed(path, directory, args.name)
     if args.output:
         Path(args.output).write_bytes(payload)
         print(f"wrote {len(payload)} bytes to {args.output}")
@@ -184,7 +275,7 @@ def cmd_cat(args):
 
 
 def cmd_ls(args):
-    directory, _ = load_container(Path(args.container))
+    directory = read_directory(Path(args.container))
     print(f"{args.container}: VAC1 v{directory['version']}, "
           f"{len(directory['entries'])} entries")
     for e in directory["entries"]:
@@ -196,10 +287,11 @@ def cmd_ls(args):
 
 
 def cmd_verify(args):
-    directory, frames = load_container(Path(args.container))
+    path = Path(args.container)
+    directory = read_directory(path)
     failures = 0
     for e in directory["entries"]:
-        payload = read_entry(directory, frames, e["name"])  # raises on bad CRC
+        payload = read_entry_streamed(path, directory, e["name"])  # raises on bad CRC
         ok = hashlib.sha256(payload).hexdigest() == e["sha256"]
         print(f"  {'OK  ' if ok else 'FAIL'} {e['name']} ({e['length']} bytes)")
         failures += not ok
