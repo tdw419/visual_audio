@@ -1,0 +1,46 @@
+[package]
+name = "virtio_pixel_rs"
+version = "0.1.0"
+edition = "2021"
+authors = ["Jericho <tdw419@github.com>"]
+description = "VirtIO Pixel vhost-user-blk backend with spatial MKV storage and WGPU Hilbert decoding"
+
+[lib]
+name = "virtio_pixel_rs"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "virtio_pixel_backend"
+path = "src/main.rs"
+
+[dependencies]
+# vhost-user-backend: Official rust-vmm vhost-user implementation
+vhost-user-backend = "0.13"
+vhost = { version = "0.11", features = ["vhost-user-backend"] }
+virtio-queue = "0.12"
+vm-memory = "0.14"
+
+# WGPU for Hilbert pixel decoding
+wgpu = "0.20"
+pollster = "0.3"  # Async runtime for WGPU
+
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+
+# Utilities
+thiserror = "1.0"
+anyhow = "1.0"
+log = "0.4"
+env_logger = "0.11"
+memmap2 = "0.9"
+nix = { version = "0.28", features = ["socket", "uio", "fs"] }  # FD passing, recvmsg for SET_MEM_TABLE
+
+# Image loading for MKV frame extraction
+image = "0.24"
+
+# Temporary file handling for MKV frame extraction
+tempfile = "3.8"
+
+[dev-dependencies]
+tempfile = "3.8"
