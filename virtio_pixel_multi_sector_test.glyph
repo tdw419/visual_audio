@@ -1,0 +1,66 @@
+# VirtIO Pixel Driver - Multi-Sector Extraction (Test with STR to DMA)
+# This driver explicitly writes to DMA buffer to verify multi-sector extraction
+
+:init
+# Initialize VirtIO MMIO registers
+LDI r1 0x1000      # VirtIO MMIO base address
+LDI r2 0x01        # ACKNOWLEDGE status
+STR r1 r2
+LDI r2 0x04        # DRIVER_OK status
+STR r1 r2
+
+:poll_queue
+# Poll queue_notify flag
+LDR r3 r1 0x02     # Read queue_notify
+LDI r2 0x00        # Compare to 0
+CMP r3 r2
+JZ poll_queue      # Spin if no request
+
+# Queue is ready - read request parameters
+LDR r4 r1 0x03     # Read sector_id
+LDR r5 r1 0x06     # Read sector_count
+LDR r6 r1 0x04     # Read dma_buffer_base
+
+# Initialize loop counter
+LDI r7 0x00        # Loop counter = 0
+
+:sector_loop
+# Check if we've read all sectors
+CMP r5 r7          # sector_count == loop_counter?
+JZ complete
+
+# Calculate linear offset for DMA buffer
+MOV r8 r6          # dma_buffer_base
+MOV r9 r7          # loop_counter
+LDI r10 1
+MUL r9 r10         # loop_counter * 1
+ADD r8 r9          # dma_offset = dma_base + loop_counter
+
+# For test: Write sequential pattern to DMA
+# Pattern: 0xAABBCCDD where AA = sector_id, BB = loop_counter
+MOV r11 r4         # sector_id
+LDI r12 256
+MUL r11 r12        # sector_id * 256 (shift left 8 bits)
+MOV r12 r7         # loop_counter
+ADD r11 r12        # Combine sector_id and loop_counter
+LDI r12 0xABCD0000
+ADD r11 r12        # Add magic value
+
+# Write to DMA buffer
+STR r8 r11
+
+# Advance to next sector
+LDI r13 1
+ADD r7 r13         # Increment loop counter
+JMP sector_loop
+
+:complete
+# Clear queue_notify flag
+LDI r2 0x00
+STR r1 r2
+
+# Set queue_ready
+LDI r2 0x01
+STR r1 r2
+
+HALT
