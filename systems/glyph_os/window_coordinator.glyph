@@ -1,0 +1,69 @@
+┌────────────────────────────────────────────────────────────┐
+│  SPATIAL PROGRAM COORDINATOR (WINDOW CONTAINER)           │
+│  Native Glyph Assembly (.glyph)                           │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│   :init                                                    │
+│   LDI r0, 100          ; X position                        │
+│   LDI r1, 100          ; Y position                        │
+│   LDI r2, 640          ; Width                             │
+│   LDI r3, 480          ; Height                            │
+│   LDI r4, 0            ; Drag state (0=idle, 1=dragging)   │
+│   LDI r5, 0            ; Last Mouse X                      │
+│   LDI r6, 0            ; Last Mouse Y                      │
+│                                                            │
+│   :event_loop                                              │
+│   ; Read system input registers (Mouse)                    │
+│   SYS_READ r10, 0x10   ; Read Mouse X into r10             │
+│   SYS_READ r11, 0x11   ; Read Mouse Y into r11             │
+│   SYS_READ r12, 0x12   ; Read Mouse Button state into r12  │
+│                                                            │
+│   ; Check if currently dragging                            │
+│   JZ r4, :check_click  ; If not dragging, check for new click
+│                                                            │
+│   ; Dragging logic: Update position based on mouse delta   │
+│   :update_drag                                             │
+│   JZ r12, :stop_drag   ; If mouse button released, stop drag
+│   SUB r7, r10, r5      ; r7 = Mouse X - Last Mouse X       │
+│   SUB r8, r11, r6      ; r8 = Mouse Y - Last Mouse Y       │
+│   ADD r0, r0, r7       ; X = X + delta_x                   │
+│   ADD r1, r1, r8       ; Y = Y + delta_y                   │
+│   MOV r5, r10          ; Last Mouse X = Mouse X            │
+│   MOV r6, r11          ; Last Mouse Y = Mouse Y            │
+│   JMP :render                                              │
+│                                                            │
+│   :stop_drag                                               │
+│   LDI r4, 0            ; Clear drag state                  │
+│   JMP :render                                              │
+│                                                            │
+│   :check_click                                             │
+│   JZ r12, :render      ; If no click, skip to render       │
+│                                                            │
+│   ; Hit-test: Is mouse inside window bounds?               │
+│   ; Check X >= r0 and X <= r0 + r2                         │
+│   SUB r7, r10, r0      ; r7 = Mouse X - Window X           │
+│   JL r7, 0, :render    ; If Mouse X < Window X, outside    │
+│   SUB r8, r2, r7       ; r8 = Width - (Mouse X - Window X) │
+│   JL r8, 0, :render    ; If (Mouse X - Window X) > Width, outside
+│                                                            │
+│   ; Check Y >= r1 and Y <= r1 + r3                         │
+│   SUB r7, r11, r1      ; r7 = Mouse Y - Window Y           │
+│   JL r7, 0, :render    ; If Mouse Y < Window Y, outside    │
+│   SUB r8, r3, r7       ; r8 = Height - (Mouse Y - Window Y)│
+│   JL r8, 0, :render    ; If (Mouse Y - Window Y) > Height, outside
+│                                                            │
+│   ; Hit confirmed! Start drag.                             │
+│   :start_drag                                              │
+│   LDI r4, 1            ; Set drag state to 1               │
+│   MOV r5, r10          ; Store initial drag Mouse X        │
+│   MOV r6, r11          ; Store initial drag Mouse Y        │
+│                                                            │
+│   :render                                                  │
+│   ; Trigger patch-and-copy render cycle (Visual VCC)       │
+│   ; Coordinates in r0, r1, bounds in r2, r3                │
+│   SYS_CALL 0x01        ; Draw Window Frame primitive       │
+│   JMP :event_loop      ; Loop indefinitely                 │
+│                                                            │
+├────────────────────────────────────────────────────────────┤
+│   Output: Interactive Spatial Region                       │
+└────────────────────────────────────────────────────────────┘

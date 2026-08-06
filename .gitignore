@@ -112,3 +112,4 @@ traces/evolver_full/
 # Autonomous repo artifacts
 autonomous_repo_orchestrator/
 systems/*.mkv
+sync/node_modules/
