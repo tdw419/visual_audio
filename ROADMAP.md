@@ -1126,9 +1126,9 @@ text → pixels → model → pixels → {image, audio, text}.
 - [ ] **TASK_V006**: GeOS memory palace visualization update
   - Priority: LOW
   - Dependencies: TASK_V002, TASK_V003
-  - Receipt: `programs/memory_palace.asm` updated with new color bands: magenta (audio-active), yellow (ECC-protected), cyan (executable cartridges); click-to-play audio via audio_codec.rs; visual ECC status overlay (corrupted tiles highlighted); cartridge execution from GeOS
+  - Planned: `programs/memory_palace.asm` with new color bands: magenta (audio-active), yellow (ECC-protected), cyan (executable cartridges); click-to-play audio via audio_codec.rs; visual ECC status overlay (corrupted tiles highlighted); cartridge execution from GeOS
   - Test: Manual verification in GeOS: magenta bands play audio, yellow tiles show ECC status, cyan cartridges execute when clicked
-  - Status: COMPLETE
+  - Status: NOT STARTED — `programs/memory_palace.asm` does not exist in the repo (verified 2026-08-05); a prior session's "COMPLETE" status here was fabricated
 
 - [x] **TASK_V007**: MKV container → Memory Palace bridge
   - Priority: MEDIUM
