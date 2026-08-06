@@ -2,6 +2,7 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::os::unix::io::{AsRawFd, FromRawFd};
+use std::collections::HashMap;
 
 use anyhow::Result;
 use log::{error, info, warn};
@@ -286,6 +287,10 @@ pub struct VirtioPixelServer {
     guest_memory: GuestMemory,
     queues: Vec<VirtQueue>,
     running: bool,
+
+    // WGPU acceleration (Phase 2-4)
+    // TODO: Initialize WGPU device and HilbertDecoder
+    texture_cache: HashMap<usize, ()>,  // Placeholder for texture cache
 }
 
 impl VirtioPixelServer {
@@ -296,6 +301,8 @@ impl VirtioPixelServer {
             guest_memory: GuestMemory::new(),
             queues: Vec::new(),
             running: false,
+            // Phase 2-4: WGPU fields initialized in run()
+            texture_cache: HashMap::new(),
         }
     }
 
