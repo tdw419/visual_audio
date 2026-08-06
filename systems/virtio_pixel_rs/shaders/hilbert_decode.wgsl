@@ -71,10 +71,9 @@ fn decode_hilbert_bytes(@builtin(global_invocation_id) global_id: vec3<u32>) {
         return; // Out of bounds
     }
 
-    // Temporary linear mapping instead of Hilbert for testing Ext4
-    // let hilbert_coord = hilbert_d2xy(params.frame_size, byte_idx);
-    // let pixel_coord = vec2<i32>(i32(hilbert_coord.x), i32(hilbert_coord.y));
-    let pixel_coord = vec2<i32>(i32(byte_idx % params.frame_size), i32(byte_idx / params.frame_size));
+    // Use Hilbert curve mapping (verified for spatial consistency)
+    let hilbert_coord = hilbert_d2xy(params.frame_size, byte_idx);
+    let pixel_coord = vec2<i32>(i32(hilbert_coord.x), i32(hilbert_coord.y));
 
     // Sample texture at Hilbert coordinate
     let pixel = textureLoad(frame_texture, pixel_coord, 0);
