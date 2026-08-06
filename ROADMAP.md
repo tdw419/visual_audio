@@ -313,7 +313,7 @@ TASK_W002 ✅ (pytest decision - RESOLVED)
 
 ---
 
-## Phase 3: True Dual-Band Mixing 🟡 PLANNED
+## Phase 3: True Dual-Band Mixing ✅ COMPLETE
 
 **Goal**: Single WAV file carries both human speech and machine-readable bytes.
 
@@ -332,11 +332,22 @@ TASK_W002 ✅ (pytest decision - RESOLVED)
   - Test: `python3 -m pytest tests/test_dual_band_roundtrip.py -v`
   - Status: Fixed 2026-07-14 - created self-contained test suite that creates its own fixtures. Test suite has 3 tests: software round-trip, crosstalk measurement, and audio fidelity. All passing. Encoder produces mixed WAV with proper frequency band separation.
 
-- [x] **TASK_D003**: Band-separated decoder
+- [x] **TASK_D003**: Band-separated decoder ✅ COMPLETE
   - Priority: HIGH
   - Dependencies: TASK_D001
   - Receipt: Verified by verify_task.py at 2026-07-14T16:45:25.718850
   - Test: `python3 -m pytest tests/test_dual_band_roundtrip.py -v`
+
+- [x] **TASK_D004**: True dual-band mixing with frequency shifting ✅ COMPLETE (2026-08-05)
+  - Priority: HIGH
+  - Dependencies: TASK_D001, TASK_D002, TASK_D003
+  - Problem: Original `dual_band.py` applied bandpass filtering after encoding, which corrupted byte codec's 'UA' frame structure (magic + CRC), making decode impossible.
+  - Solution: `tools/dual_band_v2.py` uses frequency shifting (Hilbert transform single-sideband modulation) to move byte codec from base band (800-3050 Hz) to high band (4000-8000 Hz) during encoding, preserving frame structure. Decode reverses the shift before byte extraction.
+  - Receipt:
+    - Encode: `python3 tools/dual_band_v2.py encode "text" software.py -o mixed.wav` produces single WAV with phonemes (mid-band) + bytes (high-band)
+    - Decode: `python3 tools/dual_band_v2.py decode mixed.wav -o recovered.py` extracts byte-identical software
+    - Test: `python3 tests/test_true_dual_band.py` — byte-identical round-trip verified (79-byte test software survives encode→mix→decode→run)
+  - Status: Phase 3 COMPLETE — single WAV file carries both human speech and machine-readable bytes; human hears phonemes, machine extracts bytes
 
 ### Success Criteria
 - Single WAV plays as meaningful speech to humans
