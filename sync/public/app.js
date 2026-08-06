@@ -197,6 +197,16 @@ class PixelFormulaEngine {
                         // Visual VCC Patch-and-Copy render
                         this.renderWindow();
                         this.ws.send(JSON.stringify({ type: 'sys_call', id: 0x01 }));
+                    } else if(syscall_id === 0x02) {
+                        this.renderTitle();
+                    } else if(syscall_id === 0x03) {
+                        this.renderCloseButton();
+                    } else if(syscall_id === 0xFF) {
+                        // Close Application / Self Destruct Visual
+                        this.windowGraphics.clear();
+                        if (this.titleText) this.titleText.visible = false;
+                        this.running = false;
+                        document.getElementById('status').innerText = 'Application Closed via 0xFF';
                     }
                     this.pc += 2;
                     // Break the execution loop to allow the browser to paint
@@ -254,9 +264,41 @@ class PixelFormulaEngine {
         });
         
         // Semi-transparent background
-        this.windowGraphics.beginFill(0x1a1a2e, 0.6);
+        this.windowGraphics.beginFill(0x1a1a2e, 0.8);
         this.windowGraphics.drawRoundedRect(x, y, w, h, 8);
         this.windowGraphics.endFill();
+    }
+    
+    renderTitle() {
+        if (!this.titleText) {
+            this.titleText = new Text({
+                text: 'Geometry OS Native [v0.1]', 
+                style: { fontFamily: 'monospace', fontSize: 16, fill: 0x00ff00 }
+            });
+            this.app.stage.addChild(this.titleText);
+        }
+        this.titleText.visible = true;
+        this.titleText.x = this.regs[0] + 15;
+        this.titleText.y = this.regs[1] + 15;
+    }
+    
+    renderCloseButton() {
+        const x = this.regs[0];
+        const y = this.regs[1];
+        const w = this.regs[2];
+        
+        // Draw [ X ] box
+        this.windowGraphics.setStrokeStyle({ width: 1, color: 0xff0055 });
+        this.windowGraphics.beginFill(0x330011, 0.8);
+        this.windowGraphics.drawRect(x + w - 30, y + 10, 20, 20);
+        this.windowGraphics.endFill();
+        
+        // Draw the X
+        this.windowGraphics.setStrokeStyle({ width: 2, color: 0xff0055 });
+        this.windowGraphics.moveTo(x + w - 26, y + 14);
+        this.windowGraphics.lineTo(x + w - 14, y + 26);
+        this.windowGraphics.moveTo(x + w - 14, y + 14);
+        this.windowGraphics.lineTo(x + w - 26, y + 26);
     }
 }
 

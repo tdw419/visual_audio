@@ -39,6 +39,19 @@
 │   :check_click                                             │
 │   JZ r12, :render      ; If no click, skip to render       │
 │                                                            │
+│   ; Hit-test: Is mouse inside Close Button?                │
+│   ; Close button bounds: [r0 + r2 - 30, r1 + 10] to [r0 + r2 - 10, r1 + 30]
+│   ; Let's just check if Mouse X > Window X + Width - 40 and Mouse Y < Window Y + 40
+│   SUB r7, r10, r0      ; r7 = Mouse X - Window X
+│   SUB r8, r2, 40       ; r8 = Width - 40
+│   JL r7, r8, :check_drag_hit ; If r7 < r8, not in close button
+│   SUB r7, r11, r1      ; r7 = Mouse Y - Window Y
+│   JL 40, r7, :check_drag_hit ; If 40 < r7, not in close button
+│   ; Hit Close Button!
+│   SYS_CALL 0xFF        ; Custom Syscall for App Close (or just HALT)
+│   HALT
+│
+│   :check_drag_hit
 │   ; Hit-test: Is mouse inside window bounds?               │
 │   ; Check X >= r0 and X <= r0 + r2                         │
 │   SUB r7, r10, r0      ; r7 = Mouse X - Window X           │
@@ -62,6 +75,8 @@
 │   ; Trigger patch-and-copy render cycle (Visual VCC)       │
 │   ; Coordinates in r0, r1, bounds in r2, r3                │
 │   SYS_CALL 0x01        ; Draw Window Frame primitive       │
+│   SYS_CALL 0x02        ; Draw Window Title                 │
+│   SYS_CALL 0x03        ; Draw Close Button                 │
 │   JMP :event_loop      ; Loop indefinitely                 │
 │                                                            │
 ├────────────────────────────────────────────────────────────┤
