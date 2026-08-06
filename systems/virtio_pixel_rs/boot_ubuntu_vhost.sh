@@ -79,7 +79,7 @@ trap cleanup EXIT INT TERM
 # Start Rust backend
 echo "[1] Starting VirtIO Pixel backend..."
 cd "${BACKEND_DIR}"
-RUST_LOG=info ./target/release/virtio_pixel_backend &
+RUST_LOG=info ./target/release/virtio_pixel_backend "${MKV_PATH}" "${SOCKET_PATH}" &
 BACKEND_PID=$!
 
 echo "    Backend PID: ${BACKEND_PID}"
@@ -105,10 +105,12 @@ QEMU_CMD="qemu-system-x86_64 \
   -machine q35,accel=kvm:kvm:tcg \
   -cpu host \
   -m 2G \
+  -object memory-backend-memfd,id=mem,size=2G,share=on \
+  -numa node,memdev=mem \
   -smp 2 \
   \
-  -device virtio-blk-pci,bus=pcie.0,addr=0x4,chardev=blk0 \
-  -chardev socket,id=blk0,path=${SOCKET_PATH},server=off,wait=off \
+  -device vhost-user-blk-pci,bus=pcie.0,addr=0x4,chardev=blk0,num-queues=1 \
+  -chardev socket,id=blk0,path=${SOCKET_PATH},server=off \
   \
   -drive if=virtio,file=${PROJECT_ROOT}/boot_images/ubuntu-24.04-desktop.qcow2,readonly=on,format=qcow2 \
   \

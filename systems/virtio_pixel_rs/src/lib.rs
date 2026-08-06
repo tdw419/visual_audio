@@ -340,6 +340,13 @@ impl SpatialMkvExtractor {
             ));
         }
 
+        if output.stdout.is_empty() {
+            return Err(anyhow::anyhow!(
+                "ffmpeg returned empty frame for frame_index {}",
+                frame_index
+            ));
+        }
+
         Ok(output.stdout)
     }
 
