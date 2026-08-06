@@ -84,39 +84,41 @@ def decode_hilbert_to_bytes(frames, disk_size):
     """
     Decode Hilbert-encoded frames back to raw disk bytes.
 
-    Frame layout (from disk_to_printable.py):
-    - Rows 0-127: Header (metadata)
-    - Rows 128-3839: Primary data (Hilbert encoding)
-    - Rows 3840-3967: QR zone (reserved)
-    - Rows 3968-4095: Footer (Ascii85 recovery)
-
-    Hilbert encoding stores bytes in R channel only.
+    Matches the encoding pattern from disk_to_printable.py:
+    - Frame 0: Directory frame (skip - metadata only)
+    - Frame 1+: Data frames with Hilbert encoding in rows 128-3839
+    - Each byte stored at sequential Hilbert index, starting from (128,0)
     """
     print(f"Decoding Hilbert encoding to {disk_size} bytes...")
 
     primary_start_row = 128
+    primary_end_row = 3840
     grid_size = 4096
 
-    # Calculate how many bytes we need
-    num_bytes = disk_size
-    output = bytearray(num_bytes)
-
+    output = bytearray(disk_size)
     byte_idx = 0
+
     for frame_idx, frame in enumerate(frames):
-        if byte_idx >= num_bytes:
+        if byte_idx >= disk_size:
             break
 
         print(f"  Frame {frame_idx + 1}/{len(frames)}...", end='\r')
 
-        for hilbert_idx in range(0, (3840 - 128) * 4096):  # Primary region size
-            if byte_idx >= num_bytes:
+        # Frame 0 is directory frame (metadata only, skip data decode)
+        if frame_idx == 0:
+            print(f"\n  Frame 0: Directory frame (metadata only, skipping)")
+            continue
+
+        # Data frames: decode sequential Hilbert indices
+        # Each byte is stored at hilbert_d2xy(grid_size, byte_idx) in primary region
+        for hilbert_idx in range(0, (primary_end_row - primary_start_row) * grid_size):
+            if byte_idx >= disk_size:
                 break
 
             x, y = hilbert_d2xy(grid_size, hilbert_idx)
             y += primary_start_row
 
-            # Read byte from R channel (pixel values 0-255)
-            if y < frame.shape[0] and x < frame.shape[1]:
+            if y < primary_end_row and x < grid_size:
                 output[byte_idx] = frame[y, x, 0]
                 byte_idx += 1
 
@@ -124,12 +126,22 @@ def decode_hilbert_to_bytes(frames, disk_size):
     return bytes(output)
 
 
-def load_meta(meta_path):
-    """Load metadata JSON."""
+def load_meta(mkv_path):
+    """Load metadata JSON from .meta.json file."""
+    # Try .meta.json appended to mkv_path first
+    meta_path = mkv_path + '.meta.json'
     if os.path.exists(meta_path):
         with open(meta_path, 'r') as f:
             return json.load(f)
-    return {}
+
+    # Try replacing .mkv with .meta.json
+    if mkv_path.endswith('.mkv'):
+        meta_path = mkv_path[:-4] + '.meta.json'
+        if os.path.exists(meta_path):
+            with open(meta_path, 'r') as f:
+                return json.load(f)
+
+    return None
 
 
 def main():
@@ -141,11 +153,16 @@ def main():
     mkv_path = sys.argv[1]
     output_path = sys.argv[2]
 
-    # Load metadata
-    meta_path = mkv_path + '.meta.json'
-    meta = load_meta(meta_path)
-    disk_size = meta.get('disk_size', 3145728)  # Default 3MB
-    source = meta.get('source_image', 'unknown')
+    # Load metadata to get correct disk size
+    meta = load_meta(mkv_path)
+    if meta and 'disk_size' in meta:
+        disk_size = meta['disk_size']
+        source = meta.get('source_image', 'unknown')
+    else:
+        # Fallback: default 3MB
+        disk_size = 3145728
+        source = 'unknown (no metadata)'
+        print(f"Warning: No metadata found, using default size {disk_size} bytes")
 
     print("=" * 70)
     print("Spatial Disk Extraction")
