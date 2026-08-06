@@ -1,16 +1,18 @@
-use std::io::{Read, Write};
+use std::collections::HashMap;
+use std::io;
+use std::os::unix::io::FromRawFd;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::os::unix::io::{AsRawFd, FromRawFd};
-use std::collections::HashMap;
+use std::os::fd::OwnedFd;
 
 use anyhow::Result;
 use log::{error, info, warn};
 use nix::sys::socket::{recvmsg, ControlMessageOwned, MsgFlags};
 use nix::unistd::{dup, write};
-use std::os::fd::OwnedFd;
 
 use super::SpatialMkvExtractor;
+use super::hilbert_compute::HilbertDecoder;
+use super::wgpu_texture_loader::{init_wgpu, MkvTexture};
 
 /// QEMU memory region descriptor from SET_MEM_TABLE
 #[derive(Debug, Clone)]
@@ -310,22 +312,56 @@ pub struct VirtioPixelServer {
     queues: Vec<VirtQueue>,
     running: bool,
 
-    // WGPU acceleration (Phase 2-4)
-    // TODO: Initialize WGPU device and HilbertDecoder
-    texture_cache: HashMap<usize, ()>,  // Placeholder for texture cache
+    // WGPU acceleration (Phase 4)
+    hilbert_decoder: Option<HilbertDecoder>,
+    texture_cache: HashMap<usize, MkvTexture>,
+    gpu_enabled: bool,
 }
 
 impl VirtioPixelServer {
-    pub fn new(extractor: Arc<Mutex<SpatialMkvExtractor>>, socket_path: PathBuf) -> Self {
-        Self {
+    pub fn new(
+        extractor: Arc<Mutex<SpatialMkvExtractor>>,
+        socket_path: PathBuf,
+        enable_gpu: bool,
+    ) -> Result<Self> {
+        // Initialize WGPU if enabled
+        let (hilbert_decoder, gpu_enabled) = if enable_gpu {
+            info!("Initializing WGPU for GPU-accelerated Hilbert decoding...");
+            match init_wgpu() {
+                Ok((_instance, _adapter, device, queue)) => {
+                    let device = Arc::new(device);
+                    let queue = Arc::new(queue);
+                    match HilbertDecoder::new(device, queue) {
+                        Ok(decoder) => {
+                            info!("WGPU Hilbert decoder initialized successfully");
+                            (Some(decoder), true)
+                        }
+                        Err(e) => {
+                            warn!("Failed to initialize Hilbert decoder: {}, falling back to CPU", e);
+                            (None, false)
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to initialize WGPU: {}, falling back to CPU", e);
+                    (None, false)
+                }
+            }
+        } else {
+            info!("GPU acceleration disabled, using CPU decode");
+            (None, false)
+        };
+
+        Ok(Self {
             extractor,
             socket_path,
             guest_memory: GuestMemory::new(),
             queues: Vec::new(),
             running: false,
-            // Phase 2-4: WGPU fields initialized in run()
+            hilbert_decoder,
             texture_cache: HashMap::new(),
-        }
+            gpu_enabled,
+        })
     }
 
     pub fn run(&mut self) -> Result<()> {
@@ -1085,6 +1121,72 @@ impl VirtioPixelServer {
         Ok(())
     }
 
+    /// Get or load GPU texture for a specific frame index
+    fn get_or_load_texture(&mut self, frame_index: usize) -> Result<&MkvTexture> {
+        // Check cache first
+        if !self.texture_cache.contains_key(&frame_index) {
+            info!("Loading MKV frame {} to GPU texture...", frame_index);
+            let extractor = self.extractor.lock().unwrap();
+            let mkv_path = extractor.mkv_path.clone();
+            drop(extractor);
+
+            let device = self
+                .hilbert_decoder
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("GPU not initialized"))?
+                .device()
+                .clone();
+            let queue = self
+                .hilbert_decoder
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("GPU not initialized"))?
+                .queue()
+                .clone();
+
+            let texture = MkvTexture::load_frame(&device, &queue, &mkv_path, frame_index)?;
+            self.texture_cache.insert(frame_index, texture);
+        }
+
+        Ok(self.texture_cache.get(&frame_index).unwrap())
+    }
+
+    /// Decode using GPU with zero-copy DMA
+    fn decode_with_gpu(
+        &mut self,
+        offset: u64,
+        length: u32,
+        guest_ram_ptr: *mut u8,
+    ) -> Result<usize> {
+        let extractor = self.extractor.lock().unwrap();
+        // Calculate bytes per frame: frame_size * frame_size (square frames, 1 byte per pixel)
+        let bytes_per_frame = (extractor.frame_size as u64) * (extractor.frame_size as u64);
+        let frame_width = extractor.frame_size;
+        let frame_index = (offset / bytes_per_frame) as u32;
+        let offset_in_frame = (offset % bytes_per_frame) as u32;
+        drop(extractor);
+
+        // Ensure texture is loaded (cached on first access)
+        self.get_or_load_texture(frame_index as usize)?;
+
+        // Get decoder reference (must release texture borrow first)
+        let decoder = self
+            .hilbert_decoder
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("GPU not initialized"))?;
+
+        // Get texture from cache with fresh borrow (borrow checker happy)
+        let texture = &self.texture_cache.get(&(frame_index as usize)).unwrap().texture;
+
+        decoder.decode_direct_dma(
+            texture,
+            frame_index,
+            frame_width,
+            offset_in_frame,
+            length,
+            guest_ram_ptr,
+        )
+    }
+
     /// Handle VirtIO block request (Header → Data → Status)
     fn handle_virtio_block_request(&mut self, descriptors: &[VirtqDesc]) -> Result<()> {
         // Expect at least 3 descriptors: Header, Data, Status
@@ -1132,21 +1234,58 @@ impl VirtioPixelServer {
 
         // Handle read request (T_IN=0)
         if req_type == VIRTIO_BLK_T_IN {
-            // Calculate offset in the 7GB decoded data space
             let offset = sector * 512;
+            let length = data_desc.len as u32;
 
-            // Extract Hilbert pixels from SpatialMkvExtractor
-            let decoded_data = {
-                let mut extractor = self.extractor.lock().unwrap();
-                extractor.read(offset, data_desc.len as u64)?
-            };
-
-            // Write decoded bytes to data buffer
-            self.guest_memory.write(data_desc.addr, &decoded_data)?;
-            info!(
-                "  Extracted {} Hilbert bytes at offset 0x{:x} (sector {})",
-                decoded_data.len(), offset, sector
-            );
+            // Try GPU decode first if available
+            if self.gpu_enabled {
+                if let Some(guest_ram_ptr) = self.guest_memory.get_raw_ptr(data_desc.addr, length as usize) {
+                    info!("  Using GPU decode (zero-copy DMA)");
+                    match self.decode_with_gpu(offset, length, guest_ram_ptr) {
+                        Ok(bytes_decoded) => {
+                            info!(
+                                "  GPU decoded {} bytes at offset 0x{:x} (sector {})",
+                                bytes_decoded, offset, sector
+                            );
+                        }
+                        Err(e) => {
+                            warn!("GPU decode failed: {}, falling back to CPU", e);
+                            // Fallback to CPU decode
+                            let decoded_data = {
+                                let mut extractor = self.extractor.lock().unwrap();
+                                extractor.read(offset, length as u64)?
+                            };
+                            self.guest_memory.write(data_desc.addr, &decoded_data)?;
+                            info!(
+                                "  CPU fallback extracted {} bytes at offset 0x{:x} (sector {})",
+                                decoded_data.len(), offset, sector
+                            );
+                        }
+                    }
+                } else {
+                    info!("  Guest RAM not mappable, using CPU decode");
+                    let decoded_data = {
+                        let mut extractor = self.extractor.lock().unwrap();
+                        extractor.read(offset, length as u64)?
+                    };
+                    self.guest_memory.write(data_desc.addr, &decoded_data)?;
+                    info!(
+                        "  Extracted {} Hilbert bytes at offset 0x{:x} (sector {})",
+                        decoded_data.len(), offset, sector
+                    );
+                }
+            } else {
+                // CPU-only decode
+                let decoded_data = {
+                    let mut extractor = self.extractor.lock().unwrap();
+                    extractor.read(offset, length as u64)?
+                };
+                self.guest_memory.write(data_desc.addr, &decoded_data)?;
+                info!(
+                    "  Extracted {} Hilbert bytes at offset 0x{:x} (sector {})",
+                    decoded_data.len(), offset, sector
+                );
+            }
         } else if req_type == VIRTIO_BLK_T_OUT {
             // Writes land in an in-memory sector overlay, not the source MKV -
             // re-encoding video frames on every write is a much bigger project.

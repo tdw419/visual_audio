@@ -290,10 +290,18 @@ impl SpatialMkvExtractor {
             for d in 0..frame_capacity {
                 let (x, y) = self.hilbert_lut[d];
                 let p_idx = (y as usize * frame_size + x as usize) * 3;
+
+                // Bounds check for safety
+                if p_idx + 2 >= rgb_bytes.len() {
+                    log::warn!("LUT index {} out of RGB bounds {} (x={}, y={}, d={})", p_idx + 2, rgb_bytes.len(), x, y, d);
+                    decoded_bytes.push(0);
+                    continue;
+                }
+
                 let r = rgb_bytes[p_idx];
                 let g = rgb_bytes[p_idx + 1];
                 let b = rgb_bytes[p_idx + 2];
-                
+
                 let byte = decode_pixel_to_byte(r, g, b).unwrap_or(0);
                 decoded_bytes.push(byte);
             }

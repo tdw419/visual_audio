@@ -432,6 +432,16 @@ impl HilbertDecoder {
 
         Ok(guest_ram_slice.len())
     }
+
+    /// Get reference to WGPU device (for texture loading)
+    pub fn device(&self) -> &Arc<Device> {
+        &self.device
+    }
+
+    /// Get reference to WGPU queue (for texture loading)
+    pub fn queue(&self) -> &Arc<Queue> {
+        &self.queue
+    }
 }
 
 // Buffer init helper (from wgpu::util)

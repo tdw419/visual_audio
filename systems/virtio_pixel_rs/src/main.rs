@@ -20,14 +20,28 @@ async fn main() -> Result<()> {
 
     let args: Vec<String> = std::env::args().collect();
 
-    let mkv_path = if args.len() >= 2 {
-        PathBuf::from(&args[1])
+    let mut enable_gpu = false;
+    let mut arg_idx = 1;
+
+    // Parse flags
+    while arg_idx < args.len() {
+        match args[arg_idx].as_str() {
+            "--gpu" => {
+                enable_gpu = true;
+                arg_idx += 1;
+            }
+            _ => break,
+        }
+    }
+
+    let mkv_path = if arg_idx < args.len() {
+        PathBuf::from(&args[arg_idx])
     } else {
         PathBuf::from(DEFAULT_MKV_PATH)
     };
 
-    let socket_path = if args.len() >= 3 {
-        PathBuf::from(&args[2])
+    let socket_path = if arg_idx + 1 < args.len() {
+        PathBuf::from(&args[arg_idx + 1])
     } else {
         PathBuf::from(DEFAULT_SOCKET_PATH)
     };
@@ -36,6 +50,10 @@ async fn main() -> Result<()> {
         eprintln!("ERROR: MKV not found: {}", mkv_path.display());
         return Err(anyhow!("MKV file not found: {}", mkv_path.display()));
     }
+
+    info!("GPU acceleration: {}", if enable_gpu { "enabled" } else { "disabled" });
+    info!("MKV path: {}", mkv_path.display());
+    info!("Socket path: {}", socket_path.display());
 
     let entry_name = mkv_path.file_name()
         .and_then(|n| n.to_str())
@@ -116,7 +134,7 @@ async fn main() -> Result<()> {
     });
 
     info!("Starting vhost-user backend, waiting for QEMU connection...");
-    let mut server = VirtioPixelServer::new(extractor, socket_path);
+    let mut server = VirtioPixelServer::new(extractor, socket_path, enable_gpu)?;
 
     // Using unblock to run synchronous server.run() in a background thread since we're in tokio::main
     tokio::task::spawn_blocking(move || {
