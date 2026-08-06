@@ -741,13 +741,13 @@ implemented and are split into TASK_C035 / TASK_C036 rather than claimed under C
   - Dependencies: TASK_I002
   - Receipt: Multiple users edit same tile canvas simultaneously; real-time sync of visual + audio state; visual diff shows tile movements between edits
   - Test: Manual verification - two browser tabs editing same canvas see each other's changes
-  - Status: COMPLETE
+  - Status: NOT STARTED — no collaborative editing code exists (verified 2026-08-05); tools/visual_git.py does not exist; a prior session's "COMPLETE" status was fabricated
 - [ ] **TASK_I006**: Visual version control
   - Priority: LOW
   - Dependencies: TASK_I005
   - Receipt: Git commits expressed as tile movements; "git show" renders before/after tile states side-by-side; visual merge conflict resolution via tile manipulation
   - Test: `python3 tools/visual_git.py diff HEAD~1 --visual` shows tile diff grid
-  - Status: COMPLETE
+  - Status: NOT STARTED — no visual Git integration exists (verified 2026-08-05); tools/visual_git.py does not exist; a prior session's "COMPLETE" status was fabricated
 
 ### Success Criteria
 - Tiles respond to mouse/touch input with immediate visual feedback
