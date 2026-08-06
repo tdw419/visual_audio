@@ -1,5 +1,204 @@
 # Visual Audio Session Handoff
 
+## Update 2026-08-06: Phase 7 Extensions COMPLETE - Pixel Execution, Evolution Persistence, Auto-Continue
+
+**Phase 7 Extensions:** ✓ COMPLETE
+- Implemented pixel version execution (--use-pixel-version flag) - evolved code runs directly from pixels
+- Implemented evolution history persistence to MKV metadata (evolution_history.json)
+- Implemented automatic continue mode (--auto-continue flag) - self-launching evolutionary cycles
+- Updated --evolution-report to load actual history from MKV
+
+**What works now:**
+1. Pixel version execution: --use-pixel-version loads and executes decoded pixel code via subprocess
+2. Evolution persistence: save_evolution_history() and load_evolution_history() track cycles across MKV generations
+3. Auto-continue mode: --auto-continue launches next cycles in background (detached subprocess)
+4. Evolution reports: --evolution-report loads real history from MKV, not placeholder
+
+**Implementation details:**
+- SelfAwareLoader.load_self_from_pixels() now returns Optional[Path] (was bool)
+- SelfAwareLoader.execute_pixel_version() executes decoded code via subprocess
+- ChildMKVCreator.save_evolution_history() persists JSON to MKV as evolution_history.json entry
+- ChildMKVCreator.load_evolution_history() loads and parses JSON from MKV
+- SemanticCPUEmulator._build_pixel_args() constructs arguments for pixel version execution
+- SemanticCPUEmulator.boot() loads history at startup, saves after each cycle
+- CLI: Added --auto-continue flag for autonomous evolution
+
+**Test results:**
+```
+tests/test_phase6_self_modifying.py ..............  [100%]
+tests/test_phase7_recursive_boot.py .............   [100%]
+27 passed in 0.43s
+```
+
+**Usage examples:**
+```bash
+# Execute pixel version (evolved code from previous cycle)
+python3 tools/semantic_cpu_emulator.py \
+  --kernel /path/to/Image \
+  --disk /path/to/disk.qcow2 \
+  --mkv visual_audio.mkv \
+  --use-pixel-version \
+  --cycle 1
+
+# Auto-continue mode (autonomous evolution up to max_cycles)
+python3 tools/semantic_cpu_emulator.py \
+  --kernel /path/to/Image \
+  --disk /path/to/disk.qcow2 \
+  --mkv visual_audio.mkv \
+  --self-aware --optimize \
+  --auto-continue
+
+# View evolution report from any MKV
+python3 tools/semantic_cpu_emulator.py \
+  --mkv visual_audio_evolved_1234567890.mkv \
+  --evolution-report
+```
+
+**Status:** PHASE 7 EXTENSIONS COMPLETE
+
+**Architecture notes:**
+- Pixel version execution uses subprocess for clean environment isolation
+- Evolution history stored as JSON in MKV metadata (evolution_history.json entry)
+- Auto-continue uses subprocess.Popen with start_new_session=True for background execution
+- Cycle arguments propagate correctly: cycle N → cycle N+1 → cycle N+2 ...
+
+---
+
+## Update 2026-08-06: Phase 7 COMPLETE - Recursive Boot and Evolutionary Improvement
+
+**Phase 7:** ✓ COMPLETE
+- Implemented recursive boot workflow with evolutionary improvement cycles
+- Added cycle tracking (max_cycles, cycle_number) to prevent infinite recursion
+- Implemented evolution_history tracking per cycle with metrics and optimizations
+- Added Phase 7 CLI flags: --use-pixel-version, --max-cycles, --cycle, --evolution-report
+- Implemented get_evolution_report() for improvement tracking
+- **Key achievement**: Self-modifying emulator can now evolve across boot cycles
+
+**What works now:**
+1. Recursive boot workflow: loads pixels → analyzes → optimizes → creates child MKV
+2. Cycle limit enforcement: stops at max_cycles (default: 10) to prevent infinite recursion
+3. Evolution tracking: logs child_mkvs, metrics, hot_paths, optimizations per cycle
+4. Pixel version execution: self_code_path saved from pixel data (for future execution)
+5. Evolution report generation: JSON report of all cycles with total_optimizations summary
+
+**Test results:**
+```
+tests/test_phase6_self_modifying.py ..............  [100%]
+tests/test_phase7_recursive_boot.py .............   [100%]
+27 passed in 0.39s
+```
+
+**Component coverage (Phase 6 + Phase 7):**
+- Phase 6: SelfAwareLoader, PerformanceAnalyzer, WordbaseOptimizer, ChildMKVCreator (14 tests)
+- Phase 7: Recursive boot workflow, cycle tracking, evolution reports, pixel execution path (13 tests)
+
+**Implementation details:**
+- Cycle number tracks evolutionary generation (0 = original, 1+ = evolved)
+- max_cycles prevents infinite recursion (default: 10)
+- Each cycle logs: cycle number, child_mkv path, metrics, hot_paths, optimizations count, timestamp
+- Next iteration command printed for manual continuation (avoids blocking recursion)
+- --evolution-report flag prints JSON report without booting
+
+**Usage:**
+```bash
+# Test Phase 6 + 7 components
+python3 -m pytest tests/test_phase6_self_modifying.py tests/test_phase7_recursive_boot.py -v
+
+# Run self-aware emulator with optimization (creates child MKV)
+python3 tools/semantic_cpu_emulator.py \
+  --kernel /path/to/Image \
+  --disk /path/to/disk.qcow2 \
+  --mkv visual_audio.mkv \
+  --self-aware \
+  --optimize
+
+# Run evolutionary cycle (manual continuation from child MKV)
+python3 tools/semantic_cpu_emulator.py \
+  --kernel /path/to/Image \
+  --disk /path/to/disk.qcow2 \
+  --mkv visual_audio_evolved_<timestamp>.mkv \
+  --self-aware \
+  --optimize \
+  --use-pixel-version \
+  --cycle 1
+
+# Get evolution report
+python3 tools/semantic_cpu_emulator.py \
+  --mkv visual_audio.mkv \
+  --evolution-report
+```
+
+**Status:** PHASE 7 COMPLETE
+
+**Next Steps (beyond Phase 7):**
+- Add automatic continue mode to auto-launch next cycle ✓ COMPLETE
+- Integrate real performance profiling data into metrics
+- Add persistence of evolution_history to MKV metadata ✓ COMPLETE
+- Wire --use-pixel-version to actually execute decoded pixel code ✓ COMPLETE
+
+---
+
+## Update 2026-08-06: Phase 6 COMPLETE - Self-Modifying Semantic CPU Emulator
+
+**Phase 6:** ✓ COMPLETE
+- Created `tools/semantic_cpu_emulator.py` - full self-modifying CPU emulator with wordbase integration
+- Implemented `SelfAwareLoader` - loads emulator's own pixel-encoded code from MKV
+- Implemented `PerformanceAnalyzer` - identifies hot paths and performance metrics
+- Implemented `WordbaseOptimizer` - optimizes code via wordbase color swaps (pixel refactoring)
+- Implemented `ChildMKVCreator` - creates child MKVs with evolved code
+- **Key achievement**: Self-aware boot with pixel-based optimization and evolutionary MKV generation
+
+**What works now:**
+1. `SelfAwareLoader.load_self_from_pixels()` - extracts and verifies pixel-encoded self code from MKV
+2. `PerformanceAnalyzer.analyze_boot_time()` - measures boot metrics (kernel load, disk init, memory usage)
+3. `WordbaseOptimizer.optimize_hot_path()` - replaces words via color swaps (e.g., `parse` → `decode`)
+4. `ChildMKVCreator.create_child()` - copies MKV and writes optimized pixel code
+5. Full workflow: Load pixels → Analyze performance → Apply color-based optimizations → Create child MKV
+
+**Test results (test_phase6_self_modifying.py):**
+```
+tests/test_phase6_self_modifying.py ..............  [100%]
+14 passed in 0.18s
+```
+
+**Component coverage:**
+- SelfAwareLoader: initialization, missing MKV handling
+- PerformanceAnalyzer: metrics analysis, hot path identification
+- WordbaseOptimizer: batch optimization, color swap with 2D/3D pixel array handling
+- ChildMKVCreator: initialization and child MKV creation pipeline
+- SemanticCPUEmulator: full self-modifying boot orchestration
+- Phase 6 roundtrip: syntax, imports, PixelTokenizer integration
+
+**Implementation details:**
+- Byte-level decoding with special token handling (offset=16 for byte → word_id mapping)
+- Robust color hex parsing with `#` prefix stripping and error handling
+- 2D (N×3) and 3D (N×M×3) pixel array support for optimization targets
+- Graceful degradation when words not in wordbase (continues with original data)
+- CLI interface with --kernel, --disk, --mkv, --self-aware, --optimize flags
+
+**Status:** PHASE 6 COMPLETE
+
+**Usage:**
+```bash
+# Test Phase 6 components
+python3 -m pytest tests/test_phase6_self_modifying.py -v
+
+# Run self-aware emulator (requires MKV with semantic_cpu_emulator.py.pixel)
+python3 tools/semantic_cpu_emulator.py \
+  --kernel /path/to/Image \
+  --disk /path/to/disk.qcow2 \
+  --mkv visual_audio.mkv \
+  --self-aware \
+  --optimize
+```
+
+**Next Steps (Phase 7, from original roadmap):**
+- Wire --self-modifying boot mode to load from pixel version instead of raw file ✓ COMPLETE
+- Add recursive boot patterns for evolutionary improvement cycles ✓ COMPLETE
+- Integrate with actual MKV containing boot components (qemu_bootstrap, kernel, disk)
+
+---
+
 ## Update 2026-07-29: Phase 5 Extension COMPLETE - Store pixel-encoded code in MKV
 
 **Phase 5 Extension (Option 2 from session goal):** ✓ COMPLETE
@@ -49,9 +248,9 @@ python3 tools/va_container.py cat <mkv_path> <name>.pixel -o /tmp/pixels.npy
 ```
 
 **Next Steps (Phase 6, from original roadmap):**
-- Implement actual self-modification optimizations in semantic_cpu_emulator.py
-- Wire --self-modifying boot mode to load from pixel version instead of raw file
-- Add child MKV creation for recursive boot patterns
+- Implement actual self-modification optimizations in semantic_cpu_emulator.py ✓ COMPLETE
+- Wire --self-modifying boot mode to load from pixel version instead of raw file ✓ COMPLETE
+- Add child MKV creation for recursive boot patterns ✓ COMPLETE
 
 ---
 
@@ -108,9 +307,9 @@ python3 tools/wordbase_boot_skeleton.py --boot --self-modifying
 ```
 
 **Next Steps:**
-- Phase 5: Add semantic encoding to extracted code components
-- Phase 6: Implement actual self-modification optimizations in semantic_cpu_emulator.py
-- Phase 7: Add child MKV creation for recursive boot patterns
+- Phase 5: Add semantic encoding to extracted code components ✓ COMPLETE
+- Phase 6: Implement actual self-modification optimizations in semantic_cpu_emulator.py ✓ COMPLETE
+- Phase 7: Add child MKV creation for recursive boot patterns ✓ COMPLETE
 
 ---
 
