@@ -154,13 +154,21 @@ class TestFraming:
         assert crc == expected
 
     def test_frame_large_payload(self):
-        """Test framing fails for too-large payload."""
-        payload = b'x' * 0xFFFF  # max uint16
-        framed = frame(payload)  # should work
+        """Test framing handles large payloads via auto-chunking."""
+        # Max uint16 payload (65535 bytes) should work in single frame
+        payload_64k = b'x' * 0xFFFF
+        framed_64k = frame(payload_64k)
+        recovered_64k, valid_64k = unframe(framed_64k)
+        assert valid_64k is True
+        assert recovered_64k == payload_64k
 
-        payload = b'x' * (0xFFFF + 1)  # too large
-        with pytest.raises(ValueError):
-            frame(payload)
+        # Larger payload should auto-chunk into multiple frames
+        payload_large = b'x' * (0xFFFF + 100)  # 65635 bytes
+        framed_large = frame(payload_large)
+        recovered_large, valid_large = unframe(framed_large)
+        assert valid_large is True
+        assert recovered_large == payload_large
+        assert len(framed_large) > len(framed_64k)  # Larger output due to chunking overhead
 
     def test_unframe_valid(self):
         """Test unframing valid data."""

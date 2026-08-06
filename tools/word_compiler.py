@@ -244,85 +244,94 @@ def parse_cmudict(path: str) -> Dict[str, List[str]]:
 
 def get_phonemes_for_word(word: str, cmudict: Dict[str, List[str]]) -> List[str]:
     """
-    Get ARPAbet phonemes for a word, with fallback to grapheme rules.
-    
+    Get ARPAbet phonemes for a word, with smart fallback to compound-aware G2P.
+
+    Uses smart_g2p.get_phonemes_smart() which supports:
+    - Direct CMUdict lookup
+    - Hyphenated compounds (micro-kernel)
+    - Known compound splits (websocket -> web + socket)
+    - Prefix/suffix decomposition
+    - Improved naive fallback
+
     Args:
         word: The word to look up (case-insensitive)
         cmudict: Parsed CMUdict mapping
-    
+
     Returns:
         List of phonemes for the word
     """
-    word_lower = word.lower()
-    
-    if word_lower in cmudict:
-        return cmudict[word_lower]
-    
-    # Fallback: simple grapheme-to-phoneme rules for common patterns
-    # This is very basic - real G2P is much more complex
-    fallback_phonemes = []
-    
-    for char in word_lower:
-        if char == 'a':
-            fallback_phonemes.append('AE')
-        elif char == 'b':
-            fallback_phonemes.append('B')
-        elif char == 'c':
-            fallback_phonemes.append('K')
-        elif char == 'd':
-            fallback_phonemes.append('D')
-        elif char == 'e':
-            fallback_phonemes.append('EH')
-        elif char == 'f':
-            fallback_phonemes.append('F')
-        elif char == 'g':
-            fallback_phonemes.append('G')
-        elif char == 'h':
-            fallback_phonemes.append('HH')
-        elif char == 'i':
-            fallback_phonemes.append('IH')
-        elif char == 'j':
-            fallback_phonemes.append('JH')
-        elif char == 'k':
-            fallback_phonemes.append('K')
-        elif char == 'l':
-            fallback_phonemes.append('L')
-        elif char == 'm':
-            fallback_phonemes.append('M')
-        elif char == 'n':
-            fallback_phonemes.append('N')
-        elif char == 'o':
-            fallback_phonemes.append('OW')
-        elif char == 'p':
-            fallback_phonemes.append('P')
-        elif char == 'q':
-            fallback_phonemes.append('K')
-            fallback_phonemes.append('W')
-        elif char == 'r':
-            fallback_phonemes.append('R')
-        elif char == 's':
-            fallback_phonemes.append('S')
-        elif char == 't':
-            fallback_phonemes.append('T')
-        elif char == 'u':
-            fallback_phonemes.append('UH')
-        elif char == 'v':
-            fallback_phonemes.append('V')
-        elif char == 'w':
-            fallback_phonemes.append('W')
-        elif char == 'x':
-            fallback_phonemes.append('K')
-            fallback_phonemes.append('S')
-        elif char == 'y':
-            fallback_phonemes.append('Y')
-        elif char == 'z':
-            fallback_phonemes.append('Z')
-        # Skip other characters (spaces, punctuation, etc.)
-    
-    if not fallback_phonemes:
-        print(f"  Warning: No phonemes found for '{word}'")
-    
-    return fallback_phonemes
+    try:
+        from smart_g2p import get_phonemes_smart
+        return get_phonemes_smart(word, cmudict)
+    except ImportError:
+        # Fallback to old simple grapheme rules if smart_g2p not available
+        print(f"  Warning: smart_g2p unavailable, using naive fallback for '{word}'")
+        word_lower = word.lower()
+
+        if word_lower in cmudict:
+            return cmudict[word_lower]
+
+        fallback_phonemes = []
+        for char in word_lower:
+            if char == 'a':
+                fallback_phonemes.append('AE')
+            elif char == 'b':
+                fallback_phonemes.append('B')
+            elif char == 'c':
+                fallback_phonemes.append('K')
+            elif char == 'd':
+                fallback_phonemes.append('D')
+            elif char == 'e':
+                fallback_phonemes.append('EH')
+            elif char == 'f':
+                fallback_phonemes.append('F')
+            elif char == 'g':
+                fallback_phonemes.append('G')
+            elif char == 'h':
+                fallback_phonemes.append('HH')
+            elif char == 'i':
+                fallback_phonemes.append('IH')
+            elif char == 'j':
+                fallback_phonemes.append('JH')
+            elif char == 'k':
+                fallback_phonemes.append('K')
+            elif char == 'l':
+                fallback_phonemes.append('L')
+            elif char == 'm':
+                fallback_phonemes.append('M')
+            elif char == 'n':
+                fallback_phonemes.append('N')
+            elif char == 'o':
+                fallback_phonemes.append('OW')
+            elif char == 'p':
+                fallback_phonemes.append('P')
+            elif char == 'q':
+                fallback_phonemes.append('K')
+                fallback_phonemes.append('W')
+            elif char == 'r':
+                fallback_phonemes.append('R')
+            elif char == 's':
+                fallback_phonemes.append('S')
+            elif char == 't':
+                fallback_phonemes.append('T')
+            elif char == 'u':
+                fallback_phonemes.append('UH')
+            elif char == 'v':
+                fallback_phonemes.append('V')
+            elif char == 'w':
+                fallback_phonemes.append('W')
+            elif char == 'x':
+                fallback_phonemes.append('K')
+                fallback_phonemes.append('S')
+            elif char == 'y':
+                fallback_phonemes.append('Y')
+            elif char == 'z':
+                fallback_phonemes.append('Z')
+
+        if not fallback_phonemes:
+            print(f"  Warning: No phonemes found for '{word}'")
+
+        return fallback_phonemes
 
 
 def build_word_project_with_crossfade(word: str, phonemes_list: List[str], use_neural: bool = True) -> np.ndarray:

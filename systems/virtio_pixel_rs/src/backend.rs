@@ -33,7 +33,18 @@ pub struct MemoryRegion {
 #[derive(Debug)]
 pub struct GuestMemory {
     regions: Vec<MemoryRegion>,
+    // Migration dirty-page log (VHOST_USER_PROTOCOL_F_LOG_SHMFD): a bitmap,
+    // one bit per 4KB guest page across the whole guest address space,
+    // shared with QEMU via an mmap'd fd from SET_LOG_BASE. Only touched
+    // when logging is actually negotiated (VHOST_F_LOG_ALL in SET_FEATURES) -
+    // marking dirty pages here is what lets QEMU migrate/snapshot a VM with
+    // this vhost-user device attached at all; without it QEMU refuses any
+    // migration outright ("Migration disabled: ... lacks ... LOG_SHMFD").
+    log_mmap: Option<memmap2::MmapMut>,
+    log_enabled: bool,
 }
+
+const VHOST_LOG_PAGE: u64 = 4096;
 
 /// VirtIO virtqueue state
 #[derive(Debug)]
@@ -131,6 +142,36 @@ impl GuestMemory {
     pub fn new() -> Self {
         Self {
             regions: Vec::new(),
+            log_mmap: None,
+            log_enabled: false,
+        }
+    }
+
+    pub fn set_log_base(&mut self, mmap: memmap2::MmapMut) {
+        info!("Dirty-page log region mapped ({} bytes)", mmap.len());
+        self.log_mmap = Some(mmap);
+    }
+
+    pub fn set_logging_enabled(&mut self, enabled: bool) {
+        self.log_enabled = enabled;
+    }
+
+    /// Mark the guest pages covering [gpa, gpa+len) dirty in the migration
+    /// log, if a log region is mapped and logging is currently negotiated.
+    fn mark_dirty(&mut self, gpa: u64, len: usize) {
+        if !self.log_enabled {
+            return;
+        }
+        let Some(log) = self.log_mmap.as_mut() else { return };
+
+        let start_page = gpa / VHOST_LOG_PAGE;
+        let end_page = (gpa + len as u64 - 1) / VHOST_LOG_PAGE;
+        for page in start_page..=end_page {
+            let byte_idx = (page / 8) as usize;
+            let bit = (page % 8) as u8;
+            if byte_idx < log.len() {
+                log[byte_idx] |= 1 << bit;
+            }
         }
     }
 
@@ -161,6 +202,18 @@ impl GuestMemory {
         None
     }
 
+    /// Translate userspace address (UVA from QEMU) to host memory offset
+    pub fn translate_user(&self, uva: u64) -> Option<(usize, usize)> {
+        for mr in &self.regions {
+            let base = mr.region.userspace_addr;
+            let offset = uva.wrapping_sub(base);
+            if offset < mr.size {
+                return Some((mr.guest_phys_base as usize, offset as usize));
+            }
+        }
+        None
+    }
+
     /// Read from guest physical address
     pub fn read(&self, gpa: u64, len: usize) -> Result<Vec<u8>> {
         if let Some((base, offset)) = self.translate(gpa) {
@@ -184,12 +237,45 @@ impl GuestMemory {
                     let end = offset + data.len();
                     if end <= mr.mmap.len() {
                         mr.mmap[offset..end].copy_from_slice(data);
+                        self.mark_dirty(gpa, data.len());
                         return Ok(());
                     }
                 }
             }
         }
-        Err(anyhow::anyhow!("GPA 0x{:x} out of range", gpa))
+        Err(anyhow::anyhow!("GPA 0x{:x} out of range (write)", gpa))
+    }
+
+    /// Read from userspace virtual address
+    pub fn read_user(&self, uva: u64, len: usize) -> Result<Vec<u8>> {
+        if let Some((base, offset)) = self.translate_user(uva) {
+            for mr in &self.regions {
+                if mr.guest_phys_base as usize == base {
+                    let end = offset + len;
+                    if end <= mr.mmap.len() {
+                        return Ok(mr.mmap[offset..end].to_vec());
+                    }
+                }
+            }
+        }
+        Err(anyhow::anyhow!("UVA 0x{:x} out of range", uva))
+    }
+
+    /// Write to userspace virtual address
+    pub fn write_user(&mut self, uva: u64, data: &[u8]) -> Result<()> {
+        if let Some((base, offset)) = self.translate_user(uva) {
+            for mr in &mut self.regions {
+                if mr.guest_phys_base as usize == base {
+                    let end = offset + data.len();
+                    if end <= mr.mmap.len() {
+                        mr.mmap[offset..end].copy_from_slice(data);
+                        self.mark_dirty(base as u64 + offset as u64, data.len());
+                        return Ok(());
+                    }
+                }
+            }
+        }
+        Err(anyhow::anyhow!("UVA 0x{:x} out of range (write)", uva))
     }
 }
 
@@ -225,178 +311,265 @@ impl VirtioPixelServer {
 
         self.running = true;
 
-        // Accept QEMU connection
-        let (mut stream, _addr) = listener.accept()?;
-        info!("QEMU connected!");
+        loop {
+            // Accept QEMU connection
+            let (mut stream, _addr) = listener.accept()?;
+            // Set non-blocking so we can poll virtqueues between protocol messages
+            stream.set_nonblocking(true)?;
+            info!("QEMU connected!");
 
-        // Handle vhost-user protocol messages
-        while self.running {
-            if let Err(e) = self.handle_message(&mut stream) {
-                error!("Error handling message: {}", e);
-                break;
+            // Reset state for new connection
+            // Clear guest_memory (SET_MEM_TABLE must be resent)
+            // Clear queue FDs (will be resent) but preserve queue metadata for restore operations
+            self.guest_memory = GuestMemory::new();
+            for q in &mut self.queues {
+                q.call_fd = None;
             }
-        }
+            info!("Connection state reset (guest_memory cleared, FDs cleared, queue metadata preserved)");
+
+            // Handle vhost-user protocol messages
+            loop {
+                if let Err(e) = self.handle_message(&mut stream) {
+                    if let Some(nix_err) = e.downcast_ref::<nix::errno::Errno>() {
+                        if *nix_err == nix::errno::Errno::EAGAIN
+                            || *nix_err == nix::errno::Errno::EWOULDBLOCK
+                        {
+                            // Timeout! Poll virtqueues.
+                            for i in 0..self.queues.len() {
+                                let _ = self.poll_virtqueue(i);
+                            }
+                            continue;
+                        }
+                    }
+
+                    // For io::Error (e.g. from stream.read_exact)
+                    if let Some(io_err) = e.downcast_ref::<std::io::Error>() {
+                        if io_err.kind() == std::io::ErrorKind::WouldBlock
+                            || io_err.kind() == std::io::ErrorKind::TimedOut
+                        {
+                            for i in 0..self.queues.len() {
+                                let _ = self.poll_virtqueue(i);
+                            }
+                            continue;
+                        }
+                    }
+
+                    error!("Error handling message: {:?}", e);
+                    break; // Break inner loop, will accept new connection
+                }
+            } // End inner loop
+
+            info!("Connection closed, accepting new connections...");
+        } // End outer loop
 
         info!("Backend stopped");
         Ok(())
     }
 
-    fn handle_message(&mut self, stream: &mut std::os::unix::net::UnixStream) -> Result<()> {
-        let mut hdr_buf = [0u8; 24];
+        fn handle_message(&mut self, stream: &mut std::os::unix::net::UnixStream) -> Result<()> {
+        let mut hdr_buf = [0u8; 12];
+        let mut iov = [std::io::IoSliceMut::new(&mut hdr_buf)];
+        let cmsg_buf_size = 16 + (8 * 4);
+        let mut cmsg_buf = vec![0u8; cmsg_buf_size];
 
-        // Check request type first to see if we need FD passing
-        stream.read_exact(&mut hdr_buf)?;
-        let request = u32::from_le_bytes([hdr_buf[0], hdr_buf[1], hdr_buf[2], hdr_buf[3]]);
+        use nix::sys::socket::{recvmsg, ControlMessageOwned, MsgFlags};
+        use std::os::unix::io::AsRawFd;
 
-        // Check request type to see if we need FD passing
-        // SET_MEM_TABLE (15) and SET_VRING_CALL (10) use FD passing
-        let (payload, fds) = if request == 15 || request == 10 {
-            // Use recvmsg to get FDs via SCM_RIGHTS
-            let mut buf = [0u8; 2048];
-            let mut iov = [std::io::IoSliceMut::new(&mut buf)];
-
-            // Calculate cmsg buffer size: one SCM_RIGHTS with up to 8 FDs
-            let cmsg_buf_size = 16 + (8 * 4);
-            let mut cmsg_buf = vec![0u8; cmsg_buf_size];
-
+        let mut recv_fds = Vec::new();
+        let bytes_read = {
             let msg: nix::sys::socket::RecvMsg<nix::sys::socket::UnixAddr> = recvmsg(
                 stream.as_raw_fd(),
                 &mut iov,
                 Some(&mut cmsg_buf),
                 MsgFlags::empty(),
             )?;
-
-            // Extract FDs from control messages
-            let mut recv_fds = Vec::new();
             for cmsg in msg.cmsgs() {
                 if let ControlMessageOwned::ScmRights(scn_fds) = cmsg {
                     recv_fds.extend(scn_fds);
                 }
             }
-
-            // Reconstruct payload from buffer (after 24-byte header)
-            let size = u64::from_le_bytes([
-                hdr_buf[8],
-                hdr_buf[9],
-                hdr_buf[10],
-                hdr_buf[11],
-                hdr_buf[12],
-                hdr_buf[13],
-                hdr_buf[14],
-                hdr_buf[15],
-            ]) as usize;
-
-            let mut full_payload = vec![0u8; size];
-            let copy_len = size.min(msg.bytes.saturating_sub(24));
-            if copy_len > 0 && msg.bytes >= 24 {
-                full_payload[0..copy_len].copy_from_slice(&buf[24..24 + copy_len]);
-            }
-
-            // Read remaining payload if truncated
-            if copy_len < size {
-                stream.read_exact(&mut full_payload[copy_len..])?;
-            }
-
-            (full_payload, recv_fds)
-        } else {
-            // Simple read for non-FD messages
-            let _flags = u32::from_le_bytes([hdr_buf[4], hdr_buf[5], hdr_buf[6], hdr_buf[7]]);
-            let size = u64::from_le_bytes([
-                hdr_buf[8],
-                hdr_buf[9],
-                hdr_buf[10],
-                hdr_buf[11],
-                hdr_buf[12],
-                hdr_buf[13],
-                hdr_buf[14],
-                hdr_buf[15],
-            ]) as usize;
-
-            let mut payload = vec![0u8; size];
-            if size > 0 {
-                stream.read_exact(&mut payload)?;
-            }
-
-            (payload, vec![])
+            msg.bytes
         };
 
-        let _flags = u32::from_le_bytes([hdr_buf[4], hdr_buf[5], hdr_buf[6], hdr_buf[7]]);
-        let size = payload.len() as u64;
-
-        info!(
-            "VhostUser message: request={} size={} fds={}",
-            request,
-            size,
-            fds.len()
-        );
-
-        // Handle message type (FDs for SET_MEM_TABLE and SET_VRING_CALL)
-        let (reply, _call_fds) = match request {
-            1 => (self.handle_set_owner(&payload)?, vec![]),
-            2 => (self.handle_reset_owner(&payload)?, vec![]),
-            3 => (self.handle_get_features(&payload)?, vec![]),
-            4 => (self.handle_set_features(&payload)?, vec![]),
-            5 => (self.handle_set_vring_num(&payload)?, vec![]),
-            6 => (self.handle_set_vring_addr(&payload)?, vec![]),
-            7 => (self.handle_set_vring_base(&payload)?, vec![]),
-            8 => (self.handle_get_vring_base(&payload)?, vec![]),
-            9 => (self.handle_set_vring_kick(&payload)?, vec![]),
-            10 => self.handle_set_vring_call(&payload, &fds)?,
-            11 => (self.handle_set_vring_err(&payload)?, vec![]),
-            15 => self.handle_set_mem_table(&payload, &fds)?,
-            _ => {
-                warn!("Unsupported message type: {}", request);
-                (vec![0u8; 24], vec![])
-            }
-        };
-
-        // Close FDs after use (except call FDs which are stored in queues)
-        for fd in fds {
-            let _ = nix::unistd::close(fd);
+        if bytes_read == 0 {
+            return Err(anyhow::anyhow!("Connection closed by peer"));
         }
 
-        // Send reply
-        stream.write_all(&reply)?;
+        let request = u32::from_le_bytes([hdr_buf[0], hdr_buf[1], hdr_buf[2], hdr_buf[3]]);
+        let flags = u32::from_le_bytes([hdr_buf[4], hdr_buf[5], hdr_buf[6], hdr_buf[7]]);
+        let size = u32::from_le_bytes([hdr_buf[8], hdr_buf[9], hdr_buf[10], hdr_buf[11]]) as usize;
+
+        let mut payload = vec![0u8; size];
+        if size > 0 {
+            use std::io::Read;
+            stream.read_exact(&mut payload)?;
+        }
+
+        log::info!("VhostUser request={} flags=0x{:x} size={}", request, flags, size);
+
+        let (mut reply_payload, fds_to_send) = match request {
+            1 => (self.handle_get_features(&payload)?, vec![]),
+            2 => (self.handle_set_features(&payload)?, vec![]),
+            3 => (self.handle_set_owner(&payload)?, vec![]),
+            4 => (self.handle_reset_owner(&payload)?, vec![]),
+            5 => self.handle_set_mem_table(&payload, &recv_fds)?,
+            6 => self.handle_set_log_base(&payload, &recv_fds)?,
+            8 => (self.handle_set_vring_num(&payload)?, vec![]),
+            9 => (self.handle_set_vring_addr(&payload)?, vec![]),
+            10 => (self.handle_set_vring_base(&payload)?, vec![]),
+            11 => (self.handle_get_vring_base(&payload)?, vec![]),
+            12 => (self.handle_set_vring_kick(&payload)?, vec![]),
+            13 => self.handle_set_vring_call(&payload, &recv_fds)?,
+            14 => (self.handle_set_vring_err(&payload)?, vec![]),
+            15 => (self.handle_get_protocol_features(&payload)?, vec![]),
+            16 => (self.handle_set_protocol_features(&payload)?, vec![]),
+            17 => (self.handle_get_queue_num(&payload)?, vec![]),
+            18 => (self.handle_set_vring_enable(&payload)?, vec![]),
+            24 => {
+                let capacity = { self.extractor.lock().unwrap().decoded_size / 512 };
+                let config_space = capacity.to_le_bytes(); // 8 bytes
+
+                let mut reply = payload.to_vec(); // clone request payload which has offset/size/flags
+
+                let config_offset = u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]) as usize;
+                let config_size = u32::from_le_bytes([payload[4], payload[5], payload[6], payload[7]]) as usize;
+
+                for i in 0..config_size {
+                    if config_offset + i < config_space.len() {
+                        if 12 + i < reply.len() {
+                            reply[12 + i] = config_space[config_offset + i];
+                        }
+                    }
+                }
+                (reply, vec![])
+            },
+            _ => {
+                log::warn!("Unsupported message type: {}", request);
+                (vec![], vec![])
+            }
+        };
+
+        // Only close received FDs that were NOT returned by the handler
+        // (handlers may duplicate FDs they want to keep, like callfds)
+        let fds_to_keep: std::collections::HashSet<std::os::fd::RawFd> = fds_to_send.iter().copied().collect();
+        for fd in recv_fds {
+            if !fds_to_keep.contains(&fd) {
+                let _ = nix::unistd::close(fd);
+            }
+        }
+
+        // QEMU expects reply if NEED_REPLY flag is set or for GET requests
+        // VHOST_USER_NEED_REPLY_MASK is 0x8
+        let need_reply = (flags & 0x8) != 0 || request == 1 || request == 6 || request == 11 || request == 15 || request == 17 || request == 24;
+
+        if need_reply {
+            let mut reply_header = [0u8; 12];
+            reply_header[0..4].copy_from_slice(&request.to_le_bytes());
+            let reply_flags: u32 = 0x5; // REPLY | VERSION 1
+            reply_header[4..8].copy_from_slice(&reply_flags.to_le_bytes());
+            
+            let final_payload = if (flags & 0x8) != 0 && reply_payload.is_empty() {
+                vec![0u8; 8]
+            } else {
+                reply_payload
+            };
+
+            let reply_size = final_payload.len() as u32;
+            reply_header[8..12].copy_from_slice(&reply_size.to_le_bytes());
+
+            use std::io::Write;
+            stream.write_all(&reply_header)?;
+            if !final_payload.is_empty() {
+                stream.write_all(&final_payload)?;
+            }
+        }
 
         Ok(())
     }
-
     fn handle_set_owner(&self, _payload: &[u8]) -> Result<Vec<u8>> {
-        info!("SET_OWNER");
-        Ok(vec![0u8; 24])
+        Ok(vec![])
     }
 
     fn handle_reset_owner(&self, _payload: &[u8]) -> Result<Vec<u8>> {
-        info!("RESET_OWNER");
-        Ok(vec![0u8; 24])
+        Ok(vec![])
     }
 
     fn handle_get_features(&self, _payload: &[u8]) -> Result<Vec<u8>> {
-        info!("GET_FEATURES");
-        // Return 8 bytes of features (read-only)
-        let features = 1u64 << 5; // VIRTIO_BLK_F_RO
-        let mut reply = [0u8; 32];
-        reply[0..24].copy_from_slice(&[0u8; 24]); // Header
-        reply[24..32].copy_from_slice(&features.to_le_bytes());
-        Ok(reply.to_vec())
+        // Writes land in an in-memory sector overlay (see SpatialMkvExtractor::write),
+        // not VIRTIO_BLK_F_RO(5) anymore, so the guest can mount rw.
+        // VHOST_F_LOG_ALL (26) lets QEMU negotiate migration dirty-page
+        // logging - without advertising it, QEMU refuses migration/snapshot
+        // outright for any VM with this device attached.
+        //
+        // FIX: QEMU 8.2.2 REQUIRES VHOST_USER_F_PROTOCOL_FEATURES (bit 30)
+        // to be set, otherwise it never calls GET_PROTOCOL_FEATURES and
+        // the negotiation stalls before SET_MEM_TABLE and GET_CONFIG.
+        //
+        // Response format: 0x4000000410000000
+        // - Upper bits (32+): VirtIO device features
+        //   - Bit 32: VIRTIO_F_VERSION_1
+        // - Lower bits (0-31): vhost features
+        //   - Bit 26: VHOST_F_LOG_ALL (migration support)
+        //   - Bit 30: VHOST_USER_F_PROTOCOL_FEATURES (required by QEMU 8.2.2)
+        let features = (1u64 << 26) | (1u64 << 30) | (1u64 << 32);
+        info!("GET_FEATURES returning: 0x{:016x}", features);
+        info!("  - VIRTIO_F_VERSION_1 (bit 32) enabled");
+        info!("  - VHOST_F_LOG_ALL (bit 26) for migration support");
+        info!("  - VHOST_USER_F_PROTOCOL_FEATURES (bit 30) - REQUIRED for QEMU 8.2.2");
+        Ok(features.to_le_bytes().to_vec())
     }
 
-    fn handle_set_features(&self, _payload: &[u8]) -> Result<Vec<u8>> {
-        info!("SET_FEATURES");
-        Ok(vec![0u8; 24])
+    fn handle_set_features(&mut self, payload: &[u8]) -> Result<Vec<u8>> {
+        if payload.len() >= 8 {
+            let features = u64::from_le_bytes(payload[0..8].try_into().unwrap());
+            let log_all = (features & (1 << 26)) != 0;
+            self.guest_memory.set_logging_enabled(log_all);
+            if log_all {
+                info!("Migration dirty-page logging enabled (VHOST_F_LOG_ALL negotiated)");
+            }
+        }
+        Ok(vec![])
+    }
+
+    /// VHOST_USER_SET_LOG_BASE (6): QEMU sends the dirty-page log's mmap
+    /// size/offset in the payload and the shared fd via ancillary data.
+    /// Without handling this, QEMU can't complete migration even after we
+    /// advertise VHOST_USER_PROTOCOL_F_LOG_SHMFD - it still needs somewhere
+    /// to actually receive the log.
+    fn handle_set_log_base(&mut self, payload: &[u8], recv_fds: &[std::os::fd::RawFd]) -> Result<(Vec<u8>, Vec<std::os::fd::RawFd>)> {
+        if payload.len() < 16 || recv_fds.is_empty() {
+            warn!("SET_LOG_BASE: missing payload or fd");
+            return Ok((vec![0u8; 8], vec![]));
+        }
+
+        let mmap_size = u64::from_le_bytes(payload[0..8].try_into().unwrap());
+        let mmap_offset = u64::from_le_bytes(payload[8..16].try_into().unwrap());
+
+        // dup() so the mmap owns its own fd - the generic dispatch loop
+        // closes every fd in recv_fds after the handler returns regardless
+        // of which handler ran, so holding onto the original would double-close.
+        let owned_fd = unsafe { OwnedFd::from_raw_fd(dup(recv_fds[0])?) };
+        let mmap = unsafe {
+            memmap2::MmapOptions::new()
+                .len(mmap_size as usize)
+                .offset(mmap_offset)
+                .map_mut(&owned_fd)?
+        };
+        self.guest_memory.set_log_base(mmap);
+        Ok((vec![0u8; 8], vec![]))
     }
 
     fn handle_set_vring_num(&mut self, payload: &[u8]) -> Result<Vec<u8>> {
-        let idx = u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]);
-        let num = u32::from_le_bytes([payload[4], payload[5], payload[6], payload[7]]);
-        info!("SET_VRING_NUM: index={} num={}", idx, num);
-
-        while self.queues.len() <= idx as usize {
+        // ... (keep logic, but replace Ok at end)
+        let idx = u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]) as usize;
+        let num = u32::from_le_bytes([payload[4], payload[5], payload[6], payload[7]]) as usize;
+        
+        while self.queues.len() <= idx {
             self.queues.push(VirtQueue::default());
         }
-        self.queues[idx as usize].num = num;
-
-        Ok(vec![0u8; 24])
+        self.queues[idx].num = num as u32;
+        
+        Ok(vec![])
     }
 
     fn handle_set_vring_addr(&mut self, payload: &[u8]) -> Result<Vec<u8>> {
@@ -422,15 +595,25 @@ impl VirtioPixelServer {
             payload[30],
             payload[31],
         ]);
+        let log_addr = u64::from_le_bytes([
+            payload[32],
+            payload[33],
+            payload[34],
+            payload[35],
+            payload[36],
+            payload[37],
+            payload[38],
+            payload[39],
+        ]);
         let used = u64::from_le_bytes([
-            payload[40],
-            payload[41],
-            payload[42],
-            payload[43],
-            payload[44],
-            payload[45],
-            payload[46],
-            payload[47],
+            payload[16],
+            payload[17],
+            payload[18],
+            payload[19],
+            payload[20],
+            payload[21],
+            payload[22],
+            payload[23],
         ]);
 
         info!(
@@ -444,37 +627,55 @@ impl VirtioPixelServer {
             self.queues[idx as usize].used = used;
         }
 
-        Ok(vec![0u8; 24])
+        Ok(vec![])
     }
 
     fn handle_set_vring_base(&mut self, payload: &[u8]) -> Result<Vec<u8>> {
         let idx = u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]);
-        let base = u64::from_le_bytes([
-            payload[8],
-            payload[9],
-            payload[10],
-            payload[11],
-            payload[12],
-            payload[13],
-            payload[14],
-            payload[15],
+        let base = u32::from_le_bytes([
+            payload[4],
+            payload[5],
+            payload[6],
+            payload[7],
         ]);
 
         info!("SET_VRING_BASE: index={} base={}", idx, base);
 
         if self.queues.len() > idx as usize {
+            // base initializes both avail and used tracking - on a
+            // migration resume the guest's own driver state (part of the
+            // migrated RAM) already expects the used ring to continue from
+            // this same index. Only setting last_avail_idx left used_idx at
+            // its fresh-process default of 0, so post-resume completions
+            // landed at the wrong used-ring slots ("req.0:id N is not a
+            // head!" / I/O errors on the guest side).
             self.queues[idx as usize].last_avail_idx = base as u16;
+            self.queues[idx as usize].last_used_idx = base as u16;
         }
 
-        Ok(vec![0u8; 24])
+        Ok(vec![])
     }
 
-    fn handle_get_vring_base(&self, _payload: &[u8]) -> Result<Vec<u8>> {
-        info!("GET_VRING_BASE");
-        // Return 8 bytes (last_avail_idx)
-        let mut reply = [0u8; 32];
-        reply[0..24].copy_from_slice(&[0u8; 24]); // Header
-        reply[24..32].copy_from_slice(&0u64.to_le_bytes());
+    fn handle_get_vring_base(&self, payload: &[u8]) -> Result<Vec<u8>> {
+        // Was hardcoded to always report last_avail_idx=0 regardless of the
+        // queue's real position - harmless for normal operation (nothing
+        // reads this reply outside migration) but it silently corrupted
+        // migration/snapshot: QEMU saves this value as the guest's true
+        // ring position, so resuming from a snapshot replayed every queue
+        // from index 0 while the guest kernel's own idea of the ring had
+        // already advanced, producing "Guest index inconsistent with Host
+        // index" and refusing to resume.
+        let idx = if payload.len() >= 4 {
+            u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]) as usize
+        } else {
+            0
+        };
+        let last_avail_idx = self.queues.get(idx).map(|q| q.last_avail_idx).unwrap_or(0);
+        info!("GET_VRING_BASE: index={} last_avail_idx={}", idx, last_avail_idx);
+
+        let mut reply = [0u8; 8];
+        reply[0..4].copy_from_slice(&(idx as u32).to_le_bytes());
+        reply[4..8].copy_from_slice(&(last_avail_idx as u32).to_le_bytes());
         Ok(reply.to_vec())
     }
 
@@ -484,7 +685,7 @@ impl VirtioPixelServer {
         if let Err(e) = self.poll_virtqueue(0) {
             error!("Error polling virtqueue: {}", e);
         }
-        Ok(vec![0u8; 24])
+        Ok(vec![])
     }
 
     fn handle_set_vring_call(&mut self, payload: &[u8], fds: &[std::os::fd::RawFd]) -> Result<(Vec<u8>, Vec<std::os::fd::RawFd>)> {
@@ -502,23 +703,26 @@ impl VirtioPixelServer {
         if !fds.is_empty() {
             let fd = fds[0];
             info!("  Storing callfd={} for queue {}", fd, idx);
-            let owned_fd = unsafe { OwnedFd::from_raw_fd(dup(fd)?) };
 
             while self.queues.len() <= idx as usize {
                 self.queues.push(VirtQueue::default());
             }
+            // dup() so we own a copy - the original stays in recv_fds
+            // and gets preserved by the main loop since we return it
+            let owned_fd = unsafe { OwnedFd::from_raw_fd(dup(fd)?) };
             self.queues[idx as usize].call_fd = Some(owned_fd);
+
+            // Return the original fd so main loop won't close it
+            Ok((vec![], fds.to_vec()))
         } else {
             warn!("  No FD passed in SET_VRING_CALL");
+            Ok((vec![], vec![]))
         }
-
-        // Return reply and empty FDs list (we're keeping the callfd)
-        Ok((vec![0u8; 24], vec![]))
     }
 
     fn handle_set_vring_err(&self, _payload: &[u8]) -> Result<Vec<u8>> {
         info!("SET_VRING_ERR");
-        Ok(vec![0u8; 24])
+        Ok(vec![])
     }
 
     fn handle_set_mem_table(
@@ -638,7 +842,7 @@ impl VirtioPixelServer {
         );
 
         // Return reply and empty FDs list (we're keeping the mem FDs in the mmap)
-        Ok((vec![0u8; 24], vec![]))
+        Ok((vec![], vec![]))
     }
 
     /// Read a VirtIO descriptor from guest memory
@@ -648,11 +852,11 @@ impl VirtioPixelServer {
         }
 
         let queue = &self.queues[queue_idx];
-        let desc_gpa = queue.desc + (desc_idx as u64) * 16; // VirtqDesc is 16 bytes
+        let desc_uva = queue.desc + (desc_idx as u64) * 16; // VirtqDesc is 16 bytes
 
-        let desc_bytes = self.guest_memory.read(desc_gpa, 16)?;
+        let desc_bytes = self.guest_memory.read_user(desc_uva, 16)?;
         if desc_bytes.len() < 16 {
-            return Err(anyhow::anyhow!("Descriptor read truncated at GPA 0x{:x}", desc_gpa));
+            return Err(anyhow::anyhow!("Descriptor read truncated at UVA 0x{:x}", desc_uva));
         }
 
         let addr = u64::from_le_bytes([
@@ -695,11 +899,11 @@ impl VirtioPixelServer {
         }
 
         let queue = &self.queues[queue_idx];
-        let idx_gpa = queue.avail + 2; // avail.idx is at offset 2
+        let idx_uva = queue.avail + 2; // avail.idx is at offset 2
 
-        let idx_bytes = self.guest_memory.read(idx_gpa, 2)?;
+        let idx_bytes = self.guest_memory.read_user(idx_uva, 2)?;
         if idx_bytes.len() < 2 {
-            return Err(anyhow::anyhow!("avail.idx read truncated at GPA 0x{:x}", idx_gpa));
+            return Err(anyhow::anyhow!("avail.idx read truncated at UVA 0x{:x}", idx_uva));
         }
 
         let idx = u16::from_le_bytes([idx_bytes[0], idx_bytes[1]]);
@@ -715,14 +919,14 @@ impl VirtioPixelServer {
         let queue = &self.queues[queue_idx];
         let num = queue.num as u16;
         let ring_idx = (idx % num) as usize;
-        let ring_gpa = queue.avail + 4 + (ring_idx as u64) * 2; // avail.ring starts at offset 4
+        let ring_uva = queue.avail + 4 + (ring_idx as u64) * 2; // avail.ring starts at offset 4
 
-        let entry_bytes = self.guest_memory.read(ring_gpa, 2)?;
+        let entry_bytes = self.guest_memory.read_user(ring_uva, 2)?;
         if entry_bytes.len() < 2 {
             return Err(anyhow::anyhow!(
-                "avail.ring[{}] read truncated at GPA 0x{:x}",
+                "avail.ring[{}] read truncated at UVA 0x{:x}",
                 ring_idx,
-                ring_gpa
+                ring_uva
             ));
         }
 
@@ -740,40 +944,38 @@ impl VirtioPixelServer {
         let num = queue.num as u16;
         let used_idx = queue.last_used_idx;
         let ring_idx = (used_idx % num) as usize;
-        let ring_gpa = queue.used + 4 + (ring_idx as u64) * 8; // used.ring starts at offset 4
+        let ring_uva = queue.used + 4 + (ring_idx as u64) * 8; // used.ring starts at offset 4
 
         // Write VirtqUsedElem (8 bytes)
         let mut elem_bytes = [0u8; 8];
         elem_bytes[0..4].copy_from_slice(&(head as u32).to_le_bytes());
         elem_bytes[4..8].copy_from_slice(&len.to_le_bytes());
-        self.guest_memory.write(ring_gpa, &elem_bytes)?;
+        self.guest_memory.write_user(ring_uva, &elem_bytes)?;
 
         // Update used.idx
-        let idx_gpa = queue.used + 2;
+        let idx_uva = queue.used + 2;
         let new_idx = used_idx.wrapping_add(1);
         queue.last_used_idx = new_idx;
         let idx_bytes = new_idx.to_le_bytes();
-        self.guest_memory.write(idx_gpa, &idx_bytes)?;
+        self.guest_memory.write_user(idx_uva, &idx_bytes)?;
 
         Ok(())
     }
 
     /// Poll virtqueue for new requests and process them
     fn poll_virtqueue(&mut self, queue_idx: usize) -> Result<()> {
+        // Check queue exists and is ready
         if queue_idx >= self.queues.len() {
-            return Err(anyhow::anyhow!("Invalid queue index {}", queue_idx));
+            return Ok(()); // Queue not initialized yet
+        }
+        if !self.queues[queue_idx].ready {
+            return Ok(()); // Queue not ready yet
         }
 
-        let queue = &self.queues[queue_idx];
-        if !queue.ready {
-            return Ok(());
-        }
-
-        // Check if new descriptors available
         let avail_idx = self.read_avail_idx(queue_idx)?;
         let last_avail = self.queues[queue_idx].last_avail_idx;
 
-        if avail_idx == last_avail {
+            if avail_idx == last_avail {
             return Ok(()); // No new requests
         }
 
@@ -916,6 +1118,18 @@ impl VirtioPixelServer {
                 "  Extracted {} Hilbert bytes at offset 0x{:x} (sector {})",
                 decoded_data.len(), offset, sector
             );
+        } else if req_type == VIRTIO_BLK_T_OUT {
+            // Writes land in an in-memory sector overlay, not the source MKV -
+            // re-encoding video frames on every write is a much bigger project.
+            let offset = sector * 512;
+            let write_data = self.guest_memory.read(data_desc.addr, data_desc.len as usize)?;
+
+            let mut extractor = self.extractor.lock().unwrap();
+            extractor.write(offset, &write_data)?;
+            info!(
+                "  Wrote {} bytes to overlay at offset 0x{:x} (sector {})",
+                write_data.len(), offset, sector
+            );
         }
 
         // Write status OK
@@ -923,5 +1137,33 @@ impl VirtioPixelServer {
         info!("  Wrote VIRTIO_BLK_S_OK to status byte");
 
         Ok(())
+    }
+    fn handle_get_protocol_features(&self, _payload: &[u8]) -> Result<Vec<u8>> {
+        // VHOST_USER_PROTOCOL_F_MQ (0) | VHOST_USER_PROTOCOL_F_LOG_SHMFD (1) |
+        // VHOST_USER_PROTOCOL_F_REPLY_ACK (3) | VHOST_USER_PROTOCOL_F_CONFIG (9)
+        let features = (1u64 << 0) | (1u64 << 1) | (1u64 << 3) | (1u64 << 9);
+        Ok(features.to_le_bytes().to_vec())
+    }
+
+    fn handle_get_queue_num(&self, _payload: &[u8]) -> Result<Vec<u8>> {
+        let num: u64 = 1;
+        Ok(num.to_le_bytes().to_vec())
+    }
+
+    fn handle_set_protocol_features(&self, _payload: &[u8]) -> Result<Vec<u8>> {
+        Ok(vec![])
+    }
+
+    fn handle_set_vring_enable(&mut self, payload: &[u8]) -> Result<Vec<u8>> {
+        if payload.len() >= 8 {
+            let idx = u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]) as usize;
+            let enable = u32::from_le_bytes([payload[4], payload[5], payload[6], payload[7]]);
+            
+            if idx < self.queues.len() {
+                self.queues[idx].ready = enable != 0;
+                info!("SET_VRING_ENABLE: index={} enable={}", idx, enable);
+            }
+        }
+        Ok(vec![])
     }
 }

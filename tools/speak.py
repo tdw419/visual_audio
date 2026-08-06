@@ -34,6 +34,7 @@ from upic_engine import (
 )
 from codec.phy import Phy16Tone, frame, unframe
 from codec.phy_ecc import encode_ecc, decode_ecc
+from phoneme_ecc import PhonemeECC
 
 # For 'say' mode - phoneme word compiler
 try:
@@ -359,7 +360,7 @@ def ascii_spectrogram(wav_path: str, width: int = 100, bands: int = 16):
     return '\n'.join(lines)
 
 
-def say_text(text: str, wav_path: str, project_path: str = None, verbose: bool = False, lang: str = 'en-us', use_neural: bool = True):
+def say_text(text: str, wav_path: str, project_path: str = None, verbose: bool = False, lang: str = 'en-us', use_neural: bool = True, use_ecc: bool = False):
     """
     Speak text using phoneme-based word synthesis.
     
@@ -370,6 +371,7 @@ def say_text(text: str, wav_path: str, project_path: str = None, verbose: bool =
         verbose: Print detailed output
         lang: Language code (e.g., 'en-us', 'es-es', 'de-de')
         use_neural: Use neural model for coarticulation (default: True)
+        use_ecc: Use Reed-Solomon ECC over the phoneme sequence (default: False)
     
     Returns:
         Audio array
@@ -411,7 +413,36 @@ def say_text(text: str, wav_path: str, project_path: str = None, verbose: bool =
     
     if not word_audios:
         raise ValueError("No words could be compiled from text")
-    
+
+    if use_ecc:
+        if verbose:
+            print("Applying Reed-Solomon ECC over phoneme sequence...")
+        # Re-extract all phonemes from the words
+        from word_compiler import get_phonemes_for_word
+        cmudict = get_cmudict()
+        
+        all_phonemes = []
+        for word in text.split():
+            # Clean word punctuation (simple version)
+            import re
+            clean_word = re.sub(r'[^\w\-]', '', word).lower()
+            if clean_word:
+                all_phonemes.extend(get_phonemes_for_word(clean_word, cmudict))
+                
+        ecc = PhonemeECC(ecc_symbols=8)
+        encoded_phonemes = ecc.encode(all_phonemes)
+        parity_phonemes = encoded_phonemes[len(all_phonemes):]
+        
+        if verbose:
+            print(f"  Generated {len(parity_phonemes)} parity phonemes: {parity_phonemes}")
+            
+        # Compile the parity phonemes into audio
+        from word_compiler import build_word_project_with_crossfade
+        parity_audio = build_word_project_with_crossfade("ecc_parity", parity_phonemes, use_neural=use_neural)
+        
+        # Append to word_audios as a pseudo-word
+        word_audios.append(("parity_burst", parity_audio))
+        
     # Concatenate with brief gaps
     audio = concat_words_audio(word_audios, gap_ms=50.0)
     
@@ -470,6 +501,7 @@ def main():
     p_say.add_argument('-v', '--verbose', action='store_true', help='print detailed output')
     p_say.add_argument('--lang', default='en-us', help='language code (e.g., en-us, es-es, de-de)')
     p_say.add_argument('--no-neural', action='store_true', help='disable neural coarticulation, use static envelopes')
+    p_say.add_argument('--ecc', action='store_true', help='add Reed-Solomon parity to the phoneme sequence')
 
     # Dual-band encoding commands
     p_enc_dual = sub.add_parser('encode_dual', help='encode text + software to dual-band WAV')
@@ -484,6 +516,15 @@ def main():
     p_dec_dual.add_argument('-t', '--text', help='output text file (optional)')
     p_dec_dual.add_argument('-b', '--software', required=True, help='output software file')
     p_dec_dual.add_argument('--ecc', action='store_true', help='decode a dual-band WAV encoded with --ecc')
+
+    p_verify_ecc = sub.add_parser('verify-ecc',
+        help='simulate phoneme corruption and confirm Reed-Solomon recovery (no real STT exists yet, '
+             'so this tests the ECC layer against a simulated noisy channel rather than real audio)')
+    p_verify_ecc.add_argument('text', help='text whose phoneme sequence will be protected and corrupted')
+    p_verify_ecc.add_argument('--errors', type=int, default=4,
+        help='number of phonemes to corrupt (data + parity combined); default 4 = the correction '
+             'limit for ecc_symbols=8')
+    p_verify_ecc.add_argument('--seed', type=int, default=None, help='random seed for reproducible corruption')
 
     args = parser.parse_args()
 
@@ -513,7 +554,7 @@ def main():
             text = args.text
         
         use_neural = not args.no_neural
-        audio = say_text(text, args.wav, args.project, verbose=args.verbose, lang=args.lang, use_neural=use_neural)
+        audio = say_text(text, args.wav, args.project, verbose=args.verbose, lang=args.lang, use_neural=use_neural, use_ecc=args.ecc)
         print(f"Spoke text -> {args.wav}")
         print(f"  Duration: {len(audio) / SAMPLE_RATE:.2f}s")
 
@@ -527,6 +568,52 @@ def main():
 
     elif args.cmd == 'decode_dual':
         decode_dual_band(args.wav, args.text, args.software, use_ecc=args.ecc)
+
+    elif args.cmd == 'verify-ecc':
+        import re
+        import random
+        from word_compiler import get_phonemes_for_word
+        from phoneme_ecc import PhonemeECC, PHONEMES
+
+        cmudict = get_cmudict()
+        all_phonemes = []
+        for word in args.text.split():
+            clean_word = re.sub(r'[^\w\-]', '', word).lower()
+            if clean_word:
+                all_phonemes.extend(get_phonemes_for_word(clean_word, cmudict))
+
+        if not all_phonemes:
+            print("No phonemes extracted from input text.")
+            return
+
+        ecc = PhonemeECC(ecc_symbols=8)
+        encoded = ecc.encode(all_phonemes)
+        print(f"Original phonemes ({len(all_phonemes)}): {all_phonemes}")
+        print(f"Encoded with parity ({len(encoded)}): {encoded}")
+
+        rng = random.Random(args.seed)
+        corrupted = encoded.copy()
+        error_positions = rng.sample(range(len(corrupted)), min(args.errors, len(corrupted)))
+        for i in error_positions:
+            corrupted[i] = rng.choice([p for p in PHONEMES if p != corrupted[i]])
+        print(f"\nSimulated {len(error_positions)} corrupted positions: {sorted(error_positions)}")
+        print(f"Corrupted stream: {corrupted}")
+
+        recovered, valid, fixed = ecc.decode(corrupted)
+        match = recovered == all_phonemes
+        print(f"\nRecovered: {recovered}")
+        print(f"RS decode valid: {valid}")
+        print(f"Matches original exactly: {match}")
+
+        if valid and match:
+            print(f"\n✓ Reed-Solomon recovered the original phoneme sequence "
+                  f"despite {len(error_positions)} simulated corrupted phonemes.")
+        elif valid and not match:
+            print(f"\n✗ RS decode reported success but output does not match original — bug.")
+        else:
+            print(f"\n✗ Corruption ({len(error_positions)} errors) exceeded the correction "
+                  f"capacity for ecc_symbols=8 (max ~4 symbol errors). This is expected, "
+                  f"honestly-reported failure, not silent data corruption.")
 
 
 if __name__ == '__main__':

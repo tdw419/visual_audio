@@ -1,104 +1,82 @@
 #!/bin/bash
-# End-to-end boot test for VirtIO Pixel vhost-user backend
-#
-# This script boots Ubuntu Desktop entirely from a spatial MKV container
-# via the zero-copy, GPU-native VirtIO Pixel storage bridge.
-#
-# Usage: ./boot_ubuntu_spatial.sh [mkv_path] [qemu_args...]
+# Fixed boot script with proper cleanup and timing
 
 set -e
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-BACKEND_DIR="${PROJECT_ROOT}/systems/virtio_pixel_rs"
-SOCKET_PATH="/tmp/virtio-pixel-spatial.sock"
-BACKEND_PID=""
-QEMU_PID=""
-
-# Default MKV path
-MKV_PATH="${1:-${PROJECT_ROOT}/visual_audio.mkv}"
-
-# Additional QEMU arguments
-shift 2>/dev/null || true
-QEMU_ARGS="$@"
-
-echo "========================================="
-echo "VirtIO Pixel Spatial Boot"
-echo "========================================="
-echo "MKV:      ${MKV_PATH}"
-echo "Socket:   ${SOCKET_PATH}"
-echo "Backend:  ${BACKEND_DIR}"
+echo "=== VirtIO Pixel Spatial Boot Test ==="
 echo ""
 
-# Check MKV exists
-if [[ ! -f "${MKV_PATH}" ]]; then
-    echo "ERROR: MKV not found: ${MKV_PATH}"
-    echo ""
-    echo "Available MKV files:"
-    find "${PROJECT_ROOT}" -name "*.mkv" -type f -exec ls -lh {} \; 2>/dev/null | awk '{print "  " $9 " (" $5 ")"}'
-    exit 1
-fi
+MKV_PATH="/home/jericho/projects/zion/projects/visual_audio/visual_audio.mkv"
+SOCKET_PATH="/tmp/virtio-pixel-spatial.sock"
+BACKEND_BIN="./target/release/virtio_pixel_backend"
 
-# Check backend is built
-if [[ ! -x "${BACKEND_DIR}/target/release/virtio_pixel_backend" ]]; then
-    echo "Building Rust backend..."
-    cd "${BACKEND_DIR}"
-    cargo build --release
-fi
+cd /home/jericho/projects/zion/projects/visual_audio/systems/virtio_pixel_rs
 
 # Cleanup function
 cleanup() {
-    echo ""
     echo "Cleaning up..."
-    if [[ -n "${QEMU_PID}" ]]; then
-        kill "${QEMU_PID}" 2>/dev/null || true
-        wait "${QEMU_PID}" 2>/dev/null || true
-    fi
-    if [[ -n "${BACKEND_PID}" ]]; then
-        kill "${BACKEND_PID}" 2>/dev/null || true
-        wait "${BACKEND_PID}" 2>/dev/null || true
-    fi
-    rm -f "${SOCKET_PATH}"
+    pkill -f virtio_pixel_backend 2>/dev/null || true
+    pkill -f qemu-system-x86_64 2>/dev/null || true
+    rm -f $SOCKET_PATH
+    sleep 1
 }
+trap cleanup EXIT
 
-trap cleanup EXIT INT TERM
+# Cleanup before starting
+cleanup
 
-# Start Rust backend
-echo "[1] Starting VirtIO Pixel backend..."
-cd "${BACKEND_DIR}"
-RUST_LOG=info ./target/release/virtio_pixel_backend "${MKV_PATH}" "${SOCKET_PATH}" &
+# Build backend if needed
+if [ ! -f "$BACKEND_BIN" ]; then
+    echo "Building backend..."
+    cargo build --release
+fi
+
+# Start backend in background with full logging
+echo "Starting VirtIO Pixel backend..."
+$BACKEND_BIN "$MKV_PATH" "$SOCKET_PATH" 2>&1 &
 BACKEND_PID=$!
+echo "Backend PID: $BACKEND_PID"
 
-echo "    Backend PID: ${BACKEND_PID}"
-echo "    Waiting for socket..."
-sleep 3
+# Wait for socket AND backend to be ready
+echo "Waiting for backend to initialize..."
+for i in {1..60}; do
+    if [ -S "$SOCKET_PATH" ] && ps -p $BACKEND_PID > /dev/null 2>&1; then
+        echo "✓ Backend and socket ready"
+        break
+    fi
+    sleep 0.5
+done
 
-# Check socket
-if [[ ! -S "${SOCKET_PATH}" ]]; then
-    echo "ERROR: Socket not created: ${SOCKET_PATH}"
-    echo "Backend output:"
-    ps -p "${BACKEND_PID}" -o pid,cmd 2>/dev/null || echo "Backend died"
+if [ ! -S "$SOCKET_PATH" ]; then
+    echo "✗ Socket not created"
     exit 1
 fi
 
-echo "    Socket ready: ${SOCKET_PATH}"
+if ! ps -p $BACKEND_PID > /dev/null 2>&1; then
+    echo "✗ Backend died"
+    exit 1
+fi
 
-# Launch QEMU
-echo ""
-echo "[2] Launching QEMU with vhost-user-blk..."
-echo ""
+# Give backend extra time to fully initialize
+sleep 2
 
-exec qemu-system-x86_64 \
-  -machine q35,accel=kvm:kvm:tcg \
-  -cpu host \
-  -m 2G \
-  -smp 2 \
-  \
-  -device virtio-blk-pci,bus=pcie.0,addr=0x4,chardev=blk0 \
-  -chardev socket,id=blk0,path=${SOCKET_PATH},server=off \
-  \
-  -drive if=virtio,file=${PROJECT_ROOT}/boot_images/ubuntu-24.04-desktop.qcow2,readonly=on,format=qcow2 \
-  \
-  -display gtk \
-  -serial mon:stdio \
-  -monitor telnet:127.0.0.1:4444,server,nowait \
-  ${QEMU_ARGS}
+# Launch QEMU with VirtIO block device pointing to our vhost-user socket
+echo "Launching QEMU with VirtIO Pixel backend..."
+qemu-system-x86_64 \
+    -chardev socket,id=blk0,path=$SOCKET_PATH \
+    -device vhost-user-blk-pci,chardev=blk0,bootindex=0 \
+    -m 2G -smp 2 \
+    -display none -serial mon:stdio \
+    -no-reboot 2>&1 &
+QEMU_PID=$!
+echo "QEMU PID: $QEMU_PID"
+
+# Wait for boot (indefinitely - user can Ctrl-C to stop)
+echo "Waiting for boot (Ctrl-C to stop)..."
+wait $QEMU_PID
+EXIT_CODE=$?
+
+echo ""
+echo "=== Boot completed with exit code: $EXIT_CODE ==="
+
+exit $EXIT_CODE

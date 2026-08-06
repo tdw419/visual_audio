@@ -1,45 +1,30 @@
 #!/bin/bash
-# Quick vhost-user-blk test with QEMU
-#
-# Tests basic vhost-user protocol handshake without full boot
+cd /home/jericho/projects/zion/projects/visual_audio/systems/virtio_pixel_rs
+pkill -f virtio_pixel_backend 2>/dev/null || true
+pkill -f qemu-system-x86_64 2>/dev/null || true
+rm -f /tmp/virtio-pixel-spatial.sock
+sleep 1
 
-set -e
+./target/release/virtio_pixel_backend \
+    /home/jericho/projects/zion/projects/visual_audio/alpine_rootfs_ext4_rw3.mkv \
+    /tmp/virtio-pixel-spatial.sock > /tmp/backend_full.log 2>&1 &
+BACKEND_PID=$!
 
-SOCKET_PATH="/tmp/test-vhost.sock"
-MKV_PATH="${1:-/home/jericho/projects/zion/projects/visual_audio/test_spatial_10mb.mkv}"
+for i in {1..30}; do
+    if [ -S /tmp/virtio-pixel-spatial.sock ]; then
+        break
+    fi
+    sleep 0.2
+done
 
-echo "========================================="
-echo "VirtIO Pixel Quick Test"
-echo "========================================="
-echo "Socket:   ${SOCKET_PATH}"
-echo "MKV:      ${MKV_PATH}"
-echo ""
+qemu-system-x86_64 \
+    -chardev socket,id=blk0,path=/tmp/virtio-pixel-spatial.sock \
+    -device vhost-user-blk-pci,chardev=blk0,bootindex=0 \
+    -m 2G -nographic -no-reboot 2>&1 | head -30
 
-# Check backend is running
-if ! ps aux | grep -q "[v]irtio_pixel_backend.*${SOCKET_PATH}"; then
-    echo "ERROR: Backend not running"
-    echo "Start with: RUST_LOG=info ./target/release/virtio_pixel_backend ${MKV_PATH} ${SOCKET_PATH}"
-    exit 1
-fi
-
-echo "[✓] Backend running"
-echo ""
-echo "[Test] Launching QEMU with vhost-user-blk-pci..."
-echo ""
-
-# Try direct vhost-user-blk-pci (no chardev needed)
-timeout 20s qemu-system-x86_64 \
-  -machine q35,accel=kvm:kvm:tcg \
-  -cpu host \
-  -m 512M \
-  -nographic \
-  -nodefaults \
-  -kernel /dev/null \
-  \
-  -device vhost-user-blk-pci,num-queues=1,addr=0x4 \
-  \
-  -chardev socket,id=char0,path=${SOCKET_PATH},server=off 2>&1 || true
+sleep 5
+kill $BACKEND_PID 2>/dev/null || true
 
 echo ""
-echo "Check backend output above for vhost-user protocol messages"
-echo "(GET_FEATURES, SET_OWNER, SET_MEM_TABLE, etc.)"
+echo "=== VhostUser messages ==="
+grep "VhostUser message" /tmp/backend_full.log

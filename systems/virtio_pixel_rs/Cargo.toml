@@ -14,6 +14,10 @@ crate-type = ["cdylib", "rlib"]
 name = "virtio_pixel_backend"
 path = "src/main.rs"
 
+[[example]]
+name = "direct_dma_example"
+path = "examples/direct_dma_example.rs"
+
 [dependencies]
 # vhost-user-backend: Official rust-vmm vhost-user implementation
 vhost-user-backend = "0.13"
@@ -39,8 +43,21 @@ nix = { version = "0.28", features = ["socket", "uio", "fs"] }  # FD passing, re
 # Image loading for MKV frame extraction
 image = "0.24"
 
+# Byte-level buffer casting
+bytemuck = { version = "1.14", features = ["derive"] }
+
 # Temporary file handling for MKV frame extraction
 tempfile = "3.8"
+
+# FFmpeg for hardware video decoding (Phase 5)
+ffmpeg-sys-next = "7.0"
+
+# LRU cache for predictive pre-fetching (Phase 5)
+lru = "0.12"
+
+# Thread-safe channels for background prefetch (Phase 5)
+crossbeam-channel = "0.5"
+serde_json = "1.0.151"
 
 [dev-dependencies]
 tempfile = "3.8"

@@ -436,6 +436,7 @@ def train(
     device: str = "cuda",
     fast_mode: bool = False,
     vocab_size_fast: int = 1000,
+    early_stop_patience: int = 4,
 ) -> Dict:
     """
     Main training function.
@@ -563,9 +564,11 @@ def train(
     train_losses = []
     val_losses = []
     best_val_loss = float('inf')
-    
-    print(f"\nStarting training for {n_epochs} epochs...")
-    
+    epochs_without_improvement = 0
+
+    print(f"\nStarting training for up to {n_epochs} epochs "
+          f"(early stop after {early_stop_patience} epochs without improvement)...")
+
     for epoch in range(n_epochs):
         # Train
         train_loss = train_epoch(model, train_loader, optimizer, criterion, device)
@@ -606,25 +609,40 @@ def train(
         # Create output directory if needed
         output_dir = Path(output_path).parent
         output_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Save checkpoint
-        torch.save(checkpoint, output_path)
-        
+
+        # Only overwrite the checkpoint when validation loss actually improves.
+        # Saving unconditionally every epoch means the final file on disk is
+        # whatever the LAST epoch produced, which on a small corpus is
+        # typically an overfit model far worse than the best one seen -
+        # exactly what happened training on data/pixel_corpus/real_corpus.npy
+        # (best val PPL 316 at epoch 9, final val PPL 1942 at epoch 15).
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-    
-    # Final summary
+            epochs_without_improvement = 0
+            torch.save(checkpoint, output_path)
+            print(f"  -> New best (val loss {val_loss:.4f}), checkpoint saved to {output_path}")
+        else:
+            epochs_without_improvement += 1
+            if epochs_without_improvement >= early_stop_patience:
+                print(f"  -> No improvement for {early_stop_patience} epochs, stopping early "
+                      f"at epoch {epoch + 1}/{n_epochs}.")
+                break
+
+    # Reload the best checkpoint actually written to disk for an honest summary
+    # (train_losses[-1]/val_losses[-1] are the LAST epoch, not the best one).
+    best_checkpoint = torch.load(output_path, map_location=device, weights_only=False)
+
     print("\n" + "="*50)
     print("Training complete!")
-    print(f"Final training loss: {train_losses[-1]:.4f}")
-    print(f"Final validation loss: {val_losses[-1]:.4f}")
-    print(f"Final validation perplexity: {checkpoint['val_perplexity']:.2f}")
+    print(f"Best checkpoint from epoch: {best_checkpoint['epoch']}/{n_epochs}")
+    print(f"Best validation loss: {best_checkpoint['val_losses'][-1]:.4f}")
+    print(f"Best validation perplexity: {best_checkpoint['val_perplexity']:.2f}")
     print(f"Unigram baseline perplexity: {unigram_ppl:.2f}")
-    print(f"Model beats baseline: {checkpoint['val_perplexity'] < unigram_ppl}")
+    print(f"Model beats baseline: {best_checkpoint['val_perplexity'] < unigram_ppl}")
     print(f"Checkpoint saved to: {output_path}")
     print("="*50)
-    
-    return checkpoint
+
+    return best_checkpoint
 
 
 def main():

@@ -75,25 +75,47 @@ class SpatialMKVNBDServer:
         print(f"[NBD] Export size: {self.decoded_size:,} bytes ({self.decoded_size / (1024**3):.2f} GB)")
 
     def _decode_pixel_bytes(self, offset: int, length: int) -> bytes:
-        """Decode byte range from pixel payload."""
+        """Decode byte range from pixel payload. Always returns exactly 'length' bytes."""
         import numpy as np
 
         assert self.entry_payload is not None, "Entry payload not loaded"
-        
+
+        # Check if we're reading past the end of the disk
+        if offset >= self.decoded_size:
+            return b'\x00' * length
+
+        # Calculate how many bytes we can actually read
+        available_bytes = self.decoded_size - offset
+        bytes_to_decode = min(length, available_bytes)
+
+        # Decode the available bytes
         start = offset * 3
-        end = start + length * 3
+        end = start + bytes_to_decode * 3
+
+        if bytes_to_decode == 0:
+            return b'\x00' * length
+
         px = self.entry_payload[start:end]
 
-        if len(px) < length * 3:
-            px += b"\x00" * (length * 3 - len(px))
+        # Ensure we have complete triplets
+        if len(px) % 3 != 0:
+            # Pad to complete triplets
+            px = px + b'\x00' * (3 - len(px) % 3)
 
+        # Decode: each RGB triplet → 1 byte
         arr = np.frombuffer(px, dtype=np.uint8).reshape(-1, 3)
         ids = (
             (arr[:, 0].astype(np.uint32) << 16)
             | (arr[:, 1].astype(np.uint32) << 8)
             | arr[:, 2].astype(np.uint32)
         )
-        return np.where(ids >= 16, ids - 16, 0).astype(np.uint8).tobytes()
+        decoded = np.where(ids >= 16, ids - 16, 0).astype(np.uint8).tobytes()
+
+        # Pad to exact requested length
+        if len(decoded) < length:
+            decoded += b'\x00' * (length - len(decoded))
+
+        return decoded[:length]
 
     def _recv_exact(self, conn, n: int) -> bytes:
         """Receive exactly n bytes."""
@@ -123,6 +145,9 @@ class SpatialMKVNBDServer:
         """Handle NBD client requests."""
         import struct
 
+        # Set TCP_NODELAY to avoid buffering issues
+        conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
         try:
             self._nbd_handshake(conn)
 
@@ -145,10 +170,33 @@ class SpatialMKVNBDServer:
 
                 if cmd == 0:  # READ
                     try:
-                        data = self._decode_pixel_bytes(offset, length)
+                        # Validate offset is within disk bounds
+                        if offset >= self.decoded_size:
+                            # Read past EOF - return zeros
+                            data = b'\x00' * length
+                        elif offset + length > self.decoded_size:
+                            # Partial read - truncate to available data
+                            available = self.decoded_size - offset
+                            data = self._decode_pixel_bytes(offset, available)
+                            if len(data) < length:
+                                data += b'\x00' * (length - len(data))
+                        else:
+                            # Normal read
+                            data = self._decode_pixel_bytes(offset, length)
+
+                        # NBD requires exact byte count
+                        if len(data) != length:
+                            print(f"[NBD] WARNING: length mismatch requested={length} got={len(data)} offset={offset}")
+                            data = data[:length].ljust(length, b'\x00')
+
+                        # Verify total response size
+                        total_response = len(reply) + len(data)
+                        if request_count <= 10 or request_count % 1000 == 0:
+                            print(f"[NBD] Request {request_count}: READ offset={offset} len={length} response_size={total_response}")
+
                         conn.sendall(reply + data)
                     except Exception as e:
-                        print(f"[NBD] Read error: {e}")
+                        print(f"[NBD] Read error offset={offset} len={length}: {e}")
                         reply = struct.pack(">IIQ", 0x67446698, 0xFFFFFFFF, handle)
                         conn.sendall(reply)
 
@@ -156,6 +204,7 @@ class SpatialMKVNBDServer:
                     try:
                         data = self._recv_exact(conn, length)
                         # Writes go to pixel payload (in-memory only)
+                        print(f"[NBD] Request {request_count}: WRITE offset={offset} len={length}")
                         start = offset * 3
                         end = start + len(data) * 3
                         if end <= len(self.entry_payload):
@@ -166,8 +215,13 @@ class SpatialMKVNBDServer:
                             px[1::3] = (ids >> 8) & 0xFF
                             px[2::3] = ids & 0xFF
                             self.entry_payload[start:end] = px.tobytes()
+                            print(f"[NBD] Write committed: {length} bytes at offset {offset}")
+                        else:
+                            print(f"[NBD] Write skipped: beyond payload bounds (offset={offset}, len={length}, payload={len(self.entry_payload)})")
                     except Exception as e:
-                        print(f"[NBD] Write error: {e}")
+                        print(f"[NBD] Write error offset={offset} len={length}: {e}")
+                        import traceback
+                        traceback.print_exc()
 
                     conn.sendall(reply)
 
@@ -306,7 +360,12 @@ def boot_ubuntu_spatial_window():
     finally:
         print("[BOOT] Shutting down...")
         nbd_server.running = False
-        server_thread.join(timeout=2)
+        if server_thread and server_thread.is_alive():
+            server_thread.join(timeout=2)
+        if server_thread and server_thread.is_alive():
+            print("[BOOT] Force terminating NBD server thread")
+            import os
+            os._exit(0)
 
     return 0
 

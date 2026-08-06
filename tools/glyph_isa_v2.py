@@ -227,6 +227,7 @@ class GlyphCPUv2:
         self.pc = (0, 0)
         self.running = False
         self.output = []
+        self.current_imm = 0  # Current instruction's immediate value (for syscalls)
 
     def _check_alignment(self, x: int):
         if x % INSTR_WIDTH != 0:
@@ -268,7 +269,18 @@ class GlyphCPUv2:
 
         rs1, rs2, rd = reg_px
         imm = _unpack_immediate(low_px, high_px)
-        next_pc = (x + INSTR_WIDTH, y)
+        self.current_imm = imm  # Store for syscalls that need it
+
+        # Fall-through PC advance wraps to the next row at the instruction-row
+        # width, mirroring GlyphAssemblerV2's row-major layout. Only explicit
+        # JMP/JZ/CALL carry an absolute (col,row) target; without this wrap,
+        # straight-line code that crosses a row boundary walks off the array.
+        row_width_px = self.cols_instrs * INSTR_WIDTH
+        next_x = x + INSTR_WIDTH
+        if next_x >= row_width_px:
+            next_pc = (0, y + 1)
+        else:
+            next_pc = (next_x, y)
 
         if opcode == 'LDI':
             self.registers[rd] = imm
@@ -322,7 +334,12 @@ class GlyphCPUv2:
             tx, ty = packed_pc & 0xFFFF, (packed_pc >> 16) & 0xFFFF
             next_pc = (tx, ty)
         elif opcode == 'SYSCALL':
-            # Invoke hypervisor syscall - number in immediate, result in rd
+            # Invoke hypervisor syscall - number in immediate, result in rd.
+            # syscall_num IS imm (that's how SYSCALL is encoded), so it's not
+            # passed again separately - self.current_imm (set above) already
+            # gives handlers access to it without changing this call's arity,
+            # which would break every existing bridge_handle(syscall_num, image)
+            # monkey-patch in spatial_hypervisor_bridge.py.
             syscall_num = imm
             self.registers[rd] = self._handle_syscall(syscall_num, image)
         elif opcode == 'JMP':
@@ -344,7 +361,7 @@ class GlyphCPUv2:
         self.pc = next_pc
         return True
 
-    def _handle_syscall(self, syscall_num: int, image: np.ndarray) -> int:
+    def _handle_syscall(self, syscall_num: int, image: np.ndarray, imm: int = 0) -> int:
         """
         Handle hypervisor syscalls from spatial programs.
 
