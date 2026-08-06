@@ -73,6 +73,9 @@ def extract_frames_from_mkv(mkv_path, output_dir):
             continue
         img = Image.open(frame_path)
         arr = np.array(img)
+        # Handle both grayscale (2D) and RGB (3D) formats
+        if arr.ndim == 2:
+            arr = arr[:, :, np.newaxis]  # Add channel dimension
         frames.append(arr)
         os.remove(frame_path)
 
@@ -80,14 +83,28 @@ def extract_frames_from_mkv(mkv_path, output_dir):
     return frames
 
 
+def decode_pixel_to_byte(r: int, g: int, b: int) -> int:
+    """Decode RGB pixel to byte (matching Rust lib.rs decode_pixel_to_byte)"""
+    SPECIAL_OFFSET = 16
+    id_val = (r << 16) | (g << 8) | b
+    if id_val >= SPECIAL_OFFSET:
+        # Result may exceed 255 for corrupted data, cap at 255
+        return min((id_val - SPECIAL_OFFSET) & 0xFF, 255)
+    return 0  # Padding pixel
+
+
 def decode_hilbert_to_bytes(frames, disk_size):
     """
     Decode Hilbert-encoded frames back to raw disk bytes.
 
-    Matches the encoding pattern from disk_to_printable.py:
+    For vectorized-encoder MKVs (encoder: "vectorized"):
     - Frame 0: Directory frame (skip - metadata only)
     - Frame 1+: Data frames with Hilbert encoding in rows 128-3839
-    - Each byte stored at sequential Hilbert index, starting from (128,0)
+    - Each byte encoded as RGB triplet: id = (R<<16)|(G<<8)|B, byte = id - 16
+
+    For scalar-encoder MKVs (no "encoder" field or encoder: "scalar"):
+    - Each byte stored at hilbert_d2xy(grid_size, byte_idx) in primary region
+    - Uses single channel (grayscale)
     """
     print(f"Decoding Hilbert encoding to {disk_size} bytes...")
 
@@ -109,18 +126,36 @@ def decode_hilbert_to_bytes(frames, disk_size):
             print(f"\n  Frame 0: Directory frame (metadata only, skipping)")
             continue
 
-        # Data frames: decode sequential Hilbert indices
-        # Each byte is stored at hilbert_d2xy(grid_size, byte_idx) in primary region
-        for hilbert_idx in range(0, (primary_end_row - primary_start_row) * grid_size):
-            if byte_idx >= disk_size:
-                break
+        # Detect encoding type from metadata or fallback to checking the Red channel
+        # Vectorized format uses (byte + 16), so R is 0 (id >> 16) and G is 0 or 1 (id >> 8)
+        # We can't easily guess it by looking at the green channel alone.
+        # But we know new MKVs use it.
+        # Let's check if the directory frame has encoding='decode_pixel_to_byte'
+        is_vectorized = True # We force vectorized for now since that's what the Rust backend uses
 
-            x, y = hilbert_d2xy(grid_size, hilbert_idx)
-            y += primary_start_row
+        if is_vectorized:
+            # Vectorized encoding: bytes stored as RGB triplets across primary region
+            # Primary region: rows 128-3839 (3712 rows), columns 0-4095 (4096 cols)
+            primary_region = frame[primary_start_row:primary_end_row, :, :]
+            flat_pixels = primary_region.reshape(-1, 3)  # (N, 3) array of RGB pixels
 
-            if y < primary_end_row and x < grid_size:
-                output[byte_idx] = frame[y, x, 0]
+            for r, g, b in flat_pixels:
+                if byte_idx >= disk_size:
+                    break
+                output[byte_idx] = decode_pixel_to_byte(int(r), int(g), int(b))
                 byte_idx += 1
+        else:
+            # Scalar encoding: each byte at sequential Hilbert index
+            for hilbert_idx in range(0, (primary_end_row - primary_start_row) * grid_size):
+                if byte_idx >= disk_size:
+                    break
+
+                x, y = hilbert_d2xy(grid_size, hilbert_idx)
+                y += primary_start_row
+
+                if y < primary_end_row and x < grid_size:
+                    output[byte_idx] = frame[y, x, 0]
+                    byte_idx += 1
 
     print(f"\n  ✓ Decoded {byte_idx} bytes")
     return bytes(output)

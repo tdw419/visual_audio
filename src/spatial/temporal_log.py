@@ -84,7 +84,7 @@ class TemporalLog:
         frame_path = self.log_dir / f"frame_{tick:06d}.png"
         
         # Convert framed bytes to RGB pixels (3 bytes per pixel)
-        pixel_data = bytes_to_pixels(framed)
+        pixel_data = _bytes_to_pixels(framed)
         
         # Save as PNG
         from PIL import Image
@@ -153,8 +153,12 @@ class TemporalLog:
         # Extract pixels to bytes
         pixel_bytes = img_array.flatten().tobytes()
         
-        # Unframe
-        framed = pixels_to_bytes(pixel_bytes)
+        # Strip trailing padding zeros added during capture_state
+        # Capture pads to width*height*3 bytes with zeros
+        pixel_bytes = pixel_bytes.rstrip(b'\x00')
+        
+        # Unframe - use module-level helper function
+        framed = _pixels_to_bytes(pixel_bytes)
         state_bytes, crc_valid = unframe(framed)
         
         if not crc_valid:
@@ -229,13 +233,13 @@ class TemporalLog:
         )
 
 
-def bytes_to_pixels(data: bytes) -> bytes:
+def _bytes_to_pixels(data: bytes) -> bytes:
     """Convert bytes to RGB pixel bytes (3 bytes per pixel)."""
     # Data is already 3 bytes/pixel, just ensure alignment
     return data
 
 
-def pixels_to_bytes(pixel_bytes: bytes) -> bytes:
+def _pixels_to_bytes(pixel_bytes: bytes) -> bytes:
     """Convert RGB pixel bytes to raw bytes."""
     return pixel_bytes
 
