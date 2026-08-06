@@ -278,6 +278,28 @@ impl GuestMemory {
         }
         Err(anyhow::anyhow!("UVA 0x{:x} out of range (write)", uva))
     }
+
+    /// Get raw pointer to guest physical address for GPU DMA access
+    /// Returns mutable pointer that can be used for zero-copy GPU writes
+    pub fn get_raw_ptr(&mut self, gpa: u64, len: usize) -> Option<*mut u8> {
+        if let Some((base, offset)) = self.translate(gpa) {
+            for mr in &mut self.regions {
+                if mr.guest_phys_base as usize == base {
+                    let end = offset + len;
+                    if end <= mr.mmap.len() {
+                        // SAFETY: This returns a mutable pointer into the mmap'd region.
+                        // The caller must ensure:
+                        // 1. No other thread accesses this memory concurrently
+                        // 2. GPU operations complete before the pointer is invalidated
+                        // 3. Memory is pinned (mmap guarantees this)
+                        let ptr = unsafe { mr.mmap.as_mut_ptr().add(offset) };
+                        return Some(ptr);
+                    }
+                }
+            }
+        }
+        None
+    }
 }
 
 /// Simple vhost-user-blk server that handles the protocol manually
