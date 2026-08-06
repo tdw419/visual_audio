@@ -584,17 +584,17 @@ implemented and are split into TASK_C035 / TASK_C036 rather than claimed under C
     coarticulation the static per-phoneme heuristic in tools/phonemes.py
     cannot express (onset/offset shift >50Hz based on neighbor phoneme)
   - Test: python3 -m pytest tests/test_neural_synthesis.py (7/7 pass)
-- [ ] **TASK_R009**: Cross-lingual
+- [x] **TASK_R009**: Cross-lingual
   - Priority: LOW
   - Dependencies: TASK_G2P001
   - Receipt: Extend phoneme sets for other languages
   - Test: python3 tests/test_cross_lingual.py
-- [ ] **TASK_R010**: Voice timbre
+- [x] **TASK_R010**: Voice timbre
   - Priority: LOW
   - Dependencies: None
   - Receipt: Different waveforms for different speakers
   - Test: python3 tests/test_voice_timbre.py
-- [ ] **TASK_R011**: Parallel synthesis
+- [x] **TASK_R011**: Parallel synthesis
   - Priority: LOW
   - Dependencies: TASK_P001
   - Receipt: Multi-voice polyphonic speech (chords, counterpoint)

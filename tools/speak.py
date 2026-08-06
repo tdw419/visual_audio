@@ -46,6 +46,12 @@ except ImportError:
         compile_text, concat_words_audio, get_cmudict
     )
 
+# For cross-lingual support
+try:
+    from tools.xsampa_to_arpabet import map_xsampa_sequence
+except ImportError:
+    from xsampa_to_arpabet import map_xsampa_sequence
+
 SAMPLE_RATE = 44100
 SYMBOL_SEC = 0.020          # one nibble per 20 ms
 TONE_BASE = 800.0           # Hz for nibble 0x0
@@ -360,7 +366,7 @@ def ascii_spectrogram(wav_path: str, width: int = 100, bands: int = 16):
     return '\n'.join(lines)
 
 
-def say_text(text: str, wav_path: str, project_path: str = None, verbose: bool = False, lang: str = 'en-us', use_neural: bool = True, use_ecc: bool = False):
+def say_text(text: str, wav_path: str, project_path: str = None, verbose: bool = False, lang: str = 'en-us', use_neural: bool = True, use_ecc: bool = False, voice_profile: str = 'sine'):
     """
     Speak text using phoneme-based word synthesis.
     
@@ -372,44 +378,73 @@ def say_text(text: str, wav_path: str, project_path: str = None, verbose: bool =
         lang: Language code (e.g., 'en-us', 'es-es', 'de-de')
         use_neural: Use neural model for coarticulation (default: True)
         use_ecc: Use Reed-Solomon ECC over the phoneme sequence (default: False)
+        voice_profile: Waveform type (default: 'sine')
     
     Returns:
         Audio array
     """
-    # Use phonemizer for multi-lingual support
-    try:
-        import phonemizer
-        from phonemizer.backend import EspeakBackend
-        
-        # Create backend with specified language
-        backend = EspeakBackend(lang)
-        
-        # Get phonemes from text
-        phonemes_text = backend.phonemize([text])
-        phonemes = phonemes_text[0].split()
-        
+    # Use CMUdict for English by default
+    if lang.startswith('en'):
         if verbose:
-            print(f"Language: {lang}")
-            print(f"Text: {text}")
-            print(f"Phonemes: {phonemes}")
-        
-        # Map phonemes to UPIC phoneme templates
-        # phonemizer uses XSAMPA notation, need to map to ARPAbet
-        word_audios = []
-        
-        # For now, use fallback compilation for each word since phonemizer
-        # gives us raw phonemes that need to be mapped to our templates
-        words = text.split()
+            print(f"Using CMUdict word compiler for English language '{lang}'")
+        try:
+            from word_compiler import compile_text, get_cmudict
+        except ImportError:
+            from tools.word_compiler import compile_text, get_cmudict
         cmudict = get_cmudict()
+        word_audios = compile_text(text, cmudict, force=False, verbose=verbose, use_neural=use_neural, voice_profile=voice_profile)
+    else:
+        # Use phonemizer for multi-lingual support
+        try:
+            import phonemizer
+            from phonemizer.backend import EspeakBackend
+            try:
+                from tools.ipa_to_arpabet import map_ipa_sequence
+            except ImportError:
+                from ipa_to_arpabet import map_ipa_sequence
+            try:
+                from word_compiler import build_word_project_with_crossfade
+            except ImportError:
+                from tools.word_compiler import build_word_project_with_crossfade
 
-        word_audios = compile_text(text, cmudict, force=False, verbose=verbose, use_neural=use_neural)
+            # Create backend with specified language
+            backend = EspeakBackend(lang)
 
-    except ImportError:
-        print(f"WARNING: phonemizer not installed, falling back to CMUdict (English only)")
-        # Fallback to existing CMUdict-based compilation
-        cmudict = get_cmudict()
+            # Get phonemes from text (phonemizer uses IPA by default)
+            phonemes_text = backend.phonemize([text])
+            ipa_words = phonemes_text[0].split()
 
-        word_audios = compile_text(text, cmudict, force=False, verbose=verbose, use_neural=use_neural)
+            if verbose:
+                print(f"Language: {lang}")
+                print(f"Text: {text}")
+                print(f"IPA Words: {ipa_words}")
+
+            word_audios = []
+
+            for i, ipa_word in enumerate(ipa_words):
+                # Map IPA to ARPAbet for our templates
+                arpa_phonemes_str = map_ipa_sequence(ipa_word)
+                arpa_phonemes = arpa_phonemes_str.split()
+
+                if verbose:
+                    print(f"Word {i+1} ARPAbet: {arpa_phonemes}")
+
+                if arpa_phonemes:
+                    audio = build_word_project_with_crossfade(f"word_{i}", arpa_phonemes, use_neural=use_neural, voice_profile=voice_profile)
+                    word_audios.append((f"word_{i}", audio))
+                else:
+                    if verbose:
+                        print(f"Warning: No valid phonemes for word '{ipa_word}', skipping")
+
+        except ImportError:
+            print(f"WARNING: phonemizer not installed or failed, falling back to CMUdict (English only)")
+            try:
+                from word_compiler import compile_text, get_cmudict
+            except ImportError:
+                from tools.word_compiler import compile_text, get_cmudict
+            cmudict = get_cmudict()
+            word_audios = compile_text(text, cmudict, force=False, verbose=verbose, use_neural=use_neural, voice_profile=voice_profile)
+    
     
     if not word_audios:
         raise ValueError("No words could be compiled from text")
@@ -460,6 +495,7 @@ def say_text(text: str, wav_path: str, project_path: str = None, verbose: bool =
             'name': f'spoken_{len(audio)}_samples',
             'mode': 'phoneme',
             'language': lang,
+            'voice': voice_profile,
             'words': [{'word': os.path.basename(p), 'path': p} for p, _ in word_audios],
             'total_duration': len(audio) / SAMPLE_RATE,
             'word_count': len(word_audios)
@@ -470,6 +506,61 @@ def say_text(text: str, wav_path: str, project_path: str = None, verbose: bool =
             print(f"  Project metadata: {project_path}")
     
     return audio
+
+
+def say_parallel(tracks: list, wav_path: str, verbose: bool = False):
+    """
+    Synthesize multiple tracks in parallel and mix them (polyphony/chords).
+    
+    Args:
+        tracks: List of dicts, each with 'text', 'voice', 'lang' (optional), etc.
+        wav_path: Output WAV file
+        verbose: Print detailed output
+    """
+    if not tracks:
+        raise ValueError("No tracks provided for parallel synthesis")
+        
+    audios = []
+    max_len = 0
+    
+    for i, track in enumerate(tracks):
+        text = track.get('text')
+        voice = track.get('voice', 'sine')
+        lang = track.get('lang', 'en-us')
+        
+        if not text:
+            continue
+            
+        if verbose:
+            print(f"Synthesizing Track {i+1}: '{text}' (voice: {voice}, lang: {lang})")
+            
+        # Synthesize track to temporary file/array
+        audio = say_text(text, '/tmp/temp_parallel.wav', verbose=verbose, lang=lang, voice_profile=voice)
+        audios.append(audio)
+        if len(audio) > max_len:
+            max_len = len(audio)
+            
+    if not audios:
+        raise ValueError("No valid tracks generated audio")
+        
+    # Pad and mix
+    mixed = np.zeros(max_len)
+    for audio in audios:
+        padded = np.pad(audio, (0, max_len - len(audio)))
+        mixed += padded
+        
+    # Normalize to prevent clipping
+    if np.max(np.abs(mixed)) > 0:
+        mixed = mixed / np.max(np.abs(mixed)) * 0.95
+        
+    # Save
+    sf.write(wav_path, mixed, SAMPLE_RATE)
+    
+    if verbose:
+        print(f"Mixed {len(audios)} tracks -> {wav_path}")
+        print(f"  Duration: {max_len / SAMPLE_RATE:.2f}s")
+        
+    return mixed
 
 
 def main():
@@ -502,6 +593,12 @@ def main():
     p_say.add_argument('--lang', default='en-us', help='language code (e.g., en-us, es-es, de-de)')
     p_say.add_argument('--no-neural', action='store_true', help='disable neural coarticulation, use static envelopes')
     p_say.add_argument('--ecc', action='store_true', help='add Reed-Solomon parity to the phoneme sequence')
+    p_say.add_argument('--voice', default='sine', choices=['sine', 'triangle', 'square', 'sawtooth'], help='voice waveform profile (timbre)')
+
+    p_parallel = sub.add_parser('parallel', help='synthesize multiple texts in parallel (chords/counterpoint)')
+    p_parallel.add_argument('tracks_file', help='JSON file defining the tracks [{"text": "...", "voice": "sine"}, ...]')
+    p_parallel.add_argument('-o', '--wav', default='parallel.wav', help='output WAV file')
+    p_parallel.add_argument('-v', '--verbose', action='store_true', help='print detailed output')
 
     # Dual-band encoding commands
     p_enc_dual = sub.add_parser('encode_dual', help='encode text + software to dual-band WAV')
@@ -554,9 +651,14 @@ def main():
             text = args.text
         
         use_neural = not args.no_neural
-        audio = say_text(text, args.wav, args.project, verbose=args.verbose, lang=args.lang, use_neural=use_neural, use_ecc=args.ecc)
+        audio = say_text(text, args.wav, args.project, verbose=args.verbose, lang=args.lang, use_neural=use_neural, use_ecc=args.ecc, voice_profile=args.voice)
         print(f"Spoke text -> {args.wav}")
         print(f"  Duration: {len(audio) / SAMPLE_RATE:.2f}s")
+
+    elif args.cmd == 'parallel':
+        with open(args.tracks_file, 'r') as f:
+            tracks = json.load(f)
+        say_parallel(tracks, args.wav, verbose=args.verbose)
 
     elif args.cmd == 'encode_dual':
         # Always treat -t as file path for dual-band encoding
