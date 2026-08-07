@@ -1,0 +1,18 @@
+┌────────────────────────────────────────────────────────────┐
+│  TILE DEMO PROGRAM                                         │
+│  Minimal spatial program for SPAWN_TILE (SYS_CALL 0x04)   │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│   :init                                                    │
+│   LDI r0, 0            ; X (tile-local origin)              │
+│   LDI r1, 0            ; Y (tile-local origin)              │
+│   LDI r2, 200          ; Width                              │
+│   LDI r3, 150          ; Height                             │
+│                                                            │
+│   :render_loop                                              │
+│   SYS_CALL 0x01        ; Draw Tile Frame primitive          │
+│   JMP :render_loop     ; Loop indefinitely                  │
+│                                                            │
+├────────────────────────────────────────────────────────────┤
+│   Output: Nested spatial region, drawn inside a host tile  │
+└────────────────────────────────────────────────────────────┘

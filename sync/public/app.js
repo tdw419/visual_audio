@@ -21,6 +21,136 @@ const OPCODES = {
 const GRID_SIZE = 256;
 const SPECIAL_OFFSET = 16;
 
+// SPAWN_TILE (SYS_CALL 0x04) registry: tile_id -> .rts.png URL
+const TILE_REGISTRY = {
+    0: '/rts/tile_demo.rts.png',
+};
+
+function d2xy(n, d) {
+    let x = 0, y = 0;
+    let s = 1;
+    let temp = d;
+    while (s < n) {
+        let rx = 1 & (temp / 2);
+        let ry = 1 & (temp ^ rx);
+        if (ry === 0) {
+            if (rx === 1) {
+                x = s - 1 - x;
+                y = s - 1 - y;
+            }
+            let t = x; x = y; y = t;
+        }
+        x += s * rx;
+        y += s * ry;
+        temp = Math.floor(temp / 4);
+        s *= 2;
+    }
+    return [x, y];
+}
+
+async function decodeRTSContainer(url) {
+    const img = new Image();
+    img.src = url;
+    await new Promise(r => img.onload = r);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = GRID_SIZE;
+    canvas.height = GRID_SIZE;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+
+    const imgData = ctx.getImageData(0, 0, GRID_SIZE, GRID_SIZE).data;
+    const memory = new Uint8Array(GRID_SIZE * GRID_SIZE);
+
+    // Decode Hilbert Curve pixels to bytes using SPECIAL_OFFSET
+    for (let d = 0; d < memory.length; d++) {
+        const [x, y] = d2xy(GRID_SIZE, d);
+        const idx = (y * GRID_SIZE + x) * 4;
+        const r = imgData[idx];
+        const g = imgData[idx + 1];
+        const b = imgData[idx + 2];
+
+        const id_val = (r << 16) | (g << 8) | b;
+        memory[d] = id_val >= SPECIAL_OFFSET ? id_val - SPECIAL_OFFSET : 0;
+    }
+
+    return memory;
+}
+
+// Minimal nested spatial engine spawned by SYS_CALL 0x04 (SPAWN_TILE).
+// Runs its own independent memory/registers/pc, confined and positioned
+// inside a masked Container within the parent window's bounds.
+class SpatialTile {
+    constructor(parentApp, x, y, w, h) {
+        this.regs = new Int32Array(256);
+        this.memory = new Uint8Array(GRID_SIZE * GRID_SIZE);
+        this.pc = 0;
+        this.running = false;
+
+        this.container = new Container();
+        this.container.x = x;
+        this.container.y = y;
+
+        const mask = new Graphics();
+        mask.rect(0, 0, w, h).fill(0xffffff);
+        this.container.addChild(mask);
+        this.container.mask = mask;
+
+        this.graphics = new Graphics();
+        this.container.addChild(this.graphics);
+
+        parentApp.stage.addChild(this.container);
+    }
+
+    async load(url) {
+        this.memory.set(await decodeRTSContainer(url));
+        this.running = true;
+    }
+
+    step() {
+        if (!this.running) return;
+
+        let executed = 0;
+        while (executed < 1000) {
+            const op = this.memory[this.pc];
+            if (op === 0) break; // end of program / padding
+            if (op === 0xFF) { this.running = false; break; }
+
+            switch (op) {
+                case 0x01: // LDI reg, val
+                    this.regs[this.memory[this.pc + 1]] = this.memory[this.pc + 2];
+                    this.pc += 3;
+                    break;
+                case 0x07: // JMP target
+                    this.pc = this.memory[this.pc + 1];
+                    break;
+                case 0x09: { // SYS_CALL syscall_id
+                    const syscall_id = this.memory[this.pc + 1];
+                    if (syscall_id === 0x01) this.renderFrame();
+                    this.pc += 2;
+                    executed = 1000; // yield to let the browser paint
+                    break;
+                }
+                default:
+                    console.error("SpatialTile: unsupported opcode", op);
+                    this.running = false;
+                    executed = 1000;
+                    break;
+            }
+            executed++;
+        }
+    }
+
+    renderFrame() {
+        const x = this.regs[0], y = this.regs[1], w = this.regs[2], h = this.regs[3];
+        this.graphics.clear();
+        this.graphics.setStrokeStyle({ width: 2, color: 0xffa500, alpha: 0.9 });
+        this.graphics.beginFill(0x331a00, 0.7);
+        this.graphics.drawRoundedRect(x, y, w, h, 6);
+        this.graphics.endFill();
+    }
+}
+
 class PixelFormulaEngine {
     constructor() {
         this.regs = new Int32Array(256);
@@ -35,6 +165,7 @@ class PixelFormulaEngine {
         
         this.windowGraphics = null;
         this.app = null;
+        this.tiles = [];
     }
 
     async init() {
@@ -70,59 +201,26 @@ class PixelFormulaEngine {
         this.app.ticker.add(() => this.step());
     }
 
-    d2xy(n, d) {
-        let x = 0, y = 0;
-        let s = 1;
-        let temp = d;
-        while (s < n) {
-            let rx = 1 & (temp / 2);
-            let ry = 1 & (temp ^ rx);
-            if (ry === 0) {
-                if (rx === 1) {
-                    x = s - 1 - x;
-                    y = s - 1 - y;
-                }
-                let t = x; x = y; y = t;
-            }
-            x += s * rx;
-            y += s * ry;
-            temp = Math.floor(temp / 4);
-            s *= 2;
-        }
-        return [x, y];
+    async loadRTSContainer(url) {
+        this.memory.set(await decodeRTSContainer(url));
+        console.log("RTS Container loaded into memory");
     }
 
-    async loadRTSContainer(url) {
-        const img = new Image();
-        img.src = url;
-        await new Promise(r => img.onload = r);
-        
-        const canvas = document.createElement('canvas');
-        canvas.width = GRID_SIZE;
-        canvas.height = GRID_SIZE;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0);
-        
-        const imgData = ctx.getImageData(0, 0, GRID_SIZE, GRID_SIZE).data;
-        
-        // Decode Hilbert Curve pixels to bytes using SPECIAL_OFFSET
-        for(let d=0; d<this.memory.length; d++) {
-            const [x, y] = this.d2xy(GRID_SIZE, d);
-            const idx = (y * GRID_SIZE + x) * 4;
-            const r = imgData[idx];
-            const g = imgData[idx+1];
-            const b = imgData[idx+2];
-            
-            // Reconstruct id
-            const id_val = (r << 16) | (g << 8) | b;
-            if(id_val >= SPECIAL_OFFSET) {
-                this.memory[d] = id_val - SPECIAL_OFFSET;
-            } else {
-                this.memory[d] = 0; // padding/empty
-            }
+    spawnTile() {
+        const tx = this.regs[20], ty = this.regs[21];
+        const tw = this.regs[22], th = this.regs[23];
+        const tileId = this.regs[24];
+        const url = TILE_REGISTRY[tileId];
+        if (!url) {
+            console.error("SPAWN_TILE: unknown tile_id", tileId);
+            return;
         }
-        
-        console.log("RTS Container loaded into memory");
+
+        const tile = new SpatialTile(this.app, this.regs[0] + tx, this.regs[1] + ty, tw, th);
+        this.tiles.push(tile);
+        tile.load(url).then(() => {
+            this.app.ticker.add(() => tile.step());
+        });
     }
 
     step() {
@@ -206,6 +304,8 @@ class PixelFormulaEngine {
                         this.renderTitle();
                     } else if(syscall_id === 0x03) {
                         this.renderCloseButton();
+                    } else if(syscall_id === 0x04) {
+                        this.spawnTile();
                     } else if(syscall_id === 0xFF) {
                         // Close Application / Self Destruct Visual
                         this.windowGraphics.clear();
