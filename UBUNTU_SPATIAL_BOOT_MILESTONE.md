@@ -20,14 +20,17 @@ A complete Ubuntu 24.04 LTS system was booted entirely from pixel-encoded data u
    - Seeking: Frame-level seeking using directory frame metadata
    - Block size: 512-byte sector emulation
 
-3. **Guest Boot**: Stock Ubuntu 24.04 kernel successfully:
-   - Read GPT partition table from spatial block device
-   - Identified EXT4 filesystem on vda1
-   - Recovered journal: `EXT4-fs (vda1): recovery complete`
-   - Mounted root RW: `mounted filesystem [...] r/w with ordered data mode`
-   - Completed initramfs, systemd target boot sequence
-   - Reached multi-user.target and graphical.target
-   - Spawned serial-getty@ttyS0 and login prompt
+**What We Verified (Headless Boot)**
+- Serial console fully functional (ttyS0 login prompt)
+- EXT4 filesystem recovered and mounted RW
+- systemd services completed through multi-user.target
+- GPT partition table correctly read from spatial storage
+
+**What We Did NOT Verify (Desktop Failed)**
+- VNC connection refused (port 5901, `-vnc :1`)
+- `graphical.target` marked reached in logs but no display manager connected
+- virtio-gpu-pci device present but gdm3/lightdm failed to use it
+- No visible Ubuntu Desktop login screen
 
 ## Verification Evidence
 
@@ -100,7 +103,9 @@ Without this fix, guest kernel would retry out-of-bounds reads forever.
 1. **Hilbert encoding correctness**: The spatial mapping preserves exact byte-perfect data for a full GPT-partitioned disk
 2. **vhost-user protocol compliance**: virtio_pixel_rs implements correct VirtIO block device semantics
 3. **Guest compatibility**: Unmodified Linux kernels can boot from spatial storage without driver changes
-4. **End-to-end pipeline**: Pixel → MKV → vhost-user → QEMU → Linux kernel → userspace login
+4. **End-to-end pipeline**: Pixel → MKV → vhost-user → QEMU → Linux kernel → headless login
+
+**Desktop limitation**: virtio-gpu-pci on RISC-V Ubuntu 24.04 is experimental; `graphical.target` marks reached but display manager fails to connect to VNC. This is a graphics driver issue, not a spatial storage issue.
 
 ## What Comes Next
 
