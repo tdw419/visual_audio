@@ -17,8 +17,7 @@ wss.on('connection', (ws) => {
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
-            console.log('[pxOS] Received:', data);
-            
+
             if (data.type === 'sys_call') {
                 console.log(`[pxOS] Executing SYS_CALL ${data.id} - Patch-and-Copy Visual VCC`);
                 // Bounce back the render state
@@ -26,6 +25,17 @@ wss.on('connection', (ws) => {
                     type: 'render_update',
                     status: 'success'
                 }));
+            } else if (data.type === 'tile_frame') {
+                // Relay a live tile frame (e.g. from tools/qemu_frame_server.py)
+                // to every connected browser client except the producer.
+                console.log(`[pxOS] Relaying live frame for tile_id ${data.tile_id} (${data.png_b64.length} b64 bytes)`);
+                wss.clients.forEach((client) => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN) {
+                        client.send(JSON.stringify(data));
+                    }
+                });
+            } else {
+                console.log('[pxOS] Received:', data);
             }
         } catch (e) {
             console.error('[pxOS] Message error:', e);

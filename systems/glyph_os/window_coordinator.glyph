@@ -20,6 +20,14 @@
 │   LDI r24, 0           ; Tile ID (0 = tile_demo.rts.png)    │
 │   SYS_CALL 0x04        ; SPAWN_TILE                         │
 │                                                            │
+│   ; Spawn a second, live-video tile (external frame feed)   │
+│   LDI r20, 250         ; Tile X offset (relative to window) │
+│   LDI r21, 60          ; Tile Y offset                      │
+│   LDI r22, 60          ; Tile Width                         │
+│   LDI r23, 120         ; Tile Height                        │
+│   LDI r24, 1           ; Tile ID (1 = live frame feed)      │
+│   SYS_CALL 0x04        ; SPAWN_TILE                         │
+│                                                            │
 │   :event_loop                                              │
 │   ; Read system input registers (Mouse)                    │
 │   SYS_READ r10, 0x10   ; Read Mouse X into r10             │

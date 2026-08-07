@@ -1,4 +1,4 @@
-import { Application, Graphics, Text, Container } from 'https://pixijs.download/v8.0.0/pixi.mjs';
+import { Application, Graphics, Text, Container, Sprite, Texture } from 'https://pixijs.download/v8.0.0/pixi.mjs';
 
 const OPCODES = {
     0x01: 'LDI',
@@ -21,10 +21,53 @@ const OPCODES = {
 const GRID_SIZE = 256;
 const SPECIAL_OFFSET = 16;
 
-// SPAWN_TILE (SYS_CALL 0x04) registry: tile_id -> .rts.png URL
+// SPAWN_TILE (SYS_CALL 0x04) registry.
+// type 'bytecode': loads and executes a .rts.png Glyph program (SpatialTile).
+// type 'live': displays frames pushed over the WebSocket by an external
+//              producer (e.g. tools/qemu_frame_server.py) as a texture (LiveTile).
 const TILE_REGISTRY = {
-    0: '/rts/tile_demo.rts.png',
+    0: { type: 'bytecode', url: '/rts/tile_demo.rts.png' },
+    1: { type: 'live' },
 };
+
+// Nested spatial region that displays live frames streamed over the
+// WebSocket (type: 'tile_frame', tile_id: N, png_b64: "...") instead of
+// executing Glyph bytecode. Spawned by SYS_CALL 0x04 (SPAWN_TILE) when
+// the registry entry for the given tile_id has type 'live'.
+class LiveTile {
+    constructor(parentApp, x, y, w, h) {
+        this.container = new Container();
+        this.container.x = x;
+        this.container.y = y;
+
+        const mask = new Graphics();
+        mask.rect(0, 0, w, h).fill(0xffffff);
+        this.container.addChild(mask);
+        this.container.mask = mask;
+
+        this.w = w;
+        this.h = h;
+        this.sprite = null;
+        parentApp.stage.addChild(this.container);
+    }
+
+    updateFrame(pngBase64) {
+        const img = new Image();
+        img.onload = () => {
+            const texture = Texture.from(img);
+            if (this.sprite) {
+                this.sprite.texture.destroy(true);
+                this.sprite.texture = texture;
+            } else {
+                this.sprite = new Sprite(texture);
+                this.container.addChild(this.sprite);
+            }
+            this.sprite.width = this.w;
+            this.sprite.height = this.h;
+        };
+        img.src = 'data:image/png;base64,' + pngBase64;
+    }
+}
 
 function d2xy(n, d) {
     let x = 0, y = 0;
@@ -166,6 +209,7 @@ class PixelFormulaEngine {
         this.windowGraphics = null;
         this.app = null;
         this.tiles = [];
+        this.liveTiles = new Map(); // tile_id -> LiveTile, for routing incoming frames
     }
 
     async init() {
@@ -184,6 +228,9 @@ class PixelFormulaEngine {
             const data = JSON.parse(msg.data);
             if(data.type === 'init') {
                 document.getElementById('status').innerText = 'Connected: ' + data.message;
+            } else if(data.type === 'tile_frame') {
+                const tile = this.liveTiles.get(data.tile_id);
+                if (tile) tile.updateFrame(data.png_b64);
             }
         };
 
@@ -210,17 +257,25 @@ class PixelFormulaEngine {
         const tx = this.regs[20], ty = this.regs[21];
         const tw = this.regs[22], th = this.regs[23];
         const tileId = this.regs[24];
-        const url = TILE_REGISTRY[tileId];
-        if (!url) {
+        const entry = TILE_REGISTRY[tileId];
+        if (!entry) {
             console.error("SPAWN_TILE: unknown tile_id", tileId);
             return;
         }
 
-        const tile = new SpatialTile(this.app, this.regs[0] + tx, this.regs[1] + ty, tw, th);
-        this.tiles.push(tile);
-        tile.load(url).then(() => {
-            this.app.ticker.add(() => tile.step());
-        });
+        const screenX = this.regs[0] + tx, screenY = this.regs[1] + ty;
+
+        if (entry.type === 'live') {
+            const tile = new LiveTile(this.app, screenX, screenY, tw, th);
+            this.liveTiles.set(tileId, tile);
+            this.tiles.push(tile);
+        } else {
+            const tile = new SpatialTile(this.app, screenX, screenY, tw, th);
+            this.tiles.push(tile);
+            tile.load(entry.url).then(() => {
+                this.app.ticker.add(() => tile.step());
+            });
+        }
     }
 
     step() {
