@@ -1061,9 +1061,22 @@ impl VirtioPixelServer {
             let descriptors = self.walk_descriptor_chain(queue_idx, head)?;
 
             // Handle VirtIO block request
-            self.handle_virtio_block_request(&descriptors)?;
+            if let Err(e) = self.handle_virtio_block_request(&descriptors) {
+                error!("Error processing request {}: {}", req_idx, e);
+                // Try to write IOERR status if we have enough descriptors
+                if descriptors.len() >= 3 {
+                    // Status descriptor is usually the last one
+                    let status_desc = descriptors.last().unwrap();
+                    if let Err(write_err) = self.guest_memory.write(status_desc.addr, &[VIRTIO_BLK_S_IOERR]) {
+                        error!("Failed to write IOERR status: {}", write_err);
+                    }
+                }
+            }
+            
             // Complete request (write used ring)
-            self.write_used_elem(queue_idx, head, 0)?;
+            if let Err(e) = self.write_used_elem(queue_idx, head, 0) {
+                error!("Failed to write used elem: {}", e);
+            }
 
             // Advance avail_idx
             self.queues[queue_idx].last_avail_idx =
