@@ -1,0 +1,47 @@
+┌────────────────────────────────────────────────────────────┐
+│  PATCH-AND-COPY DEMONSTRATION                             │
+│  Native GPU Code Emission                                 │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│   :init                                                    │
+│   ; Write template opcode (LDI r0, 42) to data segment     │
+│   ; Memory layout:                                         │
+│   ; 100: LDI (0x01)                                        │
+│   ; 101: r0  (0x00)                                        │
+│   ; 102: 42  (0x2A)                                        │
+│   ; 103: HALT (0xFF)                                       │
+│   LDI r10, 100         ; Addr 100                          │
+│   LDI r11, 1           ; Opcode: LDI (0x01)                │
+│   STORE r10, r11       ; memory[100] = 0x01                │
+│                                                            │
+│   LDI r10, 101         ; Addr 101                          │
+│   LDI r11, 0           ; Operand: r0                       │
+│   STORE r10, r11       ; memory[101] = 0x00                │
+│                                                            │
+│   LDI r10, 102         ; Addr 102                          │
+│   LDI r11, 42          ; Operand: 42                       │
+│   STORE r10, r11       ; memory[102] = 0x2A                │
+│                                                            │
+│   LDI r10, 103         ; Addr 103                          │
+│   LDI r11, 255         ; Opcode: HALT (0xFF)               │
+│   STORE r10, r11       ; memory[103] = 0xFF                │
+│                                                            │
+│   :patch_and_copy                                          │
+│   ; Read the register operand (0x00)                       │
+│   LDI r10, 101         ; Addr 101                          │
+│   LOAD r12, r10        ; r12 = memory[101] (0x00)          │
+│                                                            │
+│   ; Patch the register operand to r3 (0x03) using OR       │
+│   LDI r13, 3           ; Target register r3 (0x03)         │
+│   OR r14, r12, r13     ; r14 = r12 | r13 (0x00 | 0x03 = 0x03)
+│                                                            │
+│   ; Write the patched operand back                         │
+│   STORE r10, r14       ; memory[101] = 0x03                │
+│                                                            │
+│   :execute_generated_code                                  │
+│   ; Jump to the dynamically generated program              │
+│   JMP 100                                                  │
+│                                                            │
+├────────────────────────────────────────────────────────────┤
+│   Output: Halts with r3 set to 42                          │
+└────────────────────────────────────────────────────────────┘

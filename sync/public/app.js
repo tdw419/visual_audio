@@ -10,6 +10,11 @@ const OPCODES = {
     0x07: 'JMP',
     0x08: 'SYS_READ',
     0x09: 'SYS_CALL',
+    0x0A: 'LOAD',
+    0x0B: 'STORE',
+    0x0C: 'OR',
+    0x0D: 'AND',
+    0x0E: 'SHL',
     0xFF: 'HALT'
 };
 
@@ -211,6 +216,31 @@ class PixelFormulaEngine {
                     this.pc += 2;
                     // Break the execution loop to allow the browser to paint
                     executed = 1000;
+                    break;
+                case 0x0A: // LOAD dest, addr
+                    instStr += `LOAD r${this.memory[this.pc+1]}, [r${this.memory[this.pc+2]}]`;
+                    this.regs[this.memory[this.pc+1]] = this.memory[this.regs[this.memory[this.pc+2]]];
+                    this.pc += 3;
+                    break;
+                case 0x0B: // STORE addr, src
+                    instStr += `STORE [r${this.memory[this.pc+1]}], r${this.memory[this.pc+2]}`;
+                    this.memory[this.regs[this.memory[this.pc+1]]] = this.regs[this.memory[this.pc+2]];
+                    this.pc += 3;
+                    break;
+                case 0x0C: // OR dest, src1, src2
+                    instStr += `OR r${this.memory[this.pc+1]}, r${this.memory[this.pc+2]}, r${this.memory[this.pc+3]}`;
+                    this.regs[this.memory[this.pc+1]] = this.regs[this.memory[this.pc+2]] | this.regs[this.memory[this.pc+3]];
+                    this.pc += 4;
+                    break;
+                case 0x0D: // AND dest, src1, src2
+                    instStr += `AND r${this.memory[this.pc+1]}, r${this.memory[this.pc+2]}, r${this.memory[this.pc+3]}`;
+                    this.regs[this.memory[this.pc+1]] = this.regs[this.memory[this.pc+2]] & this.regs[this.memory[this.pc+3]];
+                    this.pc += 4;
+                    break;
+                case 0x0E: // SHL dest, src, shift_val
+                    instStr += `SHL r${this.memory[this.pc+1]}, r${this.memory[this.pc+2]}, ${this.memory[this.pc+3]}`;
+                    this.regs[this.memory[this.pc+1]] = this.regs[this.memory[this.pc+2]] << this.memory[this.pc+3];
+                    this.pc += 4;
                     break;
                 default:
                     instStr += `UNKNOWN 0x${op.toString(16)}`;

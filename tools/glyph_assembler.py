@@ -32,6 +32,11 @@ OPCODES = {
     'JMP': 0x07,
     'SYS_READ': 0x08,
     'SYS_CALL': 0x09,
+    'LOAD': 0x0A,
+    'STORE': 0x0B,
+    'OR': 0x0C,
+    'AND': 0x0D,
+    'SHL': 0x0E,
     'HALT': 0xFF
 }
 
