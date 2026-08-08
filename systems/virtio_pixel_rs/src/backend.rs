@@ -23,6 +23,26 @@ pub struct VhostUserMemoryRegion {
     pub mmap_offset: u64,
 }
 
+impl PartialEq for VhostUserMemoryRegion {
+    fn eq(&self, other: &Self) -> bool {
+        self.guest_phys_addr == other.guest_phys_addr
+            && self.memory_size == other.memory_size
+            && self.userspace_addr == other.userspace_addr
+            && self.mmap_offset == other.mmap_offset
+    }
+}
+
+impl VhostUserMemoryRegion {
+    /// Check if this region is compatible with another for remapping
+    fn compatible_for_remapping(&self, other: &Self) -> bool {
+        // Regions are compatible if they describe the same guest memory mapping
+        // The userspace_addr may differ, but the GPA/size/offset must match
+        self.guest_phys_addr == other.guest_phys_addr
+            && self.memory_size == other.memory_size
+            && self.mmap_offset == other.mmap_offset
+    }
+}
+
 /// Mapped QEMU memory region (mutable)
 #[derive(Debug)]
 pub struct MemoryRegion {
@@ -148,6 +168,25 @@ impl GuestMemory {
             log_mmap: None,
             log_enabled: false,
         }
+    }
+
+    /// Check if new memory regions are incompatible with existing ones
+    /// Returns true if regions differ (GPA, size, or mmap_offset changed)
+    fn regions_are_incompatible(&self, new_regions: &[VhostUserMemoryRegion]) -> bool {
+        // Quick check: different number of regions = incompatible
+        if self.regions.len() != new_regions.len() {
+            return true;
+        }
+
+        // Check each region for compatibility
+        for (existing, new_region) in self.regions.iter().zip(new_regions.iter()) {
+            if !existing.region.compatible_for_remapping(new_region) {
+                return true;
+            }
+        }
+
+        // All regions are compatible
+        false
     }
 
     pub fn set_log_base(&mut self, mmap: memmap2::MmapMut) {
@@ -315,6 +354,7 @@ pub struct VirtioPixelServer {
     // WGPU acceleration (Phase 4)
     hilbert_decoder: Option<HilbertDecoder>,
     texture_cache: HashMap<usize, MkvTexture>,
+    texture_cache_order: std::collections::VecDeque<usize>,
     gpu_enabled: bool,
 }
 
@@ -360,6 +400,7 @@ impl VirtioPixelServer {
             running: false,
             hilbert_decoder,
             texture_cache: HashMap::new(),
+            texture_cache_order: std::collections::VecDeque::new(),
             gpu_enabled,
         })
     }
@@ -795,6 +836,7 @@ impl VirtioPixelServer {
         payload: &[u8],
         fds: &[std::os::fd::RawFd],
     ) -> Result<(Vec<u8>, Vec<std::os::fd::RawFd>)> {
+        
         let num_regions = u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]);
         let padding = u32::from_le_bytes([payload[4], payload[5], payload[6], payload[7]]);
 
@@ -806,7 +848,7 @@ impl VirtioPixelServer {
         );
 
         // Each region is 32 bytes (4x u64)
-        let mut regions = Vec::new();
+        let mut new_regions = Vec::new();
         for i in 0..num_regions as usize {
             let offset = 8 + i * 32;
             let region = VhostUserMemoryRegion {
@@ -861,11 +903,24 @@ impl VirtioPixelServer {
                 region.mmap_offset
             );
 
-            regions.push(region);
+            new_regions.push(region);
         }
 
+        // IDEMPOTENT FIX: Compare new regions with existing ones
+        // Only clear and remap if regions actually changed
+        let regions_changed = self.guest_memory.regions_are_incompatible(&new_regions);
+        
+        if !regions_changed {
+            info!("SET_MEM_TABLE: Regions unchanged, skipping clear (preserving vring pointers)");
+            // Return success without clearing - vring pointers stay valid
+            return Ok((vec![], vec![]));
+        }
+        
+        info!("SET_MEM_TABLE: Regions changed, clearing old mappings");
+        self.guest_memory.regions.clear();
+
         // Mmap regions using received FDs
-        for (i, region) in regions.iter().enumerate() {
+        for (i, region) in new_regions.iter().enumerate() {
             if i < fds.len() {
                 let fd = fds[i];
                 let mmap_size = region.memory_size as usize;
@@ -896,7 +951,7 @@ impl VirtioPixelServer {
                     "  Region {} has no associated FD (have {}, need {})",
                     i,
                     fds.len(),
-                    regions.len()
+                    new_regions.len()
                 );
             }
         }
@@ -1157,7 +1212,15 @@ impl VirtioPixelServer {
                 .clone();
 
             let texture = MkvTexture::load_frame(&device, &queue, &mkv_path, frame_index)?;
+            
             self.texture_cache.insert(frame_index, texture);
+            self.texture_cache_order.push_back(frame_index);
+            
+            while self.texture_cache_order.len() > 8 {
+                if let Some(oldest) = self.texture_cache_order.pop_front() {
+                    self.texture_cache.remove(&oldest);
+                }
+            }
         }
 
         Ok(self.texture_cache.get(&frame_index).unwrap())
