@@ -35,17 +35,26 @@ fn hilbert_d2xy(n: u32, d: u32) -> vec2<u32> {
     return vec2<u32>(x, y);
 }
 
-// Decode RGB pixel to byte value (Ubuntu disk encoding)
-// Ubuntu disk uses the encode_ubuntu_spatial.py encoding:
-// Each byte is stored as a single RGB pixel where:
-// - R channel = byte value
-// - G channel = 0 (unused)
-// - B channel = 0 (unused)
+// Decode RGB pixel to byte value (Visual Audio pixel encoding)
+// Encoding: id = (R << 16) | (G << 8) | B; byte = id - SPECIAL_OFFSET
+// The encoder pre-swaps R/B for matroska rawvideo storage, but ffmpeg -pix_fmt rgb24
+// handles the conversion. So what we receive is already in correct RGB order.
+// This matches the Rust CPU decoder in lib.rs::decode_pixel_to_byte()
 fn decode_pixel_to_byte(pixel: vec4<f32>) -> u32 {
     let r = u32(pixel.r * 255.0);
-    // For Ubuntu disk, only the R channel contains data
-    // G and B are always 0 in this encoding
-    return r;
+    let g = u32(pixel.g * 255.0);
+    let b = u32(pixel.b * 255.0);
+    
+    // Decode: id = (R << 16) | (G << 8) | B; byte = id - SPECIAL_OFFSET
+    let id = (r << 16u) | (g << 8u) | b;
+    const SPECIAL_OFFSET: u32 = 16u;
+    
+    // Filter padding pixels (id < SPECIAL_OFFSET)
+    if (id >= SPECIAL_OFFSET) {
+        return id - SPECIAL_OFFSET;
+    } else {
+        return 0u; // Padding pixel
+    }
 }
 
 // Compute shader workgroup layout
