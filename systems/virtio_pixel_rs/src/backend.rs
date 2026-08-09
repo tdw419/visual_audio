@@ -535,16 +535,16 @@ impl VirtioPixelServer {
                 let capacity = { self.extractor.lock().unwrap().decoded_size / 512 };
                 let config_space = capacity.to_le_bytes(); // 8 bytes
 
-                let mut reply = payload.to_vec(); // clone request payload which has offset/size/flags
-
                 let config_offset = u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]) as usize;
                 let config_size = u32::from_le_bytes([payload[4], payload[5], payload[6], payload[7]]) as usize;
 
+                // Build reply with exact size requested
+                let mut reply = vec![0u8; config_size];
+
                 for i in 0..config_size {
-                    if config_offset + i < config_space.len() {
-                        if 12 + i < reply.len() {
-                            reply[12 + i] = config_space[config_offset + i];
-                        }
+                    let src_idx = config_offset + i;
+                    if src_idx < config_space.len() && i < config_size {
+                        reply[i] = config_space[src_idx];
                     }
                 }
                 (reply, vec![])
