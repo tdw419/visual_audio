@@ -54,7 +54,7 @@ pub fn hilbert_d2xy(n: u32, d: u32) -> (u32, u32) {
 /// Padding pixels (id < SPECIAL_OFFSET) are filtered out.
 ///
 /// Arguments:
-///   - r, g, b: RGB pixel values
+///   - r, g, b: RGB pixel values from ffmpeg (after matroska BGR->RGB conversion)
 ///
 /// Returns: decoded byte value, or None if padding pixel
 pub fn decode_pixel_to_byte(r: u8, g: u8, b: u8) -> Option<u8> {
@@ -220,7 +220,7 @@ impl SpatialMkvExtractor {
         while bytes_read < bytes_to_read {
             // Map global offset to frame + offset within frame
             let global_byte_pos = offset + bytes_read as u64;
-            let frame_index = 1 + (global_byte_pos / frame_capacity) as usize; // +1 to skip directory frame
+            let frame_index = (global_byte_pos / frame_capacity) as usize; // VAC2 has data in frame 0
             let frame_offset = (global_byte_pos % frame_capacity) as usize;
 
             // Calculate how many bytes we can read from this frame
@@ -308,7 +308,7 @@ impl SpatialMkvExtractor {
 
             self.frame_cache.insert(frame_index, decoded_bytes);
             self.cache_order.push_back(frame_index);
-            if self.cache_order.len() > 64 {
+            if self.cache_order.len() > 2 {
                 if let Some(oldest) = self.cache_order.pop_front() {
                     self.frame_cache.remove(&oldest);
                 }
