@@ -5,9 +5,9 @@
 Visual Audio enables software to exist as text, audio, or pixels. The foundation (Phase 0) is complete and working. This roadmap guides evolution toward production-grade systems: error correction, coarticulation, prosody, full Geometry OS integration, and advanced video-based state management.
 
 ### Current Status (2026-08-12)
-|| **Progress**: 79/120 tasks complete (65.8%) — Phase 12 (Single-File Container) ✅ COMPLETE, Phase 13 (Container Self-Awareness) ✅ COMPLETE, TASK_SE011 ✅ COMPLETE (Reed-Solomon ECC for spatial ISA), **TASK_VCC001 ✅ COMPLETE (VCC Engine v2 comprehensive validation)**
-||- **Critical Path**: TASK_VAC001-003 → TASK_VAC004-006 → TASK_T001-T004 → TASK_T005 → TASK_M007 → TASK_SE007 → TASK_SE009 → TASK_SE012-SE014 (spatial glyph execution → GPU native → autonomous evolution)
-||- **Recent Wins**: **TASK_VCC001 (VCC Engine v2 — comprehensive VCC validation with 100% Hilbert coverage, 67x improvement over v1 sampling)**, Phase 13 COMPLETE (A004-A006: Ollama security analyzer + progress tracker + integration docs, 81 new tests passing), TASK_T005 (pixel OS LM output channel — tools/pixel_os_output.py + 8-test suite), TASK_VAC001-007 (complete container system), TASK_R017 (container security 7/7 pass), TASK_W002 (pytest decision resolved), TASK_M004-M005 (pixel LM), TASK_C038 (native pixel boot), Phase 13 task redesign (8 generic → 6 concrete Ollama-integrated tasks), **TASK_SE007 (Spatial Glyph Emulator — 2D spatial ISA)**, **TASK_SE008 (Turing-complete ISA — 20 opcodes, 3-instruction control flow loop verified)**, **TASK_SE009 (GPU-native execution — WGSL compute shader)**, **TASK_SE010 (Hypervisor syscalls — SYSCALL opcode, 7/7 tests pass)**, **TASK_SE011 (Reed-Solomon ECC — RS(100,120) with 30% overhead, 21/21 tests pass)**
+|| **Progress**: 80/120 tasks complete (66.7%) — Phase 12 (Single-File Container) ✅ COMPLETE, Phase 13 (Container Self-Awareness) ✅ COMPLETE, TASK_SE011 ✅ COMPLETE (Reed-Solomon ECC for spatial ISA), **TASK_VCC001 ✅ COMPLETE (VCC Engine v2 comprehensive validation)**
+||- **Critical Path**: TASK_S001 (Spectral fix) → TASK_E001-002 (ECC) → Phase 9 (Interactive)
+||- **Recent Wins**: **TASK_R020 (FFV1.3 codec parameter optimization)**, **TASK_VCC001 (VCC Engine v2 — comprehensive VCC validation with 100% Hilbert coverage, 67x improvement over v1 sampling)**, Phase 13 COMPLETE (A004-A006: Ollama security analyzer + progress tracker + integration docs, 81 new tests passing), TASK_T005 (pixel OS LM output channel — tools/pixel_os_output.py + 8-test suite), TASK_VAC001-007 (complete container system), TASK_R017 (container security 7/7 pass), TASK_W002 (pytest decision resolved), TASK_M004-M005 (pixel LM), TASK_C038 (native pixel boot), Phase 13 task redesign (8 generic → 6 concrete Ollama-integrated tasks), **TASK_SE007 (Spatial Glyph Emulator — 2D spatial ISA)**, **TASK_SE008 (Turing-complete ISA — 20 opcodes, 3-instruction control flow loop verified)**, **TASK_SE009 (GPU-native execution — WGSL compute shader)**, **TASK_SE010 (Hypervisor syscalls — SYSCALL opcode, 7/7 tests pass)**, **TASK_SE011 (Reed-Solomon ECC — RS(100,120) with 30% overhead, 21/21 tests pass)**
 |- **BREAKTHROUGH 2026-07-19**: WGSL GPU-native glyph execution COMPLETE — fetch-decode-execute loop with opcode decoding, CPU state (8 registers, 1KB memory), spatial jumps (JMP, JZ), output buffer. GPU and Python emulators produce identical output. **TASK_SE009 COMPLETE**
 |- **BREAKTHROUGH 2026-07-19**: Autonomous evolution loop closed — Geometry OS observes itself (VLM Spatial Observer), reasons about state, modifies code (Spatial Compiler), end-to-end demo verified — **TASK_SE014 COMPLETED**
 |- **Key Metrics**: Phoneme throughput ~7.6 words/sec (target ≥8.0), Byte throughput ~24 bytes/sec (target ≥25), Pixel density ~2.5 bytes/pixel (VAMP target ~3), Container 35 frames 1.1 MB 6 new analysis entries added, **Spatial CPU: 10 opcodes, 8 registers, 1KB memory, 2D PC, Python emulator working, WGSL GPU-native fetch-decode-execute loop COMPLETE (GPU ↔ Python verified)**
@@ -26,7 +26,7 @@ Visual Audio enables software to exist as text, audio, or pixels. The foundation
 2. ✅ TASK_T005: Pixel OS LM output test COMPLETE — tools/pixel_os_output.py + 8-test suite (no longer a blocker; TASK_SE006 already complete)
 3. ✅ TASK_R018-R019: Fountain codes & DCT steganography COMPLETE — container resilience pipeline unlocked
 4. ✅ Phase 13: Container self-awareness COMPLETE — A001-A006 all done (131 tests across 6 tools)
-5. ▶️ **Next**: TASK_R020 (FFV1.3 codec parameter optimization)
+5. ✅ TASK_R020: FFV1.3 codec parameter optimization COMPLETE
 
 ### Blocking Issues (Critical Priority)
 
@@ -610,11 +610,12 @@ implemented and are split into TASK_C035 / TASK_C036 rather than claimed under C
   - Dependencies: TASK_P001
   - Receipt: Multi-voice polyphonic speech (chords, counterpoint)
   - Test: python3 tests/test_parallel_synthesis.py
-|- [ ] **TASK_R012**: GlyphLang integration
+|- [x] **TASK_R012**: GlyphLang integration ✅ COMPLETE
   - Priority: LOW
   - Dependencies: TASK_R002
   - Receipt: Compile directly to spatial opcodes
-  - Test: python3 tests/test_glyphlang_integration.py
+  - Test: python3 tests/test_glyphlang_integration.py (7/7 pass)
+  - Status: speak_glyph.py encodes .glyph → signed dual-band audio → pixel_os_listener decodes/verifies → GlyphCPU executes → output verified
 |- [ ] **TASK_R013**: Procedural generation using seed pixels (CONTAINER IMPLEMENTATION COMPLETE)
   - Priority: MEDIUM
   - Dependencies: TASK_R006, TASK_R007
@@ -882,11 +883,11 @@ Phase 0 (DONE) → Phase 1 (ECC + air-gap) → Phase 3 (Dual-Band) → Phase 8 (
 ## Milestones
 
 ### M1: Robust Transmission (Q1 2026)
-- Phase 1 complete
-- All codecs survive 10% transmission errors
-- ECC unit tests passing
-- [x] TASK_E002 (Dense ECC) complete
-- [ ] TASK_S001 (Spectral fix) needed before ECC
+|- Phase 1 complete
+|- All codecs survive 10% transmission errors
+|- ECC unit tests passing
+|- [x] TASK_E002 (Dense ECC) complete
+|- [x] TASK_S001 (Spectral fix) complete - see line 216
 
 ### M2: Natural Speech (Q2 2026)
 - Phase 2 complete
