@@ -29,6 +29,7 @@ Commands:
   verify <file.mkv>               CRC + sha256 check every entry
   run <file.mkv> <name> [args]    execute a Python tool stored in the container
   update <file.mkv> <name> <payload>  replace an entry (old frames kept as history)
+  patch <file.mkv> <frame> <x> <y> <payload.png>  paint pixels into a frame sub-region in place
 """
 
 import argparse
@@ -87,7 +88,7 @@ def write_frames(frames: list, out_path: Path) -> None:
         FFMPEG, "-y", "-loglevel", "error",
         "-f", "rawvideo", "-pix_fmt", "rgb24",
         "-s", f"{FRAME_SIZE}x{FRAME_SIZE}", "-r", "1", "-i", "-",
-        "-c:v", "ffv1", "-pix_fmt", "rgb24", "-f", "matroska", str(tmp_path),
+        "-c:v", "ffv1", "-level", "3", "-g", "1", "-slices", "24", "-slicecrc", "1", "-pix_fmt", "bgr0", "-f", "matroska", str(tmp_path),
     ]
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
     try:
@@ -400,6 +401,59 @@ def cmd_write_frame(args):
         print(f"  added to entry: {args.name} (role={args.role or 'content'})")
 
 
+def cmd_patch(args):
+    """Paint a pixel payload into a sub-region of an existing frame in place.
+
+    Frames belonging to a dense_encoder-wrapped entry ([UA][LEN][PAYLOAD][CRC32])
+    hold that entry's actual data at the byte level -- painting raw pixels over
+    part of one corrupts the entry's payload and its recorded sha256. Patching
+    such a frame requires --force, since it exists to write spatial/pixel state
+    (e.g. compiled .glyph programs) into container memory directly, not to be a
+    safe way to edit entry content.
+    """
+    from PIL import Image
+
+    path = Path(args.container)
+    directory, frames = load_container(path)
+
+    frame_id = args.frame
+    if frame_id == 0:
+        sys.exit("cannot patch frame 0 (directory)")
+    if frame_id >= len(frames):
+        sys.exit(f"frame {frame_id} does not exist (container has {len(frames)} frames)")
+
+    owner = None
+    for e in directory["entries"]:
+        start, count = e["frames"]
+        if start <= frame_id < start + count:
+            owner = e["name"]
+            break
+    if owner and not args.force:
+        sys.exit(f"frame {frame_id} belongs to entry '{owner}' (dense_encoder-wrapped payload); "
+                  f"patching it in place would corrupt that entry's data and its sha256. "
+                  f"Pass --force to patch anyway (entry will then fail `verify`).")
+
+    img = Image.open(args.payload)
+    if img.mode != 'RGB':
+        img = img.convert('RGB')
+    payload_array = np.array(img)
+    h, w = payload_array.shape[0], payload_array.shape[1]
+
+    if args.x < 0 or args.y < 0 or args.x + w > FRAME_SIZE or args.y + h > FRAME_SIZE:
+        sys.exit(f"patch region ({args.x},{args.y}) size {w}x{h} does not fit in a "
+                 f"{FRAME_SIZE}x{FRAME_SIZE} frame")
+
+    frames[frame_id] = frames[frame_id].copy()
+    frames[frame_id][args.y:args.y + h, args.x:args.x + w] = payload_array
+
+    payload_frames = frames[1:]
+    save_container(directory, payload_frames, path)
+
+    print(f"patched frame {frame_id} at ({args.x},{args.y}) with {w}x{h} pixels from {args.payload}")
+    if owner:
+        print(f"  WARNING: entry '{owner}' payload modified; `verify` will now report it corrupt")
+
+
 def cmd_run(args):
     """Execute a Python tool stored inside the container.
 
@@ -543,6 +597,16 @@ def main():
     sp.add_argument("--role", help="entry role (default: content)")
     sp.add_argument("--note", help="entry note")
     sp.set_defaults(func=cmd_write_frame)
+
+    sp = sub.add_parser("patch", help="paint a pixel payload into a sub-region of an existing frame")
+    sp.add_argument("container")
+    sp.add_argument("frame", type=int, help="frame ID to patch (1+; 0 is the directory)")
+    sp.add_argument("x", type=int, help="destination x offset")
+    sp.add_argument("y", type=int, help="destination y offset")
+    sp.add_argument("payload", help="PNG file to paint in (any size that fits within the frame)")
+    sp.add_argument("--force", action="store_true",
+                    help="allow patching a frame that belongs to an entry (corrupts that entry)")
+    sp.set_defaults(func=cmd_patch)
 
     sp = sub.add_parser("run", help="execute a Python tool stored in the container")
     sp.add_argument("container")

@@ -1722,4 +1722,26 @@ git commit -m "container: add frame allocation scheme + self-hosting tools"
 
 ---
 
+## Phase 15: Spatial Execution Environment (Native Pixel) ⚪ NOT STARTED
+
+**Goal**: Close the gap between "compile .glyph to pixels" (TASK_R012, TASK_glyph_to_pixels — done) and code that actually executes from inside the MKV container itself, without a CPU-side Python emulator as an intermediary. This phase is explicitly the *unstarted future* work flagged when TASK_R012 shipped — tracked here so it isn't later claimed as already-wired.
+
+### Tasks
+
+- [x] **TASK_SE015**: Container Spatial Patching ✅ COMPLETE
+  - Priority: MEDIUM
+  - Dependencies: TASK_R012 (glyph_to_pixels.py), existing va_container.py read-frame/write-frame/update commands
+  - Receipt: `va_container.py patch <file.mkv> <frame> <x> <y> <payload.png>` paints a pixel payload into a sub-region of an existing frame in place. Refuses to touch frame 0 (directory) or an entry-owned frame unless `--force` (entry-owned patches are flagged as breaking that entry's `verify`). Patched region round-trips byte-exact; unpatched pixels untouched.
+  - Test: tests/test_container_patch.py — 7/7 passing (free-frame patch exactness, untouched-pixel check, out-of-bounds rejection, directory-frame rejection, entry-frame refusal without --force, entry corruption with --force, and a real glyph_to_pixels.py → patch → read-frame round trip).
+
+- [ ] **TASK_SE016**: One-Frame GPU Decode→Execute→Encode Round Trip
+  - Priority: MEDIUM
+  - Dependencies: TASK_SE015, TASK_SE009 (WGSL fetch-decode-execute loop)
+  - Scope note: this is deliberately narrower than "live WGPU texture residency for the whole container" — that's a performance/architecture goal, not one task. SE016 proves a single full round trip; ongoing residency/streaming is future work beyond this task.
+  - Goal: Decode one MKV frame containing a patched glyph program to a GPU texture, dispatch the existing WGSL glyph CPU against it, read back the result, and re-encode the mutated frame back into the container — one full cycle, CPU only orchestrating (no Python-side instruction emulation).
+  - Receipt: output register/memory state from the GPU execution matches the equivalent GlyphCPU (Python) run on the same program.
+  - Test: tests/test_gpu_frame_roundtrip.py — must pass before this task is marked complete.
+
+---
+
 ## Backlog (Unprioritized Tasks)
