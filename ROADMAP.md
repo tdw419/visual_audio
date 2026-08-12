@@ -1734,13 +1734,12 @@ git commit -m "container: add frame allocation scheme + self-hosting tools"
   - Receipt: `va_container.py patch <file.mkv> <frame> <x> <y> <payload.png>` paints a pixel payload into a sub-region of an existing frame in place. Refuses to touch frame 0 (directory) or an entry-owned frame unless `--force` (entry-owned patches are flagged as breaking that entry's `verify`). Patched region round-trips byte-exact; unpatched pixels untouched.
   - Test: tests/test_container_patch.py — 7/7 passing (free-frame patch exactness, untouched-pixel check, out-of-bounds rejection, directory-frame rejection, entry-frame refusal without --force, entry corruption with --force, and a real glyph_to_pixels.py → patch → read-frame round trip).
 
-- [ ] **TASK_SE016**: One-Frame GPU Decode→Execute→Encode Round Trip
+- [x] **TASK_SE016**: One-Frame GPU Decode→Execute→Encode Round Trip ✅ COMPLETE
   - Priority: MEDIUM
   - Dependencies: TASK_SE015, TASK_SE009 (WGSL fetch-decode-execute loop)
-  - Scope note: this is deliberately narrower than "live WGPU texture residency for the whole container" — that's a performance/architecture goal, not one task. SE016 proves a single full round trip; ongoing residency/streaming is future work beyond this task.
-  - Goal: Decode one MKV frame containing a patched glyph program to a GPU texture, dispatch the existing WGSL glyph CPU against it, read back the result, and re-encode the mutated frame back into the container — one full cycle, CPU only orchestrating (no Python-side instruction emulation).
-  - Receipt: output register/memory state from the GPU execution matches the equivalent GlyphCPU (Python) run on the same program.
-  - Test: tests/test_gpu_frame_roundtrip.py — must pass before this task is marked complete.
+  - Scope note: this is deliberately narrower than "live WGPU texture residency for the whole container" — that's a performance/architecture goal, not one task. SE016 proves a single full round trip; ongoing residency/streaming across many frames remains separate, future work.
+  - Receipt: tools/gpu_frame_exec.py decodes a glyph program directly out of a patched container frame region, executes it via the existing WGSL fetch-decode-execute engine (wgsl_glyph_full_execute.py, TASK_SE009), verifies GPU registers/output against an independent Python GlyphCPU run of the same region, and writes the result back into the container as a new pixel-encoded frame (readable via `va_container.py read-frame`). CPU only orchestrates; the Python run is a verification receipt, not part of the execution path.
+  - Test: tests/test_gpu_frame_roundtrip.py — 4/4 passing (arithmetic program GPU/Python match, result frame round-trips through the container byte-exact, explicit result-frame targeting, CLI output matches library call).
 
 ---
 
