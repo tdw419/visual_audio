@@ -181,6 +181,11 @@ impl SpatialMkvExtractor {
         Ok(())
     }
 
+    /// Get disk capacity in 512-byte sectors
+    pub fn get_capacity_sectors(&self) -> u64 {
+        self.decoded_size / 512
+    }
+
     /// Read bytes from spatial MKV with Hilbert decoding (legacy method, kept for compatibility)
     ///
     /// This implements the CPU-based extraction path:
@@ -220,7 +225,7 @@ impl SpatialMkvExtractor {
         while bytes_read < bytes_to_read {
             // Map global offset to frame + offset within frame
             let global_byte_pos = offset + bytes_read as u64;
-            let frame_index = (global_byte_pos / frame_capacity) as usize; // VAC2 has data in frame 0
+            let frame_index = ((global_byte_pos / frame_capacity) as usize) + 1; // VSP1 has metadata in frame 0
             let frame_offset = (global_byte_pos % frame_capacity) as usize;
 
             // Calculate how many bytes we can read from this frame

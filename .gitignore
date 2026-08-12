@@ -66,6 +66,10 @@ tests/fixtures/*.png
 *.img
 *.iso
 *.apkovl.tar.gz
+*.nut
+*.raw
+*.bin
+*.elf
 
 # Backup files
 *.backup

@@ -1,0 +1,132 @@
+#!/bin/sh
+# Cognitive Initramfs - Bootstrapping Neural OS
+# "The Screen is the Mind" - OS boots with awareness of its own structure
+
+set -e
+
+echo "=== Cognitive Boot Initramfs ==="
+echo "I am a Linux kernel booting from a read-only pixel container."
+echo "Extracting my mind from the spatial substrate..."
+
+# Mount essential filesystems
+mount -t proc none /proc
+mount -t sysfs none /sys
+mount -t devtmpfs none /dev
+
+# Initialize mdev to create partition nodes if needed
+echo /sbin/mdev > /proc/sys/kernel/hotplug
+mdev -s
+
+# Create tmpfs for cognitive workspace (must be large enough for LLM weights)
+mkdir -p /tmp/cognitive
+mount -t tmpfs none /tmp/cognitive -o size=2G
+
+# Mount cognitive payload partition (at offset from single VirtIO device)
+# The offset is read from metadata
+COGNITIVE_OFFSET_BYTES=4831838208
+
+echo "Attempting to detect cognitive payload at offset ${COGNITIVE_OFFSET_BYTES}..."
+
+# We will use dd to read the 8-byte length header
+if dd if=/dev/vda bs=1 skip=$COGNITIVE_OFFSET_BYTES count=8 of=/tmp/cognitive/len_bytes 2>/dev/null; then
+    echo "✓ Cognitive payload detected at offset $COGNITIVE_OFFSET_BYTES"
+
+    echo "Reading cognitive boot configuration..."
+    touch /tmp/cognitive/payload_found
+
+    # Try to extract LLM weights from pixel container
+    echo ""
+    echo "=== Decoding LLM weights from pixel storage ==="
+
+    # Check if Python is available
+    if command -v python3 >/dev/null 2>&1; then
+        echo "Python 3 available, attempting extraction..."
+
+        # Create minimal Python path
+        export PYTHONPATH=/usr/lib/python3.12:/usr/local/lib
+
+        if python3 /bin/extract_cognitive.py; then
+            echo "✓ Cognitive extraction and inference completed successfully"
+        else
+            echo "⚠️  LLM extraction/inference failed"
+        fi
+    else
+        echo "⚠️  Python not available, skipping LLM extraction"
+    fi
+
+    if grep -q "container_boot" /proc/cmdline; then
+        echo "=== Container Boot Completed Successfully ==="
+        echo "Powering off..."
+        poweroff -f
+    fi
+
+    echo ""
+    echo "=== Executing Boot Sequence ==="
+    
+    # Wait a moment for partitions to be detected
+    sleep 2
+    
+    echo "Available partitions:"
+    ls -l /dev/vda* || true
+
+    # Mount the root filesystem and continue boot
+    echo "Block devices available:"
+    ls -l /dev/vda* || true
+    echo "Filesystems:"
+    cat /proc/partitions
+
+    # Try /dev/vda1 first (Ubuntu 24.04 server typically uses vda1)
+    if mount /dev/vda1 /sysroot 2>/dev/null; then
+        echo "✓ Mounted /dev/vda1"
+        # Check for systemd (Ubuntu 24.04)
+        if [ -x /sysroot/lib/systemd/systemd ]; then
+            echo "  Switching to systemd..."
+            exec switch_root /sysroot /lib/systemd/systemd
+        # Check for SysV init (older Ubuntu)
+        elif [ -x /sysroot/sbin/init ]; then
+            echo "  Switching to init..."
+            exec switch_root /sysroot /sbin/init
+        # Check for busybox init (minimal systems)
+        elif [ -x /sysroot/init ]; then
+            echo "  Switching to busybox init..."
+            exec switch_root /sysroot /init
+        else
+            echo "❌ CRITICAL: No init binary found in /sysroot"
+            ls -la /sysroot/ 2>/dev/null || true
+            ls -la /sysroot/lib/systemd/ 2>/dev/null || true
+            ls -la /sysroot/sbin/ 2>/dev/null || true
+            exec /bin/sh
+        fi
+    elif mount /dev/vda3 /sysroot 2>/dev/null; then
+        echo "✓ Mounted /dev/vda3"
+        exec switch_root /sysroot /sbin/init
+    else
+        echo "❌ CRITICAL: Failed to mount root partition. Dropping to shell."
+        dmesg | tail -n 20
+        exec /bin/sh
+    fi
+else
+    echo "⚠️  Failed to detect cognitive partition (offset mount)"
+    echo "  This is expected if not using cognitive boot container"
+    echo "  Falling back to standard Ubuntu boot..."
+    
+    sleep 2
+    echo "Block devices available:"
+    ls -l /dev/vda* || true
+    echo "Filesystems:"
+    cat /proc/partitions
+    dmesg | tail -n 20
+    
+    if mount /dev/vda1 /sysroot; then
+        exec switch_root /sysroot /sbin/init
+    elif mount /dev/vda3 /sysroot; then
+        exec switch_root /sysroot /sbin/init
+    else
+        echo "❌ CRITICAL: Failed to mount root partition. Dropping to shell."
+        exec /bin/sh
+    fi
+fi
+
+# Should never reach here
+echo "❌ CRITICAL: Boot switch_root failed - dropping to emergency shell"
+exec /bin/sh

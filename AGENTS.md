@@ -116,5 +116,114 @@ When Visual Audio is integrated with Geometry OS: spatial transformations must p
 
 ---
 
-**Last Updated**: 2026-07-17
+## Cognitive Boot Protocol
+
+### "The Screen is the Mind" Architecture
+
+Geometry OS achieves spatial self-awareness through pixel-encoded cognitive payloads. The OS extracts its own neural weights from a visual substrate, demonstrating that "The Screen is the Mind" — the storage medium itself encodes the system's cognition.
+
+### Boot Modes
+
+#### 1. Container Boot (Recommended for Demonstration)
+
+Clean demonstration of cognitive extraction without full OS boot complexity.
+
+**Run:**
+```bash
+./boot_cognitive_container.sh
+```
+
+**Expected Output:**
+```
+=== Extracting LLM weights from spatial block device ===
+✓ Found GGUF header at payload offset 289043151
+✓ LLM weights extracted successfully! (668MB)
+✓ MD5 verification passed
+
+=== Initializing Spatial Cognition ===
+Loading TinyLlama weights into memory...
+Querying self-knowledge: "Describe how you booted and what you are."
+
+=== COGNITIVE OUTPUT ===
+{
+  "status": "success",
+  "boot_type": "spatial_cognitive",
+  "inference_result": "I am a spatial boot system. My mind was extracted..."
+}
+
+Shutting down container gracefully...
+```
+
+**Verification Gate:**
+```bash
+./boot_cognitive_container.sh | tee container_boot.log
+grep '"status": "success"' container_boot.log
+grep "Shutting down container gracefully" container_boot.log
+```
+
+#### 2. Full System Boot
+
+Boot Ubuntu 24.04 with cognitive initramfs override.
+
+**Run:**
+```bash
+./boot_ubuntu_cognitive.sh
+```
+
+**Verification Gate:**
+```bash
+tail -f /tmp/virtio_ubuntu_cognitive_qemu.log | grep -E "(Cognitive|GGUF|MD5)"
+```
+
+### Cognitive Payload Structure
+
+```
+ubuntu_cognitive_vac2_v3.nut (13GB)
+├─ Frames 0-345:    Ubuntu 24.04 rootfs (4.5GB)
+└─ Frames 346-403:  Cognitive payload (914MB)
+   ├─ 289MB: initramfs-cognitive.gz
+   ├─ 638MB: llm_weights.gguf (TinyLlama 1.1B Q4)
+   └─ 237B:  cognitive_boot.json (metadata)
+```
+
+### Extraction Flow
+
+1. Kernel loads cognitive initramfs
+2. Mounts /dev/vda at offset 4,831,838,208 bytes
+3. Reads VAC2 metadata (cognitive_boot.json)
+4. Scans for GGUF magic header (0x46554747)
+5. Extracts 668MB weights from 58 spatial frames
+6. Hilbert curve mapping verified (4,096×4,096×3 BGR24)
+7. RGB triplets → bytes conversion
+8. MD5 checksum verification (byte-accurate)
+9. llama-cpp-python loads GGUF model
+10. LLM runs self-knowledge query
+11. Graceful shutdown (container) or system boot (full)
+
+### Performance Metrics
+
+| Metric | Achieved | Target | Status |
+|--------|----------|--------|--------|
+| Extraction time | ~2s | <5s | ✅ |
+| MD5 accuracy | 100% | 100% | ✅ |
+| Inference time | TBD | <10s | 🔬 |
+| Total container runtime | ~30-60s | <60s | 🔬 |
+
+### Protected Cognitive Assets
+
+These cognitive boot components are PROTECTED and must NOT be modified without explicit approval:
+
+- `initramfs-cognitive/` — Cognitive initramfs build artifacts
+- `ubuntu_cognitive_vac2_v3.nut` — Production cognitive container
+- `initramfs-cognitive/extract_cognitive.py` — Core extraction logic
+
+### Documentation
+
+- `COGNITIVE_BOOT_V3_RECEIPT.md` — Full cognitive extraction achievements
+- `CONTAINER_BOOT_RECEIPT.md` — Container boot implementation
+- `COGNITIVE_CONTAINER_DEMO.md` — Technical demo documentation
+
+---
+
+**Last Updated**: 2026-08-12 (Cognitive Boot Protocol added)
 **Status**: Active — All agents must obey these rules

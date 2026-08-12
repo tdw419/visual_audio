@@ -252,9 +252,13 @@ def cmd_init(args):
 
 
 def cmd_add(args):
+    # CRITICAL: Read stdin BEFORE any subprocess.run() calls
+    # subprocess.run() with capture_output=True interferes with parent's stdin
+    payload = sys.stdin.buffer.read() if args.payload == "-" else Path(args.payload).read_bytes()
+    
     path = Path(args.container)
     directory, frames = load_container(path)
-    payload = sys.stdin.buffer.read() if args.payload == "-" else Path(args.payload).read_bytes()
+    
     payload_frames = frames[1:]
     add_entry(directory, payload_frames, args.name, args.role, args.note or "", payload)
     save_container(directory, payload_frames, path)

@@ -424,10 +424,16 @@ impl HilbertDecoder {
 
         readback_buffer.unmap();
 
-        let first_bytes: Vec<u8> = u32_data.iter().take(16).map(|&val| val as u8).collect();
+        let u8_data: Vec<u8> = u32_data.iter().map(|&v| v as u8).collect();
+        let last_16: Vec<u8> = if u8_data.len() >= 16 {
+            u8_data[u8_data.len() - 16..].to_vec()
+        } else {
+            u8_data.clone()
+        };
+        
         info!(
-            "DMA complete: {} bytes written to guest RAM. First 16: {:?}",
-            guest_ram_slice.len(), first_bytes
+            "DMA complete: {} bytes written to guest RAM. First 16: {:?} Last 16: {:?}",
+            num_bytes, &u8_data[..std::cmp::min(16, u8_data.len())], last_16
         );
 
         Ok(guest_ram_slice.len())

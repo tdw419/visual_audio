@@ -115,8 +115,8 @@ fn extract_frame_pixels(mkv_path: &Path, frame_index: usize) -> Result<Vec<u8>> 
 
     let output = Command::new("ffmpeg")
         .args([
+            "-ss", &format!("{}", frame_index),
             "-i", mkv_str,
-            "-vf", &format!("select=eq(n\\,{frame_index})"),
             "-vframes", "1",
             "-f", "rawvideo",
             "-pix_fmt", "rgb24",

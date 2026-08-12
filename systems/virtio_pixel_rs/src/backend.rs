@@ -442,7 +442,9 @@ impl VirtioPixelServer {
                         {
                             // Timeout! Poll virtqueues.
                             for i in 0..self.queues.len() {
-                                let _ = self.poll_virtqueue(i);
+                                if let Err(err) = self.poll_virtqueue(i) {
+                                    error!("Queue {} poll error: {}", i, err);
+                                }
                             }
                             continue;
                         }
@@ -454,7 +456,9 @@ impl VirtioPixelServer {
                             || io_err.kind() == std::io::ErrorKind::TimedOut
                         {
                             for i in 0..self.queues.len() {
-                                let _ = self.poll_virtqueue(i);
+                                if let Err(err) = self.poll_virtqueue(i) {
+                                    error!("Queue {} poll error: {}", i, err);
+                                }
                             }
                             continue;
                         }
@@ -538,13 +542,15 @@ impl VirtioPixelServer {
                 let config_offset = u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]) as usize;
                 let config_size = u32::from_le_bytes([payload[4], payload[5], payload[6], payload[7]]) as usize;
 
-                // Build reply with exact size requested
-                let mut reply = vec![0u8; config_size];
+                // QEMU expects the reply payload to exactly match the request payload size
+                let mut reply = payload.to_vec();
 
+                // The config bytes start at offset 12 in the vhost-user payload struct
+                // struct: offset(4), size(4), flags(4), payload[...]
                 for i in 0..config_size {
                     let src_idx = config_offset + i;
-                    if src_idx < config_space.len() && i < config_size {
-                        reply[i] = config_space[src_idx];
+                    if src_idx < config_space.len() && (12 + i) < reply.len() {
+                        reply[12 + i] = config_space[src_idx];
                     }
                 }
                 (reply, vec![])
@@ -1237,7 +1243,7 @@ impl VirtioPixelServer {
         // Calculate bytes per frame: frame_size * frame_size (square frames, 1 byte per pixel)
         let bytes_per_frame = (extractor.frame_size as u64) * (extractor.frame_size as u64);
         let frame_width = extractor.frame_size;
-        let frame_index = (offset / bytes_per_frame) as u32;
+        let frame_index = ((offset / bytes_per_frame) as u32) + 1; // VSP1 has metadata in frame 0
         let offset_in_frame = (offset % bytes_per_frame) as u32;
         drop(extractor);
 
