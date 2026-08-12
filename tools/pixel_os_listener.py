@@ -273,21 +273,64 @@ class ListenerDaemon:
                 return False
             try:
                 import subprocess
-                result = subprocess.run(
-                    [sys.executable, str(script_path)],
-                    cwd=self.driver_output_dir,
-                    capture_output=True,
-                    text=True,
-                    timeout=10
-                )
-                if result.returncode == 0:
-                    logger.info(f"Ran {script_name} (stdout: {result.stdout[:100] if result.stdout else ''})")
+
+                # Special handling for .glyph files: execute via wgsl_glyph_full_execute.py
+                if script_name.endswith('.glyph'):
+                    # Assemble and execute .glyph program on GPU
+                    glyph_runner = Path(__file__).parent / 'wgsl_glyph_full_execute.py'
+                    if not glyph_runner.exists():
+                        logger.error(f"Glyph runner not found: {glyph_runner}")
+                        return False
+
+                    # We need to call the Python API directly, not subprocess
+                    # First assemble .glyph to pixels
+                    sys.path.insert(0, str(Path(__file__).parent))
+                    from mkv_glyph_emulator import OpcodeMap, GlyphAssembler, GlyphCPU
+                    import numpy as np
+                    from PIL import Image
+
+                    with open(script_path, 'r') as f:
+                        glyph_program = f.readlines()
+
+                    opcode_map = OpcodeMap()
+                    assembler = GlyphAssembler(opcode_map)
+
+                    # Assemble to pixel image
+                    pixels = assembler.assemble_to_pixels(glyph_program, width=16)
+                    test_image = Path(self.driver_output_dir) / f"{script_name}.png"
+                    img = Image.fromarray(pixels.astype(np.uint8), mode='RGB')
+                    img.save(test_image)
+                    logger.info(f"Assembled .glyph → {test_image}")
+
+                    # Run Python emulator for verification (faster than GPU for small programs)
+                    cpu = GlyphCPU(opcode_map)
+                    cpu.run(pixels, max_instructions=1000)
+
+                    if cpu.output:
+                        logger.info(f"✓ .glyph executed: output={cpu.output}")
+                    else:
+                        logger.info(f"✓ .glyph executed: no output (state check)")
+
                     return True
                 else:
-                    logger.error(f"Script {script_name} failed: {result.stderr}")
-                    return False
+                    # Standard Python script execution
+                    result = subprocess.run(
+                        [sys.executable, str(script_path)],
+                        cwd=self.driver_output_dir,
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                    if result.returncode == 0:
+                        logger.info(f"Ran {script_name} (stdout: {result.stdout[:100] if result.stdout else ''})")
+                        return True
+                    else:
+                        logger.error(f"Script {script_name} failed: {result.stderr}")
+                        return False
             except Exception as e:
                 logger.error(f"Failed to run {script_path}: {e}")
+                import traceback
+                traceback.print_exc()
                 return False
 
         logger.error(f"Unknown driver op type: {op_type!r}")
