@@ -153,7 +153,7 @@ def main():
         print(f"    --enable-driver-ops \\\\")
         print(f"    --driver-output-dir /tmp/drivers \\\\")
         print(f"    --public-key keys/pixel_os_public.pem \\\\")
-        print(f"    --queue-mode --watch-dir ./")
+        print(f"    --mode queue --watch-dir ./")
         print(f"\nThen play the WAV:")
         print(f"  aplay {args.output}")
         return 0

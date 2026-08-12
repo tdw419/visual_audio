@@ -34,13 +34,11 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Direct import from codec - provenance encoding
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src'))
-from codec.phy import Phy16Tone, frame_authenticated, unframe_authenticated
-
-import numpy as np
-import soundfile as sf
-from scipy.signal import butter, sosfilt
+# pixel_screen.utter() already implements the verified dual-band mix
+# (narration low-band + synth_data_band high-band) that pixel_os_listener.py's
+# decode_data_band() expects. Reuse it instead of driving the raw Phy16Tone
+# modem directly -- the two encodings are not interchangeable.
+from pixel_screen import utter as pixel_screen_utter
 
 
 def encode_glyph(source_path: str, script_name: str = None) -> list:
@@ -70,39 +68,18 @@ def encode_glyph(source_path: str, script_name: str = None) -> list:
     return ops
 
 
-def encode_ops_to_audio(ops: list, private_key_path: str) -> np.ndarray:
+def encode_ops_to_audio(ops: list, private_key_path: str, narration: str, wav_path: str):
     """
-    Encode ops to authenticated MFSK audio.
+    Encode ops to a signed dual-band WAV via pixel_screen.utter(), the same
+    path pixel_os_listener.py's decode_data_band() actually understands.
 
     Args:
         ops: List of ops to encode
-        private_key_path: Path to Ed25519 private key
-
-    Returns:
-        Audio samples as numpy array
+        private_key_path: Path to Ed25519 private key (PEM/PKCS8)
+        narration: Spoken narration text for the low band
+        wav_path: Output WAV path
     """
-    import nacl.signing
-    import nacl.encoding
-
-    # Load private key
-    with open(private_key_path, 'rb') as f:
-        private_key = nacl.signing.SigningKey(f.read())
-
-    # Serialize ops
-    payload = json.dumps(ops).encode('utf-8')
-
-    # Sign payload
-    timestamp = struct.pack('<Q', int(1e9 * __import__('time').time()))
-    signed_payload = private_key.sign(payload + timestamp)
-
-    # Frame with provenance
-    framed = frame_authenticated(payload, signed_payload.signature, timestamp)
-
-    # Encode to symbols then audio
-    phy = Phy16Tone()
-    audio = phy.encode(framed)
-
-    return audio
+    return pixel_screen_utter(narration, ops, wav_path, private_key_path)
 
 
 def main():
@@ -132,6 +109,12 @@ def main():
         '--private-key',
         default='keys/pixel_os_private.pem',
         help="Path to Ed25519 private key for signing (default: keys/pixel_os_private.pem)"
+    )
+
+    parser.add_argument(
+        '--narration',
+        default=None,
+        help="Spoken narration text for the low band (default: derived from script name)"
     )
 
     parser.add_argument(
@@ -168,9 +151,10 @@ def main():
     # Create audio with provenance
     print(f"\nEncoding signed audio to {args.output}...")
     try:
-        audio = encode_ops_to_audio(ops, args.private_key)
-        duration = len(audio) / Phy16Tone.SAMPLE_RATE
-        sf.write(args.output, audio, Phy16Tone.SAMPLE_RATE)
+        narration = args.narration or f"Installing spatial program {ops[0][1]}"
+        from speak import SAMPLE_RATE
+        audio = encode_ops_to_audio(ops, args.private_key, narration, args.output)
+        duration = len(audio) / SAMPLE_RATE
         print(f"  ✓ Success: {duration:.1f}s of audio")
         print(f"  ✓ Signed with Ed25519 (64-byte signature + timestamp)")
         print(f"\nTo execute this .glyph program via the listener:")
@@ -180,7 +164,7 @@ def main():
         print(f"    --enable-driver-ops \\")
         print(f"    --driver-output-dir /tmp/drivers \\")
         print(f"    --public-key keys/pixel_os_public.pem \\")
-        print(f"    --queue-mode --watch-dir ./")
+        print(f"    --mode queue --watch-dir ./")
         print(f"\nThen play the WAV:")
         print(f"  aplay {args.output}")
         return 0

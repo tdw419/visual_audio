@@ -561,8 +561,22 @@ def main():
         action='store_true',
         help='Validate and log boot ops without actually launching QEMU'
     )
+    parser.add_argument(
+        '--enable-driver-ops',
+        action='store_true',
+        help='Allow signed ["write", ...] and ["run", ...] ops (requires --provenance)'
+    )
+    parser.add_argument(
+        '--driver-output-dir',
+        help='Trusted directory for write/run driver ops (required with --enable-driver-ops)'
+    )
 
     args = parser.parse_args()
+
+    if args.enable_driver_ops and not args.provenance:
+        parser.error("--enable-driver-ops requires --provenance (only signed frames may write/run)")
+    if args.enable_driver_ops and not args.driver_output_dir:
+        parser.error("--enable-driver-ops requires --driver-output-dir")
 
     # Validate provenance requirements
     if args.provenance and not args.public_key:
@@ -581,7 +595,9 @@ def main():
         public_key_path=args.public_key,
         enable_boot=args.enable_boot,
         boot_image_dir=args.boot_image_dir,
-        boot_dry_run=args.boot_dry_run
+        boot_dry_run=args.boot_dry_run,
+        enable_driver_ops=args.enable_driver_ops,
+        driver_output_dir=args.driver_output_dir
     )
 
     # Start daemon
