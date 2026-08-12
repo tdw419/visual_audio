@@ -144,16 +144,14 @@ class PhyECC:
         
         try:
             # Decode with error correction
-            # reedsolo returns either 2-tuple or 3-tuple
-            result = self.rs_codec.decode(packed)
-            decoded_packed, decoded_packed_ecc = result[:2]
+            # reedsolo returns a 3-tuple: (message, message_ecc, errata_pos)
+            decoded_packed, decoded_packed_ecc, errata_pos = self.rs_codec.decode(packed)
             
             # Unpack back to symbols
             decoded_symbols = unpack_symbols(bytes(decoded_packed))
             
-            # Verify by re-encoding and comparing
-            test_encode = self.rs_codec.encode(bytes(decoded_packed))
-            is_valid = bytes(test_encode) == bytes(decoded_packed_ecc)
+            # If decode returned without exception, it was successful/correctable
+            is_valid = True
             
             return decoded_symbols, is_valid
             

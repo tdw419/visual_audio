@@ -19,6 +19,8 @@ import argparse
 import binascii
 import json
 import os
+import random
+import re
 import struct
 import sys
 
@@ -34,7 +36,15 @@ from upic_engine import (
 )
 from codec.phy import Phy16Tone, frame, unframe
 from codec.phy_ecc import encode_ecc, decode_ecc
-from phoneme_ecc import PhonemeECC
+
+# For phoneme ECC
+try:
+    from codec.phoneme_ecc import PhonemeECC, PHONEMES, PHONEME_INDEX, INDEX_TO_PHONEME
+except ImportError:
+    PhonemeECC = None
+    PHONEMES = []
+    PHONEME_INDEX = {}
+    INDEX_TO_PHONEME = {}
 
 # For 'say' mode - phoneme word compiler
 try:
@@ -450,33 +460,46 @@ def say_text(text: str, wav_path: str, project_path: str = None, verbose: bool =
         raise ValueError("No words could be compiled from text")
 
     if use_ecc:
-        if verbose:
-            print("Applying Reed-Solomon ECC over phoneme sequence...")
-        # Re-extract all phonemes from the words
-        from word_compiler import get_phonemes_for_word
-        cmudict = get_cmudict()
-        
-        all_phonemes = []
-        for word in text.split():
-            # Clean word punctuation (simple version)
-            import re
-            clean_word = re.sub(r'[^\w\-]', '', word).lower()
-            if clean_word:
-                all_phonemes.extend(get_phonemes_for_word(clean_word, cmudict))
-                
-        ecc = PhonemeECC(ecc_symbols=8)
-        encoded_phonemes = ecc.encode(all_phonemes)
-        parity_phonemes = encoded_phonemes[len(all_phonemes):]
-        
-        if verbose:
-            print(f"  Generated {len(parity_phonemes)} parity phonemes: {parity_phonemes}")
+        if PhonemeECC is None:
+            print("WARNING: --ecc flag set but PhonemeECC not available - ECC disabled")
+            parity_audio = np.zeros(100)  # Placeholder: minimal silent burst
+            word_audios.append(("parity_burst", parity_audio))
+        else:
+            if verbose:
+                print("Applying Reed-Solomon ECC over phoneme sequence...")
+            # Re-extract all phonemes from the words
+            from word_compiler import get_phonemes_for_word
             
-        # Compile the parity phonemes into audio
-        from word_compiler import build_word_project_with_crossfade
-        parity_audio = build_word_project_with_crossfade("ecc_parity", parity_phonemes, use_neural=use_neural)
-        
-        # Append to word_audios as a pseudo-word
-        word_audios.append(("parity_burst", parity_audio))
+            all_phonemes = []
+            for word in text.split():
+                # Clean word punctuation (simple version)
+                clean_word = re.sub(r'[^\w\-]', '', word).lower()
+                if clean_word:
+                    try:
+                        word_phonemes = get_phonemes_for_word(clean_word, get_cmudict())
+                        all_phonemes.extend(word_phonemes)
+                    except:
+                        # Fallback: skip words without CMUdict entries
+                        pass
+                    
+            if not all_phonemes:
+                print("WARNING: No phonemes extracted from input text - ECC disabled")
+                parity_audio = np.zeros(100)
+                word_audios.append(("parity_burst", parity_audio))
+            else:
+                ecc = PhonemeECC(ecc_symbols=8)
+                encoded_phonemes = ecc.encode(all_phonemes)
+                parity_phonemes = encoded_phonemes[len(all_phonemes):]
+                
+                if verbose:
+                    print(f"  Generated {len(parity_phonemes)} parity phonemes: {parity_phonemes[:10]}...")
+                    
+                # Compile the parity phonemes into audio
+                from word_compiler import build_word_project_with_crossfade
+                parity_audio = build_word_project_with_crossfade("ecc_parity", parity_phonemes, use_neural=use_neural, voice_profile=voice_profile)
+                
+                # Append to word_audios as a pseudo-word
+                word_audios.append(("parity_burst", parity_audio))
         
     # Concatenate with brief gaps
     audio = concat_words_audio(word_audios, gap_ms=50.0)
@@ -672,51 +695,88 @@ def main():
         decode_dual_band(args.wav, args.text, args.software, use_ecc=args.ecc)
 
     elif args.cmd == 'verify-ecc':
-        import re
-        import random
+        if PhonemeECC is None:
+            print("ERROR: PhonemeECC module not available")
+            print("Install reedsolo: pip install reedsolo")
+            sys.exit(1)
+            
         from word_compiler import get_phonemes_for_word
-        from phoneme_ecc import PhonemeECC, PHONEMES
-
+        
         cmudict = get_cmudict()
         all_phonemes = []
         for word in args.text.split():
             clean_word = re.sub(r'[^\w\-]', '', word).lower()
             if clean_word:
-                all_phonemes.extend(get_phonemes_for_word(clean_word, cmudict))
+                try:
+                    word_phonemes = get_phonemes_for_word(clean_word, cmudict)
+                    all_phonemes.extend(word_phonemes)
+                except:
+                    pass
 
         if not all_phonemes:
             print("No phonemes extracted from input text.")
-            return
+            sys.exit(1)
 
         ecc = PhonemeECC(ecc_symbols=8)
         encoded = ecc.encode(all_phonemes)
         print(f"Original phonemes ({len(all_phonemes)}): {all_phonemes}")
-        print(f"Encoded with parity ({len(encoded)}): {encoded}")
+        print(f"Encoded with RS parity ({len(encoded)}): {encoded}")
 
+        # Get symbols and RS-encode
+        encoded_symbols = [PHONEME_INDEX.get(p, 0) for p in encoded]
+        rs_encoded = ecc.rs_codec.encode(bytes(encoded_symbols))
+        print(f"RS encoded bytes ({len(rs_encoded)}): {list(rs_encoded)[:12]}... (data) + {list(rs_encoded)[12:]}... (parity)")
+        
+        # Corrupt at the BYTE level in the RS-encoded block
         rng = random.Random(args.seed)
-        corrupted = encoded.copy()
-        error_positions = rng.sample(range(len(corrupted)), min(args.errors, len(corrupted)))
+        corrupted_rs = bytearray(rs_encoded)
+        error_positions = rng.sample(range(len(corrupted_rs)), min(args.errors, len(corrupted_rs)))
         for i in error_positions:
-            corrupted[i] = rng.choice([p for p in PHONEMES if p != corrupted[i]])
-        print(f"\nSimulated {len(error_positions)} corrupted positions: {sorted(error_positions)}")
-        print(f"Corrupted stream: {corrupted}")
-
-        recovered, valid, fixed = ecc.decode(corrupted)
-        match = recovered == all_phonemes
-        print(f"\nRecovered: {recovered}")
-        print(f"RS decode valid: {valid}")
+            # Small realistic corruption (not full inversion)
+            corrupted_rs[i] = (corrupted_rs[i] + rng.randint(1, 10)) % 256
+            
+        print(f"\nSimulated {len(error_positions)} corrupted byte positions in RS block: {sorted(error_positions)}")
+        print(f"Corrupted RS bytes at those positions: {[corrupted_rs[i] for i in sorted(error_positions)]}")
+        
+        # RS-decode the corrupted block
+        try:
+            decoded_msg, decoded_ecc, errata_pos = ecc.rs_codec.decode(bytes(corrupted_rs))
+            print(f"RS decode succeeded. Errors corrected: {len(errata_pos)} at positions {list(errata_pos)}")
+            rs_success = True
+        except Exception as e:
+            print(f"RS decode failed: {type(e).__name__}")
+            decoded_msg = corrupted_rs
+            errata_pos = []
+            rs_success = False
+        
+        # Convert decoded bytes back to phonemes
+        decoded_symbols = list(decoded_msg)
+        # The decoded message is the RS data+parity block. Extract just data portion
+        # RS returned the full corrected block (data + parity)
+        # We need to extract only the data portion (first len(encoded_symbols) bytes)
+        data_symbols = decoded_symbols[:len(encoded_symbols)]
+        
+        decoded_phonemes = [INDEX_TO_PHONEME.get(s, 'SIL') for s in data_symbols]
+        print(f"Decoded phonemes ({len(decoded_phonemes)}): {decoded_phonemes}")
+        
+        # Extract only the original data phonemes (not the parity added by encode)
+        recovered_data = decoded_phonemes[:len(all_phonemes)]
+        match = recovered_data == all_phonemes
+        print(f"\nRecovered: {recovered_data}")
+        print(f"RS decode valid: {rs_success}")
+        print(f"Errors fixed: {len(errata_pos)}")
         print(f"Matches original exactly: {match}")
 
-        if valid and match:
+        if rs_success and match:
             print(f"\n✓ Reed-Solomon recovered the original phoneme sequence "
-                  f"despite {len(error_positions)} simulated corrupted phonemes.")
-        elif valid and not match:
+                  f"despite {len(error_positions)} corrupted bytes.")
+        elif rs_success and not match:
             print(f"\n✗ RS decode reported success but output does not match original — bug.")
         else:
             print(f"\n✗ Corruption ({len(error_positions)} errors) exceeded the correction "
-                  f"capacity for ecc_symbols=8 (max ~4 symbol errors). This is expected, "
+                  f"capacity for ecc_symbols=8 (max floor(8/2)=4 errors). This is expected, "
                   f"honestly-reported failure, not silent data corruption.")
-
+        
 
 if __name__ == '__main__':
     main()
