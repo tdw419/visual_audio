@@ -177,18 +177,46 @@ def new_directory() -> dict:
 
 def load_container(mkv_path: Path):
     frames = read_frames(mkv_path)
-    directory = json.loads(frame_to_chunk(frames[0]))
-    if directory.get("magic") != DIR_MAGIC:
+    dir_bytes = b""
+    dir_frames = 0
+    directory = None
+    for i, f in enumerate(frames):
+        chunk = frame_to_chunk(f)
+        dir_bytes += chunk
+        try:
+            directory = json.loads(dir_bytes.decode())
+            dir_frames = i + 1
+            break
+        except json.JSONDecodeError:
+            if len(chunk) < MAX_PAYLOAD_PER_FRAME:
+                break
+    if not directory or directory.get("magic") != DIR_MAGIC:
         raise ValueError(f"not a VAC1 container: {mkv_path}")
+    directory["_dir_frames"] = dir_frames
     return directory, frames
 
 
 def read_directory(mkv_path: Path) -> dict:
-    """Read just the directory (frame 0) without decoding the rest of the container."""
-    frames = read_frame_range(mkv_path, 0, 1)
-    directory = json.loads(frame_to_chunk(frames[0]))
-    if directory.get("magic") != DIR_MAGIC:
+    """Read just the directory without decoding the rest of the container."""
+    dir_bytes = b""
+    dir_frames = 0
+    directory = None
+    while True:
+        frames = read_frame_range(mkv_path, dir_frames, 1)
+        if not frames:
+            break
+        chunk = frame_to_chunk(frames[0])
+        dir_bytes += chunk
+        dir_frames += 1
+        try:
+            directory = json.loads(dir_bytes.decode())
+            break
+        except json.JSONDecodeError:
+            if len(chunk) < MAX_PAYLOAD_PER_FRAME:
+                break
+    if not directory or directory.get("magic") != DIR_MAGIC:
         raise ValueError(f"not a VAC1 container: {mkv_path}")
+    directory["_dir_frames"] = dir_frames
     return directory
 
 
@@ -205,10 +233,23 @@ def read_entry_streamed(mkv_path: Path, directory: dict, name: str) -> bytes:
 
 
 def save_container(directory: dict, payload_frames: list, mkv_path: Path) -> None:
-    dir_bytes = json.dumps(directory).encode()
-    if len(dir_bytes) > MAX_PAYLOAD_PER_FRAME:
-        raise ValueError("directory exceeds one frame; multi-frame directory not yet implemented")
-    write_frames([chunk_to_frame(dir_bytes)] + payload_frames, mkv_path)
+    old_dir_frames = directory.pop("_dir_frames", 1)
+    while True:
+        dir_bytes = json.dumps(directory).encode()
+        chunks = [dir_bytes[i : i + MAX_PAYLOAD_PER_FRAME]
+                  for i in range(0, max(len(dir_bytes), 1), MAX_PAYLOAD_PER_FRAME)]
+        new_dir_frames = len(chunks)
+        if new_dir_frames == old_dir_frames:
+            break
+        shift = new_dir_frames - old_dir_frames
+        for e in directory["entries"]:
+            e["frames"][0] += shift
+            if "history" in e:
+                for h in e["history"]:
+                    h["frames"][0] += shift
+        old_dir_frames = new_dir_frames
+    dir_frames = [chunk_to_frame(c) for c in chunks]
+    write_frames(dir_frames + payload_frames, mkv_path)
 
 
 def add_entry(directory: dict, payload_frames: list, name: str, role: str,
@@ -217,7 +258,7 @@ def add_entry(directory: dict, payload_frames: list, name: str, role: str,
         raise ValueError(f"entry already exists: {name}")
     chunks = [payload[i : i + MAX_PAYLOAD_PER_FRAME]
               for i in range(0, max(len(payload), 1), MAX_PAYLOAD_PER_FRAME)]
-    start = 1 + len(payload_frames)  # frame 0 is the directory
+    start = directory.get("_dir_frames", 1) + len(payload_frames)
     payload_frames.extend(chunk_to_frame(c) for c in chunks)
     directory["entries"].append({
         "name": name,
@@ -260,7 +301,7 @@ def cmd_add(args):
     path = Path(args.container)
     directory, frames = load_container(path)
     
-    payload_frames = frames[1:]
+    payload_frames = frames[directory.get("_dir_frames", 1):]
     add_entry(directory, payload_frames, args.name, args.role, args.note or "", payload)
     save_container(directory, payload_frames, path)
     print(f"added {args.name}: {len(payload)} bytes in "
@@ -342,7 +383,7 @@ def cmd_write_frame(args):
     
     path = Path(args.container)
     directory, frames = load_container(path)
-    payload_frames = frames[1:]
+    payload_frames = frames[directory.get("_dir_frames", 1):]
     
     # Load PNG
     img = Image.open(args.frame)
@@ -355,7 +396,7 @@ def cmd_write_frame(args):
         sys.exit(f"frame must be {FRAME_SIZE}x{FRAME_SIZE}, got {frame_array.shape[0]}x{frame_array.shape[1]}")
     
     # Append frame
-    new_frame_id = 1 + len(payload_frames)
+    new_frame_id = directory.get("_dir_frames", 1) + len(payload_frames)
     payload_frames.append(frame_array)
     
     # Update directory if named entry
@@ -446,7 +487,7 @@ def cmd_patch(args):
     frames[frame_id] = frames[frame_id].copy()
     frames[frame_id][args.y:args.y + h, args.x:args.x + w] = payload_array
 
-    payload_frames = frames[1:]
+    payload_frames = frames[directory.get("_dir_frames", 1):]
     save_container(directory, payload_frames, path)
 
     print(f"patched frame {frame_id} at ({args.x},{args.y}) with {w}x{h} pixels from {args.payload}")
@@ -508,10 +549,10 @@ def cmd_update(args):
         sys.exit(f"no such entry: {args.name} (use add to create it)")
     payload = sys.stdin.buffer.read() if args.payload == "-" else Path(args.payload).read_bytes()
 
-    payload_frames = frames[1:]
+    payload_frames = frames[directory.get("_dir_frames", 1):]
     chunks = [payload[i : i + MAX_PAYLOAD_PER_FRAME]
               for i in range(0, max(len(payload), 1), MAX_PAYLOAD_PER_FRAME)]
-    start = 1 + len(payload_frames)
+    start = directory.get("_dir_frames", 1) + len(payload_frames)
     payload_frames.extend(chunk_to_frame(c) for c in chunks)
 
     entry.setdefault("history", []).append(
@@ -536,7 +577,9 @@ def cmd_list_frames(args):
     
     # Build frame -> entry mapping (Frame 0 is always the directory)
     frame_to_entry = {}
-    frame_to_entry[0] = {"name": "<directory>", "role": "directory", "frames": [0, 1]}
+    dir_frames = directory.get("_dir_frames", 1)
+    for i in range(dir_frames):
+        frame_to_entry[i] = {"name": "<directory>", "role": "directory", "frames": [0, dir_frames]}
     for e in directory["entries"]:
         start, count = e["frames"]
         for i in range(count):
