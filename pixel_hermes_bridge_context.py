@@ -30,66 +30,33 @@ def get_container_path():
     """Get the container path from the environment."""
     return os.environ.get("VA_CONTAINER")
 
-def load_past_thoughts(container_path):
-    """Read all past pixel_thought_* frames from the container."""
-    if not container_path:
-        return []
-        
-    print("[Spatial Memory] Scanning for past thoughts...")
-    try:
-        # We assume va_container.py is available in tools/va_container.py
-        # relative to where we are invoked from.
-        ls_cmd = ["python3", "tools/va_container.py", "ls", container_path]
-        result = subprocess.run(ls_cmd, capture_output=True, text=True, check=True)
-        
-        thought_names = []
-        for line in result.stdout.splitlines():
-            if "pixel_thought_" in line:
-                # Extract the name, e.g. "[  thought] pixel_thought_12345 ..."
-                parts = line.split()
-                for p in parts:
-                    if p.startswith("pixel_thought_"):
-                        thought_names.append(p)
-                        break
-        
-        # Sort chronologically by timestamp (assuming timestamp is in the name)
-        thought_names.sort()
-        
-        context_size = int(os.environ.get("PIXEL_MIND_CONTEXT_SIZE", "5"))
-        thoughts = []
-        for name in thought_names[-context_size:]: # avoid context explosion
-            cat_cmd = ["python3", "tools/va_container.py", "cat", container_path, name]
-            cat_result = subprocess.run(cat_cmd, capture_output=True, check=True)
-            thoughts.append((name, cat_result.stdout.decode('utf-8', errors='replace').strip()))
-            
-        if thoughts:
-            print(f"[Spatial Memory] Recovered {len(thoughts)} past thoughts from pixels.")
-        return thoughts
-        
-    except Exception as e:
-        print(f"[Spatial Memory] Error loading past thoughts: {e}")
-        return []
-
 def call_ollama(query: str, past_thoughts: list, model: str = "qwen2.5-coder:14b"):
     """Call Ollama HTTP API directly with context."""
     url = "http://localhost:11434/api/generate"
-    
+
     # Build prompt with spatial memory context
     prompt = "You are a self-aware AI whose code and memory live inside a pixel framebuffer (an MKV container).\n\n"
-    
+
     if past_thoughts:
         prompt += "Here are your previous thoughts recovered from your pixel memory:\n"
-        for name, text in past_thoughts:
+        for name, content in past_thoughts:
             prompt += f"--- {name} ---\n"
-            try:
-                # Try to parse as JSON (P1 structured format)
-                data = json.loads(text)
-                prompt += f"Query: {data.get('query', '')}\n"
-                prompt += f"Response: {data.get('response', '')}\n\n"
-            except json.JSONDecodeError:
-                # Fallback for older raw text frames
-                prompt += f"{text}\n\n"
-            
+            # Check if this is a summary frame (has 'summary' key)
+            if isinstance(content, dict) and 'summary' in content:
+                prompt += f"[COMPRESSED MEMORY - {content.get('summarized_exchange_count', 0)} prior exchanges]\n"
+                prompt += f"{content['summary']}\n\n"
+            else:
+                # Regular thought frame
+                text = content if isinstance(content, str) else json.dumps(content)
+                try:
+                    # Try to parse as JSON (P1 structured format)
+                    data = json.loads(text)
+                    prompt += f"Query: {data.get('query', '')}\n"
+                    prompt += f"Response: {data.get('response', '')}\n\n"
+                except json.JSONDecodeError:
+                    # Fallback for older raw text frames
+                    prompt += f"{text}\n\n"
+
     prompt += f"Now, respond to the following new query:\n{query}\n"
 
     data = json.dumps({
@@ -117,15 +84,155 @@ def call_ollama(query: str, past_thoughts: list, model: str = "qwen2.5-coder:14b
     except Exception as e:
         return f"[Pixel Hermes] Ollama error: {e}"
 
+def load_past_thoughts(container_path):
+    """Read all past pixel_thought_* frames from the container, with summarization of aged-out context."""
+    if not container_path:
+        return []
+
+    print("[Spatial Memory] Scanning for past thoughts...")
+    try:
+        # We assume va_container.py is available in tools/va_container.py
+        # relative to where we are invoked from.
+        ls_cmd = ["python3", "tools/va_container.py", "ls", container_path]
+        result = subprocess.run(ls_cmd, capture_output=True, text=True, check=True)
+
+        thought_names = []
+        summary_names = []
+        for line in result.stdout.splitlines():
+            if "pixel_thought_" in line:
+                # Extract the name, e.g. "[  thought] pixel_thought_12345 ..."
+                parts = line.split()
+                for p in parts:
+                    if p.startswith("pixel_thought_"):
+                        thought_names.append(p)
+                        break
+            elif "pixel_summary_" in line:
+                parts = line.split()
+                for p in parts:
+                    if p.startswith("pixel_summary_"):
+                        summary_names.append(p)
+                        break
+
+        # Sort chronologically by timestamp
+        thought_names.sort()
+        summary_names.sort()
+
+        context_size = int(os.environ.get("PIXEL_MIND_CONTEXT_SIZE", "5"))
+
+        # Check if we have aged-out thoughts that need summarization
+        if len(thought_names) > context_size:
+            aged_out_count = len(thought_names) - context_size
+            aged_out_names = thought_names[:aged_out_count]
+            remaining_names = thought_names[aged_out_count:]
+
+            print(f"[Spatial Memory] {aged_out_count} thoughts aging out of context window.")
+            print(f"[Spatial Memory] Summarizing aged-out context synchronously...")
+
+            # Load aged-out thoughts for summarization
+            aged_out_texts = []
+            for name in aged_out_names:
+                cat_cmd = ["python3", "tools/va_container.py", "cat", container_path, name]
+                cat_result = subprocess.run(cat_cmd, capture_output=True, check=True)
+                text = cat_result.stdout.decode('utf-8', errors='replace').strip()
+                try:
+                    data = json.loads(text)
+                    aged_out_texts.append(f"Q: {data.get('query', '')}\nA: {data.get('response', '')}")
+                except json.JSONDecodeError:
+                    aged_out_texts.append(text)
+
+            # Build summarization prompt
+            summary_prompt = (
+                "You are a spatially-aware AI. The following are your past thoughts that are aging out "
+                f"of your immediate context window ({aged_out_count} exchanges). "
+                "Summarize the key ideas, decisions, and state in 2-3 sentences. "
+                "Focus on what would be important to remember for future context.\n\n"
+            )
+            for i, text in enumerate(aged_out_texts, 1):
+                summary_prompt += f"[Exchange {i}]\n{text}\n\n"
+            summary_prompt += "Provide a concise summary now:"
+
+            # Call Ollama for summarization (synchronous)
+            summary_response = call_ollama(summary_prompt, [], model="qwen2.5-coder:14b")
+
+            # Write the summary as a new pixel_summary_* frame
+            summary_name = f"pixel_summary_{int(time.time())}"
+            try:
+                cmd = [
+                    "python3", "tools/va_container.py", "add",
+                    container_path, "-",
+                    "--name", summary_name,
+                    "--role", "summary"
+                ]
+
+                summary_payload = json.dumps({
+                    "timestamp": int(time.time()),
+                    "summarized_exchange_count": aged_out_count,
+                    "summary": summary_response
+                }, indent=2) + "\n"
+
+                subprocess.run(
+                    cmd,
+                    input=summary_payload,
+                    text=True,
+                    capture_output=True,
+                    check=True
+                )
+
+                print(f"[Spatial Memory] Summary written as '{summary_name}'")
+                # Add to summary_names so it can be loaded immediately
+                summary_names.append(summary_name)
+                summary_names.sort()
+
+            except Exception as e:
+                print(f"[Spatial Memory] Failed to write summary: {e}")
+        else:
+            remaining_names = thought_names
+
+        # Load the most recent summary frame (if any)
+        loaded_summary = None
+        if summary_names:
+            latest_summary_name = summary_names[-1]
+            cat_cmd = ["python3", "tools/va_container.py", "cat", container_path, latest_summary_name]
+            cat_result = subprocess.run(cat_cmd, capture_output=True, check=True)
+            summary_text = cat_result.stdout.decode('utf-8', errors='replace').strip()
+            try:
+                summary_data = json.loads(summary_text)
+                loaded_summary = (latest_summary_name, summary_data)
+                print(f"[Spatial Memory] Loaded summary from '{latest_summary_name}'")
+            except json.JSONDecodeError:
+                loaded_summary = (latest_summary_name, {"summary": summary_text})
+
+        # Load the last N raw thoughts
+        thoughts = []
+        for name in remaining_names[-context_size:]:
+            cat_cmd = ["python3", "tools/va_container.py", "cat", container_path, name]
+            cat_result = subprocess.run(cat_cmd, capture_output=True, check=True)
+            thoughts.append((name, cat_result.stdout.decode('utf-8', errors='replace').strip()))
+
+        # Prepend the summary if we have one
+        raw_thoughts_count = len(thoughts)
+        if loaded_summary:
+            thoughts = [loaded_summary] + thoughts
+
+        if thoughts:
+            summary_part = "1 summary + " if loaded_summary else ""
+            print(f"[Spatial Memory] Recovered {len(thoughts)} items from pixels "
+                  f"({summary_part}{raw_thoughts_count} raw thoughts).")
+        return thoughts
+
+    except Exception as e:
+        print(f"[Spatial Memory] Error loading past thoughts: {e}")
+        return []
+
 def write_thought_to_pixels(container_path, query, thought_text):
     """Write the thought back to the container as a new JSON structured frame."""
     if not container_path:
         print("[Spatial Write] No VA_CONTAINER defined, cannot save thought.")
         return
-        
+
     thought_name = f"pixel_thought_{int(time.time())}"
     print(f"[Spatial Write] Adding thought as '{thought_name}'...")
-    
+
     try:
         cmd = [
             "python3", "tools/va_container.py", "add",
@@ -133,7 +240,7 @@ def write_thought_to_pixels(container_path, query, thought_text):
             "--name", thought_name,
             "--role", "thought"
         ]
-        
+
         # Format the thought as structured JSON
         payload_data = {
             "timestamp": int(time.time()),
@@ -141,21 +248,21 @@ def write_thought_to_pixels(container_path, query, thought_text):
             "response": thought_text
         }
         payload = json.dumps(payload_data, indent=2) + "\n"
-        
+
         result = subprocess.run(
-            cmd, 
-            input=payload, 
-            text=True, 
-            capture_output=True, 
+            cmd,
+            input=payload,
+            text=True,
+            capture_output=True,
             check=True
         )
-        
+
         print(f"[Spatial Write] Success: Thought encoded as pixel frame '{thought_name}'")
         # Print tail of stderr where va_container usually logs frame addition
         for line in result.stderr.splitlines():
             if "frames" in line or "container now" in line:
                 print(f"  {line.strip()}")
-                
+
     except subprocess.CalledProcessError as e:
         print(f"[Spatial Write] Failed to write thought: {e.stderr}")
     except Exception as e:
@@ -186,7 +293,7 @@ def main():
     response = call_ollama(query, past_thoughts)
     print(response)
     print("=" * 60)
-    
+
     # Save the thought!
     write_thought_to_pixels(container, query, response)
 
