@@ -457,13 +457,14 @@ def cmd_patch(args):
 def cmd_run(args):
     """Execute a Python tool stored inside the container.
 
-    All bootstrap/tools-role entries are extracted (flattened by basename) into
-    a temp dir so embedded tools can import each other (e.g. dense_encoder).
+    All bootstrap/tools-role entries are extracted into a persistent cache dir,
+    preserving each entry's relative path (e.g. "tools/wordbase.py").
+    Files are only extracted if they have changed (via sha256 caching).
     The tool runs with cwd = the caller's cwd, so outputs land where you are,
     and VA_CONTAINER is set to the container's absolute path.
     """
     import os
-    import tempfile
+    import hashlib
 
     path = Path(args.container).resolve()
     directory, frames = load_container(path)
@@ -471,15 +472,29 @@ def cmd_run(args):
     if args.name not in names:
         sys.exit(f"no such entry: {args.name}")
 
-    with tempfile.TemporaryDirectory(prefix="va_run_") as tmp:
-        for e in directory["entries"]:
-            if e["role"] in ("bootstrap", "tools") or e["name"] == args.name:
-                dest = Path(tmp) / Path(e["name"]).name
+    # Use a persistent cache directory tied to the container's path
+    cache_dir = path.parent / ".va_run_cache" / hashlib.sha256(str(path).encode()).hexdigest()[:12]
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    
+    parent_dirs = {str(cache_dir)}
+    for e in directory["entries"]:
+        if e["role"] in ("bootstrap", "tools") or e["name"] == args.name:
+            dest = cache_dir / e["name"]
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            parent_dirs.add(str(dest.parent))
+            
+            # Cache check using a sidecar .sha256 file
+            dest_hash_file = dest.with_suffix(dest.suffix + ".sha256")
+            cached_hash = dest_hash_file.read_text() if dest_hash_file.exists() else ""
+            if cached_hash != e["sha256"] or not dest.exists():
                 dest.write_bytes(read_entry(directory, frames, e["name"]))
-        script = Path(tmp) / Path(args.name).name
-        env = dict(os.environ, VA_CONTAINER=str(path),
-                   PYTHONPATH=tmp + os.pathsep + os.environ.get("PYTHONPATH", ""))
-        result = subprocess.run([sys.executable, str(script)] + args.args, env=env)
+                dest_hash_file.write_text(e["sha256"])
+                
+    script = cache_dir / args.name
+    pythonpath = os.pathsep.join(parent_dirs)
+    env = dict(os.environ, VA_CONTAINER=str(path), VA_RUN_DIR=str(cache_dir),
+               PYTHONPATH=pythonpath + os.pathsep + os.environ.get("PYTHONPATH", ""))
+    result = subprocess.run([sys.executable, str(script)] + args.args, env=env)
     sys.exit(result.returncode)
 
 
