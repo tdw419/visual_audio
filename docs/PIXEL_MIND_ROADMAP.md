@@ -25,6 +25,19 @@ matters here specifically.
   recalled in a separate later invocation with no shared process state).
 - `db/wordbase.db` `spectrogram_cache`: 126,142/126,167 words have real,
   non-empty PNG spectrogram data (spot-checked, not placeholder-sized).
+- **Structured thought frames** (P1): `pixel_thought_*` frames now store
+  JSON with `timestamp`, `query`, `response` fields. Parseable for future
+  search/meta-cognition work.
+- **Rolling summarization** (P2): When thoughts exceed `PIXEL_MIND_CONTEXT_SIZE`,
+  oldest exchanges are compressed via synchronous Ollama call into
+  `pixel_summary_*` frames (structured JSON with `summarized_exchange_count`,
+  `summary`). Most recent summary is prepended to context alongside raw thoughts.
+- **Cached tool extraction** (P2): `cmd_run` extracts to persistent
+  `.va_run_cache/<container_hash>/` and skips disk writes for unchanged entries
+  (verified via sidecar `.sha256` files).
+- **Host Hermes routing** (P3): `~/.hermes/hermes-agent/run_agent.py` now parses
+  provider from `provider/model` format (e.g. `anthropic/claude-fable-5`) and
+  routes to correct API endpoint. Verified with real Anthropic API call.
 
 ## Known, measured limitations (not yet fixed)
 
@@ -34,27 +47,16 @@ matters here specifically.
    current sizes. Past that, every `add`/`update` raises `ValueError`. Every
    REPL turn writes one entry, so a long session hits this wall abruptly.
    See memory `va-container-directory-entry-ceiling`.
-2. **Context window is a flat recency cutoff.** `PIXEL_MIND_CONTEXT_SIZE`
-   (default 5, now configurable — was hardcoded before 2026-08-13) just takes
-   the last N thought frames. No relevance filtering, no summarization of
-   older thoughts, no way to keep an old but important fact in context once
-   it ages out.
-3. **Thought frames are unstructured text**, not queryable. `/cat N` in the
-   REPL is the only way to inspect them. No timestamps parsed back out
-   (only embedded in the frame name), no query/response separation, no way
-   to search past thoughts by topic.
-4. **Every `run` re-extracts all bootstrap/tools-role entries to a temp dir**,
-   even for a single-file script with no dependencies (`va_container.py`
-   `cmd_run`, line ~482). Fine at current tool-file counts; would slow down
-   linearly if the container accumulates many large tool entries.
-5. **No delete/prune.** The REPL's `/clear` command is a stub that prints a
+2. **No context relevance filtering.** `PIXEL_MIND_CONTEXT_SIZE` takes the
+   last N thought frames (default 5). Summarization preserves old context,
+   but retrieval is still recency-based, not similarity-based. No embeddings
+   or keyword search yet.
+3. **Thought frames are not directly queryable.** `/cat N` in the REPL is the
+   only way to inspect them. No search by topic, no filtering by timestamp
+   range, no aggregate queries (e.g. "show all thoughts mentioning 'color'").
+4. **No delete/prune.** The REPL's `/clear` command is a stub that prints a
    warning and refuses — VAC1 is append-only by design, so old thought frames
    can never be reclaimed short of rebuilding the container from scratch.
-6. **Host Hermes (`~/.hermes/hermes-agent/run_agent.py`) LLM routing is still
-   broken** (Z.AI 400 / Anthropic 404 on the model strings tried 2026-08-13).
-   Not blocking — the pixel bridge bypasses it by calling Ollama directly —
-   but anything that specifically needs the *real* Hermes agent (not just an
-   LLM call) is still blocked on this.
 
 ## Priority order
 
@@ -73,27 +75,30 @@ matters here specifically.
   rebuild required" instead of an unhandled traceback.
 
 ### P1 — Makes the memory system actually useful, not just working
-- **Structured thought frames.** Switch the write format from raw text to a
-  small JSON envelope (`timestamp`, `query`, `response`, maybe `model`).
-  Keeps `/cat` output readable (render the JSON nicely) but makes the data
-  actually parseable for anything built on top later (search, summarization,
-  meta-cognition). Low risk, mechanical change to `write_to_visual_container`.
-- **Context relevance instead of flat recency.** Once frames are structured,
+~~Structured thought frames.~~ **DONE (2026-08-13)** — frames now store JSON
+with `timestamp`, `query`, `response` fields.
+
+- **Context relevance instead of flat recency.** Now that frames are structured,
   a cheap first step is keyword/embedding similarity against the current
   query to pick which past thoughts to include, rather than always "last N."
-  Don't build this before structured frames — it needs queryable data first.
+  Summarization already preserves old context, but retrieval is still recency.
 
 ### P2 — Scale/quality, not urgent
-- Rolling summarization of old thought frames once they age out of the
-  context window, so old context isn't just silently dropped.
-- Skip re-extracting unchanged bootstrap/tools entries on `run` if nothing
-  has changed since the last extraction (cache by sha256, already stored per
-  entry in the directory).
+~~Rolling summarization of old thought frames~~ **DONE (2026-08-13)** — when
+thoughts age out, they're compressed via synchronous Ollama call into
+`pixel_summary_*` frames. Most recent summary is prepended to context.
+~~Skip re-extracting unchanged bootstrap/tools entries on `run`~~ **DONE
+(2026-08-13)** — `.va_run_cache/<container_hash>/` with sidecar `.sha256`
+files skips disk writes for unchanged entries.
+
+- **Multi-modal context retrieval.** If thoughts eventually include non-text
+  data (images, audio spectra), extend retrieval to match on multiple modalities
+  or generate text descriptions for similarity scoring.
 
 ### P3 — Separate track, not part of this memory system
-- Fix host Hermes model routing (`~/.hermes/.env`) if the actual Hermes
-  agent (tool-calling, MCP, etc.) is wanted rather than a bare Ollama call.
-  Independent of everything above.
+~~Fix host Hermes model routing~~ **DONE (2026-08-13)** —
+`~/.hermes/hermes-agent/run_agent.py` parses provider from `provider/model`
+format and routes to correct API endpoint.
 
 ## Explicitly out of scope / not recommended right now
 
