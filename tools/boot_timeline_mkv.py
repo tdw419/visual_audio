@@ -38,6 +38,66 @@ _hilbert_cache = {}
 
 
 # ============================================================================
+# VAC3 Layer Creation
+# ============================================================================
+
+def create_display_layer(width: int, height: int, milestone_name: str = "") -> bytes:
+    """Create Z=0 display layer with milestone text."""
+    pixels = np.zeros((height, width, 3), dtype=np.uint8)
+    pixels.fill(30)  # Dark background
+    
+    # Title bar
+    pixels[0:32, :] = [60, 60, 100]  # Dark blue header
+    
+    # Status indicator
+    pixels[8:24, 8:24] = [0, 255, 100]  # Green "running" dot
+    
+    # Add milestone name text (simplified pixel rendering)
+    if milestone_name:
+        # Draw milestone name in center
+        text_y = height // 2
+        for i, char in enumerate(milestone_name[:20]):
+            text_x = 100 + i * 12
+            if text_x < width - 20:
+                # Simple pixel for each char
+                pixels[text_y:text_y+8, text_x:text_x+8] = [200, 200, 255]
+    
+    # Timestamp indicator bar at bottom
+    pixels[height-8:, :] = [80, 80, 80]
+    
+    return pixels.tobytes()
+
+
+def create_diagnostics_layer(width: int, height: int, 
+                               error_state: str = "none") -> bytes:
+    """Create Z=2 diagnostics layer with error/failure markers."""
+    pixels = np.zeros((height, width, 3), dtype=np.uint8)
+    pixels.fill(20)  # Dark diagnostic background
+    
+    # Add grid pattern for diagnostics visualization
+    grid_spacing = 32
+    for y in range(0, height, grid_spacing):
+        pixels[y:y+1, :] = [40, 40, 40]
+    for x in range(0, width, grid_spacing):
+        pixels[:, x:x+1] = [40, 40, 40]
+    
+    # Error state markers
+    if error_state == "timeout":
+        # Red X pattern
+        pixels[height//2-20:height//2+20, width//2-2:width//2+2] = [255, 0, 0]
+        pixels[height//2-2:height//2+2, width//2-20:width//2+20] = [255, 0, 0]
+    elif error_state == "hang":
+        # Orange warning bars
+        pixels[0:5, :] = [255, 165, 0]
+        pixels[height-5:, :] = [255, 165, 0]
+    elif error_state == "panic":
+        # Full red overlay
+        pixels.fill([255, 0, 0])
+    
+    return pixels.tobytes()
+
+
+# ============================================================================
 # Milestone Detection
 # ============================================================================
 
@@ -345,7 +405,8 @@ async def capture_boot_timeline(
     pixel_width: int = 256,
     pixel_height: int = 256,
     boot_timeout: float = 60.0,
-    use_tiling: bool = False
+    use_tiling: bool = False,
+    use_vac3: bool = False
 ) -> Tuple[str, List[Milestone]]:
     """
     Capture boot process as milestone-based MKV video.
@@ -359,6 +420,7 @@ async def capture_boot_timeline(
         pixel_height: Height of pixel grid
         boot_timeout: Maximum time to wait for boot completion
         use_tiling: If True, tile entire RAM across multiple frames per capture
+        use_vac3: If True, output VAC3 3-layer format (Z=0 display, Z=1 RAM, Z=2 diagnostics)
     
     Returns:
         (mkv_path, milestones_list)
@@ -491,6 +553,11 @@ async def capture_boot_timeline(
                     ram_data = f.read()
                 
                 # Map to pixel grid (tiling or single frame)
+                milestone_name = f"frame_{frame_index}"
+                if use_vac3 and detector.detected_milestones:
+                    # Use most recent milestone name
+                    milestone_name = detector.detected_milestones[-1].name
+                
                 if use_tiling:
                     tile_frames_bytes, num_tiles = map_full_ram_to_tiles(
                         ram_data, pixel_width, pixel_height
@@ -499,8 +566,8 @@ async def capture_boot_timeline(
                           f"→ {num_tiles} tiles ({len(ram_data) / (1024*1024):.1f} MB)")
                     
                     # Compute deltas per tile
+                    unchanged_tiles = 0
                     if last_frame_data is not None and len(last_frame_data) == num_tiles:
-                        unchanged_tiles = 0
                         for tile_idx in range(num_tiles):
                             current_tile = np.frombuffer(tile_frames_bytes[tile_idx], dtype=np.uint8)
                             prev_tile = np.frombuffer(last_frame_data[tile_idx], dtype=np.uint8)
@@ -518,9 +585,27 @@ async def capture_boot_timeline(
                         # First capture or RAM size changed
                         pass
                     
-                    # Store all tiles for this frame
-                    for tile_bytes in tile_frames_bytes:
-                        frames_data.append(tile_bytes)
+                    # VAC3: Wrap tiles in Z-layers
+                    if use_vac3:
+                        # Z=0: Display layer with milestone name
+                        z0_display = create_display_layer(pixel_width, pixel_height, milestone_name)
+                        
+                        # Z=2: Diagnostics layer (check for errors)
+                        error_state = "none"
+                        if unchanged_tiles == num_tiles and frame_index > 0:
+                            error_state = "hang"
+                        elif time.time() - start_time > boot_timeout * 0.9:
+                            error_state = "timeout"
+                        z2_diagnostics = create_diagnostics_layer(pixel_width, pixel_height, error_state)
+                        
+                        # Bundle: Z=0 + Z=1 (all tiles) + Z=2
+                        vac3_bundle = [z0_display] + tile_frames_bytes + [z2_diagnostics]
+                        frames_data.append(b''.join(vac3_bundle))
+                        print(f"  VAC3 bundle: Z=0 ({len(z0_display)}B) + Z=1 ({len(b''.join(tile_frames_bytes))}B, {num_tiles} tiles) + Z=2 ({len(z2_diagnostics)}B)")
+                    else:
+                        # Legacy mode: just store tiles
+                        for tile_bytes in tile_frames_bytes:
+                            frames_data.append(tile_bytes)
                     
                     last_frame_data = tile_frames_bytes.copy()
                 else:
@@ -539,8 +624,30 @@ async def capture_boot_timeline(
                     else:
                         delta_pixels = pixels
                     
-                    # Store frame (use delta for compression)
-                    frames_data.append(delta_pixels.tobytes())
+                    # VAC3: Wrap single frame in Z-layers
+                    if use_vac3:
+                        # Z=0: Display layer
+                        z0_display = create_display_layer(pixel_width, pixel_height, milestone_name)
+                        
+                        # Z=1: RAM data
+                        z1_ram = delta_pixels.tobytes()
+                        
+                        # Z=2: Diagnostics layer
+                        error_state = "none"
+                        if not np.any(delta_pixels) and frame_index > 0:
+                            error_state = "hang"
+                        elif time.time() - start_time > boot_timeout * 0.9:
+                            error_state = "timeout"
+                        z2_diagnostics = create_diagnostics_layer(pixel_width, pixel_height, error_state)
+                        
+                        # Bundle: Z=0 + Z=1 + Z=2
+                        vac3_bundle = z0_display + z1_ram + z2_diagnostics
+                        frames_data.append(vac3_bundle)
+                        print(f"  VAC3 bundle: Z=0 ({len(z0_display)}B) + Z=1 ({len(z1_ram)}B) + Z=2 ({len(z2_diagnostics)}B)")
+                    else:
+                        # Legacy mode: just store frame
+                        frames_data.append(delta_pixels.tobytes())
+                    
                     last_frame_data = [pixels.tobytes()]
                     
                     print(f"Frame {frame_index}: captured {dump_size} bytes RAM, "
@@ -608,9 +715,16 @@ async def capture_boot_timeline(
         "qemu_cmd": " ".join(qemu_cmd),
         "capture_delay": capture_delay,
         "use_tiling": use_tiling,
+        "use_vac3": use_vac3,
     }
     if use_tiling:
         metadata["tiles_per_capture"] = (last_frame_data and len(last_frame_data)) or 0
+    if use_vac3:
+        metadata["vac3_layers"] = [
+            {"z_index": 0, "name": "display", "description": "Human-readable UI with milestone text"},
+            {"z_index": 1, "name": "ram_substrate", "description": "Hilbert-mapped RAM execution substrate"},
+            {"z_index": 2, "name": "diagnostics", "description": "Error/failure state markers"}
+        ]
     
     # Encode MKV
     mkv_path, manifest = encode_mkv(
@@ -681,6 +795,11 @@ def main():
         help="Enable full-RAM tiling (capture entire RAM across multiple frames)"
     )
     parser.add_argument(
+        "--vac3",
+        action="store_true",
+        help="Enable VAC3 3-layer format (Z=0 display, Z=1 RAM, Z=2 diagnostics)"
+    )
+    parser.add_argument(
         "-h", "--help",
         action="store_true",
         help="Show help message"
@@ -710,7 +829,8 @@ def main():
         pixel_width=args.pixel_width,
         pixel_height=args.pixel_height,
         boot_timeout=args.timeout,
-        use_tiling=args.tiling
+        use_tiling=args.tiling,
+        use_vac3=args.vac3
     ))
     
     print(f"\n✓ Boot timeline captured to: {mkv_path}")
