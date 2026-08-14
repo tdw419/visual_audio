@@ -47,6 +47,12 @@ matters here specifically.
   with a direct unit test proving it actually reorders by relevance, not just
   recency (real production data is currently too small to exercise this path
   in practice).
+- **Topic search** (`/search` in `tools/pixel_mind_repl.py`): ranks all
+  thought/summary frames by keyword overlap with a search term. Also fixed a
+  real crash along the way — reading the known-corrupted legacy frame
+  (`pixel_thought_1786619391`, see "Known permanent damage" below) via
+  `subprocess.run(..., text=True)` raised an uncaught `UnicodeDecodeError`;
+  switched to manual `decode(errors='replace')`.
 
 ## Known, measured limitations (not yet fixed)
 
@@ -59,9 +65,10 @@ matters here specifically.
 2. ~~No context relevance filtering.~~ **DONE (2026-08-13)** — see
    `select_context()` below. Still no embeddings, just keyword overlap; fine
    for now given the small real corpus.
-3. **Thought frames are not directly queryable.** `/cat N` in the REPL is the
-   only way to inspect them. No search by topic, no filtering by timestamp
-   range, no aggregate queries (e.g. "show all thoughts mentioning 'color'").
+3. ~~Thought frames are not directly queryable.~~ **DONE (2026-08-13)** —
+   `/search <keywords>` in the REPL ranks all `pixel_thought_*`/
+   `pixel_summary_*` frames by keyword overlap. Still no timestamp-range
+   filtering or aggregate queries, just topic search.
 4. **No delete/prune.** The REPL's `/clear` command is a stub that prints a
    warning and refuses — VAC1 is append-only by design, so old thought frames
    can never be reclaimed short of rebuilding the container from scratch.
