@@ -229,6 +229,7 @@ def run_cycle(dry_run: bool = False) -> bool:
 
     branch = f"pixel-self-improve/{int(time.time())}"
     wt_dir = make_worktree(branch)
+    committed = False
     try:
         log(f"verifying claimed gap in isolated worktree ({wt_dir})...")
         rc, output = run_verify_check(wt_dir, proposal["verify_check"])
@@ -304,13 +305,22 @@ def run_cycle(dry_run: bool = False) -> bool:
         write_thought("cycle_succeeded_pending_review", {
             "proposal": proposal, "branch": branch,
         })
+        committed = True
         return True
 
     finally:
-        if not dry_run:
+        # Only a real, committed change is worth keeping around for human
+        # review. Every other exit path (rejected proposal, gap already
+        # done, fake/failed implementation, failed commit) leaves nothing
+        # to review, so its worktree+branch must be cleaned up immediately
+        # - otherwise an unattended cron loop leaks a worktree and branch
+        # on every single rejected cycle, forever.
+        if committed:
             log(f"worktree left at {wt_dir} on branch {branch} for review (not auto-removed on success)")
         else:
             remove_worktree(wt_dir)
+            subprocess.run(["git", "branch", "-D", branch], cwd=REPO, capture_output=True, text=True)
+            log(f"cleaned up worktree and branch {branch} (cycle did not succeed)")
 
 
 def main():
