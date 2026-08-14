@@ -324,7 +324,7 @@ def execute_build(container: Container, my_x: int, my_y: int, build_params: Dict
     if state is not None:
         faction = faction_tracker.faction_at(state, my_x, my_y)
         if faction is not None:
-            faction_tracker.record_claim(state, faction, target_name)
+            faction_tracker.record_claim(state, faction, target_name, container)
             faction_tracker.clear_active_cascade(state, faction, target_x, target_y)
             faction_tracker.save_factions(container, state)
 

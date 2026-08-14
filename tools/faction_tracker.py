@@ -26,6 +26,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from visual_audio_container import Container
 
 FACTION_STATE_ENTRY = "faction_state"
+GAME_STATE_ENTRY = "game_state"
+MAP_SIZE = 256  # per visual_audio.map.json: grid_side=256, capacity=65536
+MAP_CAPACITY = MAP_SIZE * MAP_SIZE  # 65,536 tiles
+VICTORY_THRESHOLD = 0.51  # 51% of map controls the game
+VICTORY_TILES = int(MAP_CAPACITY * VICTORY_THRESHOLD)  # 33,424
+
 DEFAULT_STEP = 4
 DEFAULT_CLAIM_RADIUS = 1
 
@@ -205,9 +211,53 @@ def move_attention(state: Dict, faction: str, target_x: int, target_y: int,
     }
 
 
-def record_claim(state: Dict, faction: str, structure_name: str) -> None:
+def record_claim(state: Dict, faction: str, structure_name: str, container=None) -> None:
     state["factions"][faction]["structures"].append(structure_name)
     state["claims"] += 1
+    
+    # Check victory condition if container provided
+    if container is not None:
+        _check_victory(state, container)
+
+
+def _check_victory(state: Dict, container) -> None:
+    """Check if any faction controls 51% of the map.
+    
+    Writes game_state entry on victory, persisting the winner.
+    No-op if game already ended.
+    """
+    # Skip if game already ended
+    try:
+        game_state = container.read_json(GAME_STATE_ENTRY)
+        if game_state.get("winner"):
+            return
+    except KeyError:
+        pass  # No game state yet, continue checking
+    
+    # Check each faction's coverage
+    for faction, f_data in state["factions"].items():
+        structures = len(f_data["structures"])
+        if structures >= VICTORY_TILES:
+            # Victory! Write game state
+            game_state = {
+                "winner": faction,
+                "coverage": structures / MAP_CAPACITY,
+                "structures_claimed": structures,
+                "total_tiles": MAP_CAPACITY,
+                "timestamp": time.time(),
+            }
+            payload = json.dumps(game_state, indent=2).encode()
+            try:
+                container.add(GAME_STATE_ENTRY, payload, role="game",
+                             note=f"Victory: {faction} controls {game_state['coverage']:.1%} of map")
+            except KeyError:
+                # Game state already exists (race condition), update instead
+                container.update(GAME_STATE_ENTRY, payload)
+            print(f"\n{'='*60}")
+            print(f"  VICTORY: {faction.upper()} WINS!")
+            print(f"  Controls {structures:,} / {MAP_CAPACITY:,} tiles ({game_state['coverage']:.1%})")
+            print(f"{'='*60}\n")
+            return
 
 
 def territory_report(state: Dict) -> Dict[str, int]:
