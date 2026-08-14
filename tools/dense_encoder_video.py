@@ -31,6 +31,8 @@ from typing import List, Tuple, Optional
 import numpy as np
 from PIL import Image
 
+import sys
+import os
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src'))
 
 from dense_encoder import frame, unframe, bytes_to_pixels, pixels_to_bytes
