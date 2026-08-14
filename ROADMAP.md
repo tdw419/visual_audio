@@ -5,21 +5,21 @@
 Visual Audio enables software to exist as text, audio, or pixels. The foundation (Phase 0) is complete and working. This roadmap guides evolution toward production-grade systems: error correction, coarticulation, prosody, full Geometry OS integration, and advanced video-based state management.
 
 ### Current Status (2026-08-12)
-|| **Progress**: 99/105 tasks complete (94.3%) — reconciled 2026-08-12 by counting every `[x]`/`[ ]` **TASK_...** checkbox in this document directly (previous "80/120" figure did not match an actual count of either complete or total tasks). Remaining unstarted: TASK_I005, TASK_I006 (low priority, interactive), TASK_R013-R016 (previously mismarked "CONTAINER IMPLEMENTATION COMPLETE" with fabricated receipts — corrected and reset to NOT STARTED, see Phase 6). Phase 12 (Single-File Container) ✅ COMPLETE, Phase 13 (Container Self-Awareness) ✅ COMPLETE, TASK_SE011 ✅ COMPLETE (Reed-Solomon ECC for spatial ISA), **TASK_VCC001 ✅ COMPLETE (VCC Engine v2 comprehensive validation)**
-||- **Critical Path**: none blocking — TASK_S001 and TASK_E001-002 are complete (corrected 2026-08-12, this line was stale). All that remains unstarted is TASK_I005, TASK_I006 (Phase 9, interactive — low priority) and TASK_R013-R016 (Phase 6, previously mismarked complete with fabricated receipts — see Progress line above).
-||- **Recent Wins**: **TASK_R020 (FFV1.3 codec parameter optimization)**, **TASK_VCC001 (VCC Engine v2 — comprehensive VCC validation with 100% Hilbert coverage, 67x improvement over v1 sampling)**, Phase 13 COMPLETE (A004-A006: Ollama security analyzer + progress tracker + integration docs, 81 new tests passing), TASK_T005 (pixel OS LM output channel — tools/pixel_os_output.py + 8-test suite), TASK_VAC001-007 (complete container system), TASK_R017 (container security 7/7 pass), TASK_W002 (pytest decision resolved), TASK_M004-M005 (pixel LM), TASK_C038 (native pixel boot), Phase 13 task redesign (8 generic → 6 concrete Ollama-integrated tasks), **TASK_SE007 (Spatial Glyph Emulator — 2D spatial ISA)**, **TASK_SE008 (Turing-complete ISA — 20 opcodes, 3-instruction control flow loop verified)**, **TASK_SE009 (GPU-native execution — WGSL compute shader)**, **TASK_SE010 (Hypervisor syscalls — SYSCALL opcode, 7/7 tests pass)**, **TASK_SE011 (Reed-Solomon ECC — RS(100,120) with 30% overhead, 21/21 tests pass)**
-|- **BREAKTHROUGH 2026-07-19**: WGSL GPU-native glyph execution COMPLETE — fetch-decode-execute loop with opcode decoding, CPU state (8 registers, 1KB memory), spatial jumps (JMP, JZ), output buffer. GPU and Python emulators produce identical output. **TASK_SE009 COMPLETE**
-|- **BREAKTHROUGH 2026-07-19**: Autonomous evolution loop closed — Geometry OS observes itself (VLM Spatial Observer), reasons about state, modifies code (Spatial Compiler), end-to-end demo verified — **TASK_SE014 COMPLETED**
-|- **Key Metrics**: Phoneme throughput ~7.6 words/sec (target ≥8.0), Byte throughput ~24 bytes/sec (target ≥25), Pixel density ~2.5 bytes/pixel (VAMP target ~3), Container 35 frames 1.1 MB 6 new analysis entries added, **Spatial CPU: 10 opcodes, 8 registers, 1KB memory, 2D PC, Python emulator working, WGSL GPU-native fetch-decode-execute loop COMPLETE (GPU ↔ Python verified)**
-|- **New Milestone**: visual_audio.mkv (35 frames, 1.1 MB) — fully self-hosting with embedded tools (ollama_prompt.py, dense_encoder.py, frame tools), run+update commands, security tests passing; Phase 13 tasks (TASK_A001-A006) designed for 1-3 day implementation; **NEW: visual_audio.mkv is executable ROM + autonomous evolution capable**
+ **Progress**: 99/105 tasks complete (94.3%) — reconciled 2026-08-12 by counting every `[x]`/`[ ]` **TASK_...** checkbox in this document directly (previous "80/120" figure did not match an actual count of either complete or total tasks). Remaining unstarted: TASK_I005, TASK_I006 (low priority, interactive), TASK_R013-R016 (previously mismarked "CONTAINER IMPLEMENTATION COMPLETE" with fabricated receipts — corrected and reset to NOT STARTED, see Phase 6). Phase 12 (Single-File Container) ✅ COMPLETE, Phase 13 (Container Self-Awareness) ✅ COMPLETE, TASK_SE011 ✅ COMPLETE (Reed-Solomon ECC for spatial ISA), **TASK_VCC001 ✅ COMPLETE (VCC Engine v2 comprehensive validation)**
+- **Critical Path**: none blocking — TASK_S001 and TASK_E001-002 are complete (corrected 2026-08-12, this line was stale). All that remains unstarted is TASK_I005, TASK_I006 (Phase 9, interactive — low priority) and TASK_R013-R016 (Phase 6, previously mismarked complete with fabricated receipts — see Progress line above).
+- **Recent Wins**: **TASK_R020 (FFV1.3 codec parameter optimization)**, **TASK_VCC001 (VCC Engine v2 — comprehensive VCC validation with 100% Hilbert coverage, 67x improvement over v1 sampling)**, Phase 13 COMPLETE (A004-A006: Ollama security analyzer + progress tracker + integration docs, 81 new tests passing), TASK_T005 (pixel OS LM output channel — tools/pixel_os_output.py + 8-test suite), TASK_VAC001-007 (complete container system), TASK_R017 (container security 7/7 pass), TASK_W002 (pytest decision resolved), TASK_M004-M005 (pixel LM), TASK_C038 (native pixel boot), Phase 13 task redesign (8 generic → 6 concrete Ollama-integrated tasks), **TASK_SE007 (Spatial Glyph Emulator — 2D spatial ISA)**, **TASK_SE008 (Turing-complete ISA — 20 opcodes, 3-instruction control flow loop verified)**, **TASK_SE009 (GPU-native execution — WGSL compute shader)**, **TASK_SE010 (Hypervisor syscalls — SYSCALL opcode, 7/7 tests pass)**, **TASK_SE011 (Reed-Solomon ECC — RS(100,120) with 30% overhead, 21/21 tests pass)**
+- **BREAKTHROUGH 2026-07-19**: WGSL GPU-native glyph execution COMPLETE — fetch-decode-execute loop with opcode decoding, CPU state (8 registers, 1KB memory), spatial jumps (JMP, JZ), output buffer. GPU and Python emulators produce identical output. **TASK_SE009 COMPLETE**
+- **BREAKTHROUGH 2026-07-19**: Autonomous evolution loop closed — Geometry OS observes itself (VLM Spatial Observer), reasons about state, modifies code (Spatial Compiler), end-to-end demo verified — **TASK_SE014 COMPLETED**
+- **Key Metrics**: Phoneme throughput ~7.6 words/sec (target ≥8.0), Byte throughput ~24 bytes/sec (target ≥25), Pixel density ~2.5 bytes/pixel (VAMP target ~3), Container 35 frames 1.1 MB 6 new analysis entries added, **Spatial CPU: 10 opcodes, 8 registers, 1KB memory, 2D PC, Python emulator working, WGSL GPU-native fetch-decode-execute loop COMPLETE (GPU ↔ Python verified)**
+- **New Milestone**: visual_audio.mkv (35 frames, 1.1 MB) — fully self-hosting with embedded tools (ollama_prompt.py, dense_encoder.py, frame tools), run+update commands, security tests passing; Phase 13 tasks (TASK_A001-A006) designed for 1-3 day implementation; **NEW: visual_audio.mkv is executable ROM + autonomous evolution capable**
 
 ### Research Integration (New Directions)
-|- **Video Architecture (CONTAINER IMPLEMENTED)**: Procedural generation from seed pixels, multi-frame state management, infinite maps via noise algorithms
-|- **Nested Frame Buffers (CONTAINER IMPLEMENTED)**: Photoshop-like temporal layering for AI systems with spatial and temporal composition
-|- **Video-in-Video (CONTAINER IMPLEMENTED)**: Media playback integrated into pixel-native OS with dual time vectors (system time vs media time)
-|- **Security & Codec Research (NEW)**: Container sandboxing (PixelSmash mitigation), fountain codes for lossy channels, DCT steganography, FFV1.3 codec tuning
-|- **Container-Based Development**: All development work now happens inside visual_audio.mkv with `run` + `update` commands for self-hosting workflow
-|- **Autonomous Evolution (NEW)**: Geometry OS observes itself (VLM), reasons about state, modifies code (Spatial Compiler), end-to-end loop verified — VLM coordinate extraction, WGSL patch application, VRAM self-modification
+- **Video Architecture (CONTAINER IMPLEMENTED)**: Procedural generation from seed pixels, multi-frame state management, infinite maps via noise algorithms
+- **Nested Frame Buffers (CONTAINER IMPLEMENTED)**: Photoshop-like temporal layering for AI systems with spatial and temporal composition
+- **Video-in-Video (CONTAINER IMPLEMENTED)**: Media playback integrated into pixel-native OS with dual time vectors (system time vs media time)
+- **Security & Codec Research (NEW)**: Container sandboxing (PixelSmash mitigation), fountain codes for lossy channels, DCT steganography, FFV1.3 codec tuning
+- **Container-Based Development**: All development work now happens inside visual_audio.mkv with `run` + `update` commands for self-hosting workflow
+- **Autonomous Evolution (NEW)**: Geometry OS observes itself (VLM), reasons about state, modifies code (Spatial Compiler), end-to-end loop verified — VLM coordinate extraction, WGSL patch application, VRAM self-modification
 
 ### Immediate Focus (Priority Order)
 1. ✅ TASK_T001-T004: Test creation COMPLETE → VAMP verification DONE (all tests passing)
@@ -610,28 +610,28 @@ implemented and are split into TASK_C035 / TASK_C036 rather than claimed under C
   - Dependencies: TASK_P001
   - Receipt: Multi-voice polyphonic speech (chords, counterpoint)
   - Test: python3 tests/test_parallel_synthesis.py
-|- [x] **TASK_R012**: GlyphLang integration ✅ COMPLETE
+- [x] **TASK_R012**: GlyphLang integration ✅ COMPLETE
   - Priority: LOW
   - Dependencies: TASK_R002
   - Receipt: Compile directly to spatial opcodes
   - Test: python3 tests/test_glyphlang_integration.py (7/7 pass)
   - Status: speak_glyph.py encodes .glyph → signed dual-band audio → pixel_os_listener decodes/verifies → GlyphCPU executes → output verified
-|- [ ] **TASK_R013**: Procedural generation using seed pixels — NOT STARTED
+- [ ] **TASK_R013**: Procedural generation using seed pixels — NOT STARTED
   - Priority: MEDIUM
   - Dependencies: TASK_R006, TASK_R007
   - Correction (2026-08-12): previously marked "CONTAINER IMPLEMENTATION COMPLETE" with a detailed receipt (world_core frame 21, Perlin/Simplex noise seed, biome palette matrix, `generate-world` CLI). Verified against the real container and code: `va_container.py ls visual_audio.mkv` has no `world_core` entry, and `va_container.py` has no `generate-world` subcommand. None of it exists. Reset to NOT STARTED.
   - Goal (unbuilt): derive a noise seed from a small pixel block and generate a coherent, deterministic infinite coordinate plane from it, with a terrain/biome lookup.
-|- [ ] **TASK_R014**: Multi-frame state management — NOT STARTED
+- [ ] **TASK_R014**: Multi-frame state management — NOT STARTED
   - Priority: HIGH
   - Dependencies: TASK_R006, TASK_R008
   - Correction (2026-08-12): previously marked "CONTAINER IMPLEMENTATION COMPLETE" citing frames 5-9 (timeline/diff_overlay/execution_history) in visual_audio.mkv. Verified: the container has 11 entries, none of them these. tools/create_state_frame.py and tools/create_diff_overlay.py do exist on disk but are ~80-line scripts that each write one static pixel-register layout — no chunk-modification tracking, no temporal logging, no stress test, and neither is embedded in the container. Reset to NOT STARTED.
   - Goal (unbuilt): a real multi-frame state/diff system with seekable history, built from (or replacing) the existing skeleton scripts.
-|- [ ] **TASK_R015**: Nested frame buffers — NOT STARTED
+- [ ] **TASK_R015**: Nested frame buffers — NOT STARTED
   - Priority: MEDIUM
   - Dependencies: TASK_R007, TASK_R009
   - Correction (2026-08-12): previously marked "CONTAINER IMPLEMENTATION COMPLETE" describing a 3-layer compositor (system memory / nested frame buffer / UI overlay) with Photoshop-style blending. No such compositor exists anywhere in the codebase. Reset to NOT STARTED.
   - Goal (unbuilt): layered frame composition with per-layer read/blend, so AI vision can be scoped to one layer's coordinates.
-|- [ ] **TASK_R016**: Video-in-video architecture — NOT STARTED
+- [ ] **TASK_R016**: Video-in-video architecture — NOT STARTED
   - Priority: HIGH
   - Dependencies: TASK_R008, TASK_R010
   - Correction (2026-08-12): previously marked "CONTAINER IMPLEMENTATION COMPLETE" describing dual time vectors and a nested video playback zone (frame 50). tools/create_timeline_frame.py exists but only writes a static frame-allocation layout — no video decode, no playback loop, no dual time vector, and it isn't in the container. Reset to NOT STARTED.
@@ -855,11 +855,11 @@ Phase 0 (DONE) → Phase 1 (ECC + air-gap) → Phase 3 (Dual-Band) → Phase 8 (
 ## Milestones
 
 ### M1: Robust Transmission (Q1 2026)
-|- Phase 1 complete
-|- All codecs survive 10% transmission errors
-|- ECC unit tests passing
-|- [x] TASK_E002 (Dense ECC) complete
-|- [x] TASK_S001 (Spectral fix) complete - see line 216
+- Phase 1 complete
+- All codecs survive 10% transmission errors
+- ECC unit tests passing
+- [x] TASK_E002 (Dense ECC) complete
+- [x] TASK_S001 (Spectral fix) complete - see line 216
 
 ### M2: Natural Speech (Q2 2026)
 - Phase 2 complete
@@ -1495,13 +1495,13 @@ Do NOT use H.264/MP4 CRF 0 for pixel-exact storage — chroma subsampling corrup
 
 ### Performance Targets
 
-|| Metric | Target |
-||--------|--------|
-|| Seed encode/decode | <1ms (8×8 RGBA → 64-bit integer) |
-|| Procedural terrain gen | <10ms per 16×16 chunk |
-|| Diff overlay lookup | O(1) per coordinate (hash map) |
-|| Temporal seek | <100ms to restore N-tick-old state |
-|| Nested frame blit | <16ms (60 FPS for display zone) |
+| Metric | Target |
+|--------|--------|
+| Seed encode/decode | <1ms (8×8 RGBA → 64-bit integer) |
+| Procedural terrain gen | <10ms per 16×16 chunk |
+| Diff overlay lookup | O(1) per coordinate (hash map) |
+| Temporal seek | <100ms to restore N-tick-old state |
+| Nested frame blit | <16ms (60 FPS for display zone) |
 
 ---
 
