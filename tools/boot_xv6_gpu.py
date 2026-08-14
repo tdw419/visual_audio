@@ -249,7 +249,7 @@ def get_next_autonomous_command(recent_output, model):
 
 def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False,
                     autonomous_turns: int = 20, autonomous_model: str = 'qwen2.5-coder:14b',
-                    trace_file: Optional[str] = None, trace_max: int = 2000,
+                    trace_file: Optional[str] = None, trace_mkv: Optional[str] = None, trace_max: int = 2000,
                     init_state: Optional[str] = None, stall_threshold: int = 100):
     """Main boot sequence.
 
@@ -578,6 +578,7 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
     iteration = 0
     autonomous_turns_used = 0
     trace_out = None
+    trace_mkv_frames = []
 
     # Initialize trace output file if requested
     if trace_file:
@@ -634,6 +635,12 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
                 regs_dict['mcause'] = int((int(cpu_readback[0]['mcause'][1]) << 32) | int(cpu_readback[0]['mcause'][0]))
                 trace_out.write(json.dumps({'pc': pc, 'instr_count': int(instr_count), 'regs': regs_dict}, 
                                       default=lambda o: int(o) if hasattr(o, 'dtype') else str(o)) + '\n')
+            
+            # Save MKV trace frame
+            if trace_mkv is not None and len(trace_mkv_frames) < trace_max:
+                # 528 bytes cpu state padded to 582 bytes (14x14x3 - 6 bytes overhead)
+                padded = cpu_readback_bytes + b'\x00' * (582 - len(cpu_readback_bytes))
+                trace_mkv_frames.append(padded)
 
             # Progress indicator (less frequent to not spam)
             if iteration % 1 == 0 or running == 0:
@@ -796,6 +803,16 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
     finally:
         if trace_out is not None:
             trace_out.close()
+            
+        if trace_mkv is not None and len(trace_mkv_frames) > 0:
+            print(f"\n[!] Encoding {len(trace_mkv_frames)} frames to MKV trace: {trace_mkv}")
+            try:
+                from dense_encoder_video import encode_mkv
+                payload = b''.join(trace_mkv_frames)
+                encode_mkv(payload, trace_mkv, frame_size=14)
+                print(f"    MKV trace saved.")
+            except Exception as e:
+                print(f"    Failed to save MKV trace: {e}")
             print(f"  Trace closed ({iteration} entries written)")
 
     # Read output (UART console)
@@ -857,6 +874,8 @@ if __name__ == '__main__':
                         help='Ollama model tag for autonomous mode (default: qwen2.5-coder:14b)')
     parser.add_argument('--trace', metavar='FILE',
                         help='Capture per-instruction CPU state trace to FILE (JSONL format)')
+    parser.add_argument('--trace-mkv', metavar='FILE',
+                        help='Capture CPU state as a video trace to FILE (MKV format)')
     parser.add_argument('--trace-max', type=int, default=2000,
                         help='Max instructions to capture when tracing (default: 2000)')
     parser.add_argument('--init-state', metavar='JSON',
@@ -872,5 +891,5 @@ if __name__ == '__main__':
 
     boot_xv6_on_gpu(args.kernel, args.command, args.autonomous,
                     args.autonomous_turns, args.autonomous_model,
-                    args.trace, args.trace_max, args.init_state,
+                    args.trace, args.trace_mkv, args.trace_max, args.init_state,
                     args.stall_threshold)
