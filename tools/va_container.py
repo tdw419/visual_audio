@@ -33,6 +33,8 @@ Commands:
 """
 
 import argparse
+import contextlib
+import fcntl
 import hashlib
 import json
 import struct
@@ -169,6 +171,26 @@ def read_frame_range(mkv_path: Path, start: int, count: int) -> list:
     ]
 
 
+@contextlib.contextmanager
+def container_lock(mkv_path: Path):
+    """Exclusive lock over the whole load-modify-save cycle for one container.
+
+    Concurrent writers (multiple agents) racing load_container()..save_container()
+    would otherwise silently lose one side's update -- the second save always wins
+    and neither error nor merges. This blocks the second writer until the first's
+    re-encode (55-90s+ on this container's current size) finishes, then it reloads
+    fresh state itself. Callers must load_container() *inside* this context, not
+    before it, or they'll still write from stale state.
+    """
+    lock_path = Path(str(mkv_path) + ".lock")
+    with open(lock_path, "w") as fh:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+
+
 # ---------------------------------------------------------------- directory
 
 def new_directory() -> dict:
@@ -283,13 +305,15 @@ def read_entry(directory: dict, frames: list, name: str) -> bytes:
 # ---------------------------------------------------------------- commands
 
 def cmd_init(args):
-    directory = new_directory()
-    payload_frames = []
-    if args.seed:
-        src = Path(__file__).resolve().read_bytes()
-        add_entry(directory, payload_frames, "bootstrap/va_container.py", "bootstrap",
-                  "the reader/writer for this container, stored inside it", src)
-    save_container(directory, payload_frames, Path(args.container))
+    path = Path(args.container)
+    with container_lock(path):
+        directory = new_directory()
+        payload_frames = []
+        if args.seed:
+            src = Path(__file__).resolve().read_bytes()
+            add_entry(directory, payload_frames, "bootstrap/va_container.py", "bootstrap",
+                      "the reader/writer for this container, stored inside it", src)
+        save_container(directory, payload_frames, path)
     print(f"created {args.container} ({1 + len(payload_frames)} frames)")
 
 
@@ -297,13 +321,19 @@ def cmd_add(args):
     # CRITICAL: Read stdin BEFORE any subprocess.run() calls
     # subprocess.run() with capture_output=True interferes with parent's stdin
     payload = sys.stdin.buffer.read() if args.payload == "-" else Path(args.payload).read_bytes()
-    
+
     path = Path(args.container)
-    directory, frames = load_container(path)
-    
-    payload_frames = frames[directory.get("_dir_frames", 1):]
-    add_entry(directory, payload_frames, args.name, args.role, args.note or "", payload)
-    save_container(directory, payload_frames, path)
+    with container_lock(path):
+        directory, frames = load_container(path)
+
+        if args.expect_count is not None and len(directory["entries"]) != args.expect_count:
+            sys.exit(f"refusing to add {args.name!r}: caller expected {args.expect_count} existing "
+                      f"entries but the container has {len(directory['entries'])} -- another writer "
+                      f"landed here first. Recompute the target index/coordinate and retry.")
+
+        payload_frames = frames[directory.get("_dir_frames", 1):]
+        add_entry(directory, payload_frames, args.name, args.role, args.note or "", payload)
+        save_container(directory, payload_frames, path)
     print(f"added {args.name}: {len(payload)} bytes in "
           f"{directory['entries'][-1]['frames'][1]} frame(s); "
           f"container now {1 + len(payload_frames)} frames")
@@ -382,61 +412,62 @@ def cmd_write_frame(args):
     from PIL import Image
     
     path = Path(args.container)
-    directory, frames = load_container(path)
-    payload_frames = frames[directory.get("_dir_frames", 1):]
-    
-    # Load PNG
-    img = Image.open(args.frame)
-    if img.mode != 'RGB':
-        img = img.convert('RGB')
-    frame_array = np.array(img)
-    
-    # Check dimensions
-    if frame_array.shape[0] != FRAME_SIZE or frame_array.shape[1] != FRAME_SIZE:
-        sys.exit(f"frame must be {FRAME_SIZE}x{FRAME_SIZE}, got {frame_array.shape[0]}x{frame_array.shape[1]}")
-    
-    # Append frame
-    new_frame_id = directory.get("_dir_frames", 1) + len(payload_frames)
-    payload_frames.append(frame_array)
-    
-    # Update directory if named entry
-    if args.name:
-        entry_name = args.name
-        entry_role = args.role or "content"
-        entry_note = args.note or ""
-        
-        # Compute actual sha256 of the raw frame data
-        frame_bytes = frame_array.tobytes()
-        actual_sha256 = hashlib.sha256(frame_bytes).hexdigest()
-        
-        # Check if entry exists
-        existing = next((e for e in directory["entries"] if e["name"] == entry_name), None)
-        if existing:
-            # Extend existing entry — only legal if it ends at the current tail,
-            # since entry frames must stay contiguous
-            start, count = existing["frames"]
-            if start + count != new_frame_id:
-                sys.exit(f"cannot extend {entry_name}: its frames end at "
-                         f"{start + count - 1}, not at the container tail")
-            existing["frames"] = [start, count + 1]
-            existing["length"] += len(frame_bytes)
-            full = b"".join(payload_frames[i - 1].tobytes()
-                            for i in range(start, start + count + 1))
-            existing["sha256"] = hashlib.sha256(full).hexdigest()
-        else:
-            # Create new entry
-            directory["entries"].append({
-                "name": entry_name,
-                "role": entry_role,
-                "note": entry_note,
-                "frames": [new_frame_id, 1],
-                "length": len(frame_bytes),
-                "sha256": actual_sha256,
-                "ts": time.time(),
-            })
-    
-    # Save container
-    save_container(directory, payload_frames, path)
+    with container_lock(path):
+        directory, frames = load_container(path)
+        payload_frames = frames[directory.get("_dir_frames", 1):]
+
+        # Load PNG
+        img = Image.open(args.frame)
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+        frame_array = np.array(img)
+
+        # Check dimensions
+        if frame_array.shape[0] != FRAME_SIZE or frame_array.shape[1] != FRAME_SIZE:
+            sys.exit(f"frame must be {FRAME_SIZE}x{FRAME_SIZE}, got {frame_array.shape[0]}x{frame_array.shape[1]}")
+
+        # Append frame
+        new_frame_id = directory.get("_dir_frames", 1) + len(payload_frames)
+        payload_frames.append(frame_array)
+
+        # Update directory if named entry
+        if args.name:
+            entry_name = args.name
+            entry_role = args.role or "content"
+            entry_note = args.note or ""
+
+            # Compute actual sha256 of the raw frame data
+            frame_bytes = frame_array.tobytes()
+            actual_sha256 = hashlib.sha256(frame_bytes).hexdigest()
+
+            # Check if entry exists
+            existing = next((e for e in directory["entries"] if e["name"] == entry_name), None)
+            if existing:
+                # Extend existing entry — only legal if it ends at the current tail,
+                # since entry frames must stay contiguous
+                start, count = existing["frames"]
+                if start + count != new_frame_id:
+                    sys.exit(f"cannot extend {entry_name}: its frames end at "
+                             f"{start + count - 1}, not at the container tail")
+                existing["frames"] = [start, count + 1]
+                existing["length"] += len(frame_bytes)
+                full = b"".join(payload_frames[i - 1].tobytes()
+                                for i in range(start, start + count + 1))
+                existing["sha256"] = hashlib.sha256(full).hexdigest()
+            else:
+                # Create new entry
+                directory["entries"].append({
+                    "name": entry_name,
+                    "role": entry_role,
+                    "note": entry_note,
+                    "frames": [new_frame_id, 1],
+                    "length": len(frame_bytes),
+                    "sha256": actual_sha256,
+                    "ts": time.time(),
+                })
+
+        # Save container
+        save_container(directory, payload_frames, path)
     print(f"wrote frame {new_frame_id} to {path} (container now {1 + len(payload_frames)} frames)")
     if args.name:
         print(f"  added to entry: {args.name} (role={args.role or 'content'})")
@@ -455,54 +486,68 @@ def cmd_patch(args):
     from PIL import Image
 
     path = Path(args.container)
-    directory, frames = load_container(path)
+    with container_lock(path):
+        directory, frames = load_container(path)
 
-    frame_id = args.frame
-    if frame_id == 0:
-        sys.exit("cannot patch frame 0 (directory)")
-    if frame_id >= len(frames):
-        sys.exit(f"frame {frame_id} does not exist (container has {len(frames)} frames)")
+        frame_id = args.frame
+        if frame_id == 0:
+            sys.exit("cannot patch frame 0 (directory)")
+        if frame_id >= len(frames):
+            sys.exit(f"frame {frame_id} does not exist (container has {len(frames)} frames)")
 
-    owner = None
-    for e in directory["entries"]:
-        start, count = e["frames"]
-        if start <= frame_id < start + count:
-            owner = e["name"]
-            break
-    if owner and not args.force:
-        sys.exit(f"frame {frame_id} belongs to entry '{owner}' (dense_encoder-wrapped payload); "
-                  f"patching it in place would corrupt that entry's data and its sha256. "
-                  f"Pass --force to patch anyway (entry will then fail `verify`).")
+        owner = None
+        for e in directory["entries"]:
+            start, count = e["frames"]
+            if start <= frame_id < start + count:
+                owner = e["name"]
+                break
+        if owner and not args.force:
+            sys.exit(f"frame {frame_id} belongs to entry '{owner}' (dense_encoder-wrapped payload); "
+                      f"patching it in place would corrupt that entry's data and its sha256. "
+                      f"Pass --force to patch anyway (entry will then fail `verify`).")
 
-    img = Image.open(args.payload)
-    if img.mode != 'RGB':
-        img = img.convert('RGB')
-    payload_array = np.array(img)
-    h, w = payload_array.shape[0], payload_array.shape[1]
+        img = Image.open(args.payload)
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+        payload_array = np.array(img)
+        h, w = payload_array.shape[0], payload_array.shape[1]
 
-    if args.x < 0 or args.y < 0 or args.x + w > FRAME_SIZE or args.y + h > FRAME_SIZE:
-        sys.exit(f"patch region ({args.x},{args.y}) size {w}x{h} does not fit in a "
-                 f"{FRAME_SIZE}x{FRAME_SIZE} frame")
+        if args.x < 0 or args.y < 0 or args.x + w > FRAME_SIZE or args.y + h > FRAME_SIZE:
+            sys.exit(f"patch region ({args.x},{args.y}) size {w}x{h} does not fit in a "
+                     f"{FRAME_SIZE}x{FRAME_SIZE} frame")
 
-    frames[frame_id] = frames[frame_id].copy()
-    frames[frame_id][args.y:args.y + h, args.x:args.x + w] = payload_array
+        frames[frame_id] = frames[frame_id].copy()
+        frames[frame_id][args.y:args.y + h, args.x:args.x + w] = payload_array
 
-    payload_frames = frames[directory.get("_dir_frames", 1):]
-    save_container(directory, payload_frames, path)
+        payload_frames = frames[directory.get("_dir_frames", 1):]
+        save_container(directory, payload_frames, path)
 
     print(f"patched frame {frame_id} at ({args.x},{args.y}) with {w}x{h} pixels from {args.payload}")
     if owner:
         print(f"  WARNING: entry '{owner}' payload modified; `verify` will now report it corrupt")
 
 
+RUN_INTERPRETERS = {
+    ".py": [sys.executable],
+    ".sh": ["bash"],
+    ".js": ["node"],
+    ".rb": ["ruby"],
+    ".pl": ["perl"],
+}
+
+
 def cmd_run(args):
-    """Execute a Python tool stored inside the container.
+    """Execute a tool stored inside the container -- not just Python.
 
     All bootstrap/tools-role entries are extracted into a persistent cache dir,
     preserving each entry's relative path (e.g. "tools/wordbase.py").
     Files are only extracted if they have changed (via sha256 caching).
     The tool runs with cwd = the caller's cwd, so outputs land where you are,
     and VA_CONTAINER is set to the container's absolute path.
+
+    Interpreter is --interpreter if given, else inferred from the entry
+    name's extension (RUN_INTERPRETERS), else python3 (backward compatible
+    with entries that have no extension).
     """
     import os
     import hashlib
@@ -535,7 +580,11 @@ def cmd_run(args):
     pythonpath = os.pathsep.join(parent_dirs)
     env = dict(os.environ, VA_CONTAINER=str(path), VA_RUN_DIR=str(cache_dir),
                PYTHONPATH=pythonpath + os.pathsep + os.environ.get("PYTHONPATH", ""))
-    result = subprocess.run([sys.executable, str(script)] + args.args, env=env)
+    if args.interpreter:
+        interpreter = args.interpreter.split()
+    else:
+        interpreter = RUN_INTERPRETERS.get(script.suffix, [sys.executable])
+    result = subprocess.run(interpreter + [str(script)] + args.args, env=env)
     sys.exit(result.returncode)
 
 
@@ -543,26 +592,27 @@ def cmd_update(args):
     """Replace an entry's payload. Old frames stay in the file as seekable
     history; the directory entry records where they were."""
     path = Path(args.container)
-    directory, frames = load_container(path)
-    entry = next((e for e in directory["entries"] if e["name"] == args.name), None)
-    if entry is None:
-        sys.exit(f"no such entry: {args.name} (use add to create it)")
     payload = sys.stdin.buffer.read() if args.payload == "-" else Path(args.payload).read_bytes()
+    with container_lock(path):
+        directory, frames = load_container(path)
+        entry = next((e for e in directory["entries"] if e["name"] == args.name), None)
+        if entry is None:
+            sys.exit(f"no such entry: {args.name} (use add to create it)")
 
-    payload_frames = frames[directory.get("_dir_frames", 1):]
-    chunks = [payload[i : i + MAX_PAYLOAD_PER_FRAME]
-              for i in range(0, max(len(payload), 1), MAX_PAYLOAD_PER_FRAME)]
-    start = directory.get("_dir_frames", 1) + len(payload_frames)
-    payload_frames.extend(chunk_to_frame(c) for c in chunks)
+        payload_frames = frames[directory.get("_dir_frames", 1):]
+        chunks = [payload[i : i + MAX_PAYLOAD_PER_FRAME]
+                  for i in range(0, max(len(payload), 1), MAX_PAYLOAD_PER_FRAME)]
+        start = directory.get("_dir_frames", 1) + len(payload_frames)
+        payload_frames.extend(chunk_to_frame(c) for c in chunks)
 
-    entry.setdefault("history", []).append(
-        {"frames": entry["frames"], "length": entry["length"],
-         "sha256": entry["sha256"], "ts": entry["ts"]})
-    entry.update(frames=[start, len(chunks)], length=len(payload),
-                 sha256=hashlib.sha256(payload).hexdigest(), ts=time.time())
-    if args.note:
-        entry["note"] = args.note
-    save_container(directory, payload_frames, path)
+        entry.setdefault("history", []).append(
+            {"frames": entry["frames"], "length": entry["length"],
+             "sha256": entry["sha256"], "ts": entry["ts"]})
+        entry.update(frames=[start, len(chunks)], length=len(payload),
+                     sha256=hashlib.sha256(payload).hexdigest(), ts=time.time())
+        if args.note:
+            entry["note"] = args.note
+        save_container(directory, payload_frames, path)
     print(f"updated {args.name}: {len(payload)} bytes at frames "
           f"{start}..{start + len(chunks) - 1} "
           f"(v{len(entry['history'])} archived; container now {1 + len(payload_frames)} frames)")
@@ -625,6 +675,9 @@ def main():
     sp.add_argument("--name", required=True)
     sp.add_argument("--role", default="content")
     sp.add_argument("--note")
+    sp.add_argument("--expect-count", type=int,
+                     help="refuse to add unless the container currently has exactly this many "
+                          "entries (atomic guard for coordinate-addressed writers)")
     sp.set_defaults(func=cmd_add)
 
     sp = sub.add_parser("cat", help="extract an entry")
@@ -666,10 +719,13 @@ def main():
                     help="allow patching a frame that belongs to an entry (corrupts that entry)")
     sp.set_defaults(func=cmd_patch)
 
-    sp = sub.add_parser("run", help="execute a Python tool stored in the container")
+    sp = sub.add_parser("run", help="execute a tool stored in the container")
     sp.add_argument("container")
     sp.add_argument("name", help="entry name of the tool to run")
     sp.add_argument("args", nargs=argparse.REMAINDER, help="arguments passed to the tool")
+    sp.add_argument("--interpreter",
+                     help="command to run the script with (default: infer from extension, "
+                          "falling back to python3). e.g. --interpreter bash, --interpreter node")
     sp.set_defaults(func=cmd_run)
 
     sp = sub.add_parser("update", help="replace an entry's payload (old frames kept as history)")
