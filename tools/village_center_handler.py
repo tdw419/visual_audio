@@ -20,6 +20,7 @@ from typing import Dict, List, Tuple
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from visual_audio_container import Container
+import faction_tracker
 
 
 def find_local_structures(container: Container, my_x: int, my_y: int, radius: int = 4) -> List[Dict]:
@@ -79,7 +80,7 @@ def read_governance_directives(container: Container, my_x: int, my_y: int) -> Li
         # Check if directive targets this structure
         target = content.get("target", "")
         if f"village_center.py.{my_x}_{my_y}" in target or f"village_center_{my_x}_{my_y}" in target:
-            if content.get("action") in ("coordinate", "build"):
+            if content.get("action") in ("coordinate", "build", "move_attention"):
                 directives.append((e["name"], content))
 
     return directives
@@ -168,6 +169,26 @@ def execute_build(container: Container, my_x: int, my_y: int, build_params: Dict
     target_y = build_params.get("y", my_y)
     structure_type = build_params.get("type", "utility_shed")
 
+    # Entropy War proximity guard: if a faction game is in progress and this
+    # village center belongs to a faction, its build must be within
+    # claim-radius of that faction's *attention* position, not just
+    # possible from its home coordinates -- see [[faction_tracker.py]].
+    # No faction_state entry at all means the game isn't in progress, so
+    # this is a no-op and build works exactly as it did before.
+    state = faction_tracker.load_factions(container)
+    if state is not None:
+        faction = faction_tracker.faction_at(state, my_x, my_y)
+        if faction is not None:
+            f = state["factions"][faction]
+            dist = faction_tracker.chebyshev(
+                f["attention_x"], f["attention_y"], target_x, target_y)
+            if dist > faction_tracker.DEFAULT_CLAIM_RADIUS:
+                print(f"    ✗ too_far: {faction}'s attention is at "
+                      f"({f['attention_x']}, {f['attention_y']}), "
+                      f"{dist} tiles from target ({target_x}, {target_y}) -- "
+                      f"move_attention there first")
+                return False
+
     # Check if space is empty
     target_name = f"{structure_type}.{target_x}_{target_y}"
     try:
@@ -195,7 +216,40 @@ def execute_build(container: Container, my_x: int, my_y: int, build_params: Dict
     )
 
     print(f"    ✓ Built {structure_type} at ({target_x}, {target_y})")
+
+    if state is not None:
+        faction = faction_tracker.faction_at(state, my_x, my_y)
+        if faction is not None:
+            faction_tracker.record_claim(state, faction, target_name)
+            faction_tracker.save_factions(container, state)
+
     return True
+
+
+def execute_move_attention(container: Container, my_x: int, my_y: int, params: Dict) -> Dict:
+    """Execute a move_attention directive: step this village center's
+    faction toward a target coordinate, bounded by DEFAULT_STEP per turn."""
+    target_x = params.get("target_x")
+    target_y = params.get("target_y")
+    step = params.get("step", faction_tracker.DEFAULT_STEP)
+
+    state = faction_tracker.load_factions(container)
+    if state is None:
+        print(f"    ✗ No faction game in progress (faction_state not initialized)")
+        return {"moved": False, "reason": "no_faction_game"}
+
+    faction = faction_tracker.faction_at(state, my_x, my_y)
+    if faction is None:
+        print(f"    ✗ ({my_x}, {my_y}) is not a faction seed")
+        return {"moved": False, "reason": "not_a_faction_seed"}
+
+    report = faction_tracker.move_attention(state, faction, target_x, target_y, step=step)
+    faction_tracker.save_factions(container, state)
+
+    print(f"  [village_center] {faction} attention {report['from']} -> {report['to']} "
+          f"(target {report['target']}, {report['dist_after']} tiles remaining"
+          f"{', ARRIVED' if report['arrived'] else ''})")
+    return report
 
 
 def main():
@@ -271,6 +325,9 @@ def main():
                     success = execute_build(c, my_x, my_y, params)
                     if not success:
                         print(f"    ✗ Build failed")
+
+                elif directive.get("action") == "move_attention":
+                    execute_move_attention(c, my_x, my_y, params)
 
                 mark_consumed(c, name, directive)
 
