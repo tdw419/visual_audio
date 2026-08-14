@@ -80,6 +80,7 @@ def init_factions(container: Container, seeds: Dict[str, str]) -> Dict:
             "home_y": y,
             "turns_used": 0,
             "structures": [seed_entry],
+            "active_cascade": None,
         }
 
     state = {
@@ -101,6 +102,7 @@ def reset_factions(container: Container, seeds: Dict[str, str]) -> Dict:
         factions[name] = {
             "seed": seed_entry, "attention_x": x, "attention_y": y,
             "home_x": x, "home_y": y, "turns_used": 0, "structures": [seed_entry],
+            "active_cascade": None,
         }
     state = {"factions": factions, "created": time.time(), "moves": 0, "claims": 0}
     save_factions(container, state)
@@ -121,6 +123,55 @@ def faction_at(state: Dict, x: int, y: int) -> Optional[str]:
         if f["home_x"] == x and f["home_y"] == y:
             return name
     return None
+
+
+MAX_CASCADE_ATTEMPTS = 20  # backstop; single-target convergence is proven bounded by
+                            # ceil(distance/step), this only guards against future changes
+                            # breaking that guarantee, not something expected to trigger
+
+
+def get_active_cascade(state: Dict, faction: str) -> Optional[Dict]:
+    return state["factions"][faction].get("active_cascade")
+
+
+def try_start_cascade(state: Dict, faction: str, target_x: int, target_y: int) -> bool:
+    """Claim the faction's attention for a move-then-build cascade toward
+    (target_x, target_y).
+
+    Returns True if this cascade now owns (or already owned) the faction's
+    attention -- caller should issue move_attention + re-queue build.
+    Returns False if a DIFFERENT cascade already owns the attention -- caller
+    must not issue a competing move_attention (this is what prevents the
+    livelock proven 2026-08-14: two simultaneous targets pulling the same
+    attention in opposite directions every pass, oscillating forever while
+    the governance log grows unbounded). Caller should just re-queue the
+    build alone, unmoved, to retry once the active cascade clears.
+    """
+    f = state["factions"][faction]
+    active = f.get("active_cascade")
+
+    if active is not None and (active["target_x"], active["target_y"]) == (target_x, target_y):
+        active["attempts"] += 1
+        if active["attempts"] > MAX_CASCADE_ATTEMPTS:
+            f["active_cascade"] = None
+            return False  # give up on this cascade; let it fall through as abandoned
+        return True
+
+    if active is not None:
+        return False  # a different cascade already owns this faction's attention
+
+    f["active_cascade"] = {"target_x": target_x, "target_y": target_y, "attempts": 1}
+    return True
+
+
+def clear_active_cascade(state: Dict, faction: str, target_x: int, target_y: int) -> None:
+    """Release the faction's attention claim once its cascade's target build
+    succeeds (or is abandoned) -- only clears if it still matches, so an
+    unrelated already-cleared/replaced cascade can't be stomped."""
+    f = state["factions"][faction]
+    active = f.get("active_cascade")
+    if active is not None and (active["target_x"], active["target_y"]) == (target_x, target_y):
+        f["active_cascade"] = None
 
 
 def move_attention(state: Dict, faction: str, target_x: int, target_y: int,

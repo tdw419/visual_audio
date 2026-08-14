@@ -180,13 +180,43 @@ def execute_build(container: Container, my_x: int, my_y: int, build_params: Dict
         faction = faction_tracker.faction_at(state, my_x, my_y)
         if faction is not None:
             f = state["factions"][faction]
-            dist = faction_tracker.chebyshev(
-                f["attention_x"], f["attention_y"], target_x, target_y)
+            dist = faction_tracker.chebyshev(f["attention_x"], f["attention_y"], target_x, target_y)
             if dist > faction_tracker.DEFAULT_CLAIM_RADIUS:
                 print(f"    ✗ too_far: {faction}'s attention is at "
                       f"({f['attention_x']}, {f['attention_y']}), "
                       f"{dist} tiles from target ({target_x}, {target_y}) -- "
                       f"move_attention there first")
+
+                # Autonomous cascade: move attention and retry build -- but
+                # ONLY if this target already owns (or can claim) the
+                # faction's attention. Proven livelock (2026-08-14): two
+                # simultaneous build targets each issuing their own
+                # move_attention pull the shared attention position in
+                # opposite directions every pass, canceling out forever
+                # while the governance log grows unbounded. See
+                # [[faction_tracker.try_start_cascade]].
+                owns_attention = faction_tracker.try_start_cascade(state, faction, target_x, target_y)
+                faction_tracker.save_factions(container, state)
+
+                if owns_attention:
+                    print(f"    [village_center] Cascading move_attention to ({target_x}, {target_y}) and re-queueing build.")
+                    issue_directive(
+                        container,
+                        f"village_center_{my_x}_{my_y}",
+                        f"village_center.py.{my_x}_{my_y}",
+                        "move_attention",
+                        {"target_x": target_x, "target_y": target_y}
+                    )
+                else:
+                    print(f"    [village_center] {faction}'s attention is committed to a different "
+                          f"cascade -- queueing this build to retry once it's free (not moving).")
+                issue_directive(
+                    container,
+                    f"village_center_{my_x}_{my_y}",
+                    f"village_center.py.{my_x}_{my_y}",
+                    "build",
+                    build_params
+                )
                 return False
 
     # Check if space is empty
@@ -221,6 +251,7 @@ def execute_build(container: Container, my_x: int, my_y: int, build_params: Dict
         faction = faction_tracker.faction_at(state, my_x, my_y)
         if faction is not None:
             faction_tracker.record_claim(state, faction, target_name)
+            faction_tracker.clear_active_cascade(state, faction, target_x, target_y)
             faction_tracker.save_factions(container, state)
 
     return True
