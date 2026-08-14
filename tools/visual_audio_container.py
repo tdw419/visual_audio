@@ -121,9 +121,19 @@ class Container:
 
     @contextlib.contextmanager
     def _write_lock(self):
-        """Internal: acquire lock, load fresh state."""
+        """Internal: acquire lock, load fresh state.
+
+        load_container() returns ALL frames including the leading directory
+        frames. save_container()/add_entry() expect payload-only frames (they
+        prepend the directory themselves) -- passing the raw list back in
+        double-counts and re-embeds stale directory frames, corrupting the
+        offset table. Strip them here, once, the same way cmd_add() does in
+        va_container.py.
+        """
         with container_lock(self.mkv_path):
-            self._directory, self._frames = load_container(self.mkv_path)
+            directory, frames = load_container(self.mkv_path)
+            self._directory = directory
+            self._frames = frames[directory.get("_dir_frames", 1):]
             yield
 
     def add(
@@ -268,6 +278,39 @@ class Container:
             "tile_count": len(tiles),
             "tiles": tiles,
         }
+
+    def get_ascii_viewport(self, x0: int, y0: int, w: int, h: int, order: int = 10) -> str:
+        """Return a semantic ASCII representation of a viewport on the map."""
+        manifest = self.get_manifest(order)
+        by_coord = {(t["x"], t["y"]): t for t in manifest["tiles"]}
+        
+        ROLE_CHARS = {
+            "thought": "?",
+            "summary": "S",
+            "terrain_tile": "~",
+            "code": "{",
+            "bootstrap": "^",
+            "kernel": "K",
+            "tools": "*",
+            "message": "@",
+            "emulator": "E",
+            "reference": "R",
+            "content": "C"
+        }
+        
+        lines = []
+        for y in range(y0, y0 + h):
+            row = []
+            for x in range(x0, x0 + w):
+                t = by_coord.get((x, y))
+                if t:
+                    char = ROLE_CHARS.get(t.get("role", ""), "#")
+                    row.append(char)
+                else:
+                    row.append(".")
+            lines.append("".join(row))
+            
+        return "\n".join(lines)
 
     # ---------------------------------------------------------------- private helpers
 

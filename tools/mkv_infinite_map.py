@@ -119,11 +119,32 @@ def cmd_ascii(args):
     x0, y0, w, h = args.x0, args.y0, args.w, args.h
     print(f"viewport ({x0},{y0}) {w}x{h} of {manifest['grid_side']}x{manifest['grid_side']} grid, "
           f"container={manifest['container']}")
+          
+    # Semantic character mapping by role
+    ROLE_CHARS = {
+        "thought": "?",
+        "summary": "S",
+        "terrain_tile": "~",
+        "code": "{",
+        "bootstrap": "^",
+        "kernel": "K",
+        "tools": "*",
+        "message": "@",
+        "emulator": "E",
+        "reference": "R",
+        "content": "C"
+    }
+    
     for y in range(y0, y0 + h):
         row = []
         for x in range(x0, x0 + w):
             e = by_coord.get((x, y))
-            row.append("#" if e else ".")
+            if e:
+                role = e.get("role", "")
+                char = ROLE_CHARS.get(role, "#")
+                row.append(char)
+            else:
+                row.append(".")
         print("".join(row))
     print()
     legend = [e for e in manifest["entries"] if x0 <= e["x"] < x0 + w and y0 <= e["y"] < y0 + h]
