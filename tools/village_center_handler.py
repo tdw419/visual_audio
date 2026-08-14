@@ -179,6 +179,23 @@ def execute_build(container: Container, my_x: int, my_y: int, build_params: Dict
     if state is not None:
         faction = faction_tracker.faction_at(state, my_x, my_y)
         if faction is not None:
+            # Check if we own the cascade lock
+            if not faction_tracker.try_start_cascade(state, faction, target_x, target_y):
+                print(f"    [village_center] Another cascade active. Re-queueing build unmoved.")
+                issue_directive(container, f"village_center_{my_x}_{my_y}", f"village_center.py.{my_x}_{my_y}", "build", build_params)
+                return False
+
+            # CRITICAL: persist the claim immediately. try_start_cascade only
+            # mutates `state` in memory -- without saving here, every branch
+            # below that returns without its own save_factions() call
+            # silently drops the claim, and the next execute_build() call
+            # reloads a fresh state showing no active cascade at all. That
+            # was a real, reproduced regression (2026-08-14): it resurrected
+            # the exact livelock the lock exists to prevent, byte-for-byte
+            # (opposing targets oscillating 0->4->0->4 forever). See
+            # [[entropy-war-game-design]].
+            faction_tracker.save_factions(container, state)
+
             f = state["factions"][faction]
             dist = faction_tracker.chebyshev(f["attention_x"], f["attention_y"], target_x, target_y)
             if dist > faction_tracker.DEFAULT_CLAIM_RADIUS:
@@ -186,30 +203,16 @@ def execute_build(container: Container, my_x: int, my_y: int, build_params: Dict
                       f"({f['attention_x']}, {f['attention_y']}), "
                       f"{dist} tiles from target ({target_x}, {target_y}) -- "
                       f"move_attention there first")
-
-                # Autonomous cascade: move attention and retry build -- but
-                # ONLY if this target already owns (or can claim) the
-                # faction's attention. Proven livelock (2026-08-14): two
-                # simultaneous build targets each issuing their own
-                # move_attention pull the shared attention position in
-                # opposite directions every pass, canceling out forever
-                # while the governance log grows unbounded. See
-                # [[faction_tracker.try_start_cascade]].
-                owns_attention = faction_tracker.try_start_cascade(state, faction, target_x, target_y)
-                faction_tracker.save_factions(container, state)
-
-                if owns_attention:
-                    print(f"    [village_center] Cascading move_attention to ({target_x}, {target_y}) and re-queueing build.")
-                    issue_directive(
-                        container,
-                        f"village_center_{my_x}_{my_y}",
-                        f"village_center.py.{my_x}_{my_y}",
-                        "move_attention",
-                        {"target_x": target_x, "target_y": target_y}
-                    )
-                else:
-                    print(f"    [village_center] {faction}'s attention is committed to a different "
-                          f"cascade -- queueing this build to retry once it's free (not moving).")
+                
+                # Autonomous Cascade: Move attention and retry build
+                print(f"    [village_center] Cascading move_attention to ({target_x}, {target_y}) and re-queueing build.")
+                issue_directive(
+                    container,
+                    f"village_center_{my_x}_{my_y}",
+                    f"village_center.py.{my_x}_{my_y}",
+                    "move_attention",
+                    {"target_x": target_x, "target_y": target_y}
+                )
                 issue_directive(
                     container,
                     f"village_center_{my_x}_{my_y}",
@@ -218,6 +221,72 @@ def execute_build(container: Container, my_x: int, my_y: int, build_params: Dict
                     build_params
                 )
                 return False
+
+            # Clash Resolution Check
+            contesting = []
+            for other_fac, other_f in state["factions"].items():
+                if other_fac != faction:
+                    other_dist = faction_tracker.chebyshev(other_f["attention_x"], other_f["attention_y"], target_x, target_y)
+                    if other_dist <= faction_tracker.DEFAULT_CLAIM_RADIUS:
+                        contesting.append(other_fac)
+            
+            if contesting:
+                topic = f"Territory_Claim_{target_x}_{target_y}_by_{faction}"
+                resolved = False
+                all_gov = container.list(filter_role="governance")
+                for e in all_gov[-40:]:
+                    if "debate_log_" in e["name"]:
+                        try:
+                            d_log = json.loads(container.read_text(e["name"]))
+                            if d_log.get("topic") != topic:
+                                continue
+                            # A deferred debate (ai_council's own bounded
+                            # cascade gave up -- radius exhaustion or its
+                            # 5-attempt cap) is a real, terminal outcome, not
+                            # "not yet resolved". Treating it as still-pending
+                            # meant this loop would keep issuing brand new
+                            # debate directives with the same topic forever,
+                            # each spawning its own fresh 5-attempt
+                            # sub-cascade -- unbounded governance-log growth
+                            # with no path to termination. Deferred yields
+                            # the tile, same as an explicit reject: a
+                            # stalemate is a resolution, not a reason to
+                            # retry indefinitely.
+                            terminal_status = d_log.get("terminal_status", "")
+                            if terminal_status.startswith("deferred"):
+                                print(f"    ✗ Clash yielded (debate deferred: {terminal_status}). Clearing cascade.")
+                                faction_tracker.clear_active_cascade(state, faction, target_x, target_y)
+                                faction_tracker.save_factions(container, state)
+                                return False
+                            if d_log.get("meets_threshold"):
+                                if d_log.get("consensus") == "approve":
+                                    resolved = True
+                                    break
+                                elif d_log.get("consensus") == "reject":
+                                    print(f"    ✗ Clash lost (debate rejected). Clearing cascade.")
+                                    faction_tracker.clear_active_cascade(state, faction, target_x, target_y)
+                                    faction_tracker.save_factions(container, state)
+                                    return False
+                        except Exception:
+                            pass
+                
+                if not resolved:
+                    print(f"    [village_center] Contested frontier! Factions {contesting} in range. Routing to AI Council.")
+                    
+                    # Find any AI council
+                    council_target = f"ai_council.py.2_7"  # Default fallback
+                    all_arch = container.list(filter_role="architecture")
+                    for a in all_arch:
+                        if "ai_council" in a["name"]:
+                            council_target = a["name"]
+                            break
+                            
+                    issue_directive(container, f"village_center_{my_x}_{my_y}", council_target, "debate", {
+                        "topic": topic, "consensus_threshold": 0.6
+                    })
+                    print(f"    [village_center] Re-queueing build unmoved pending debate resolution.")
+                    issue_directive(container, f"village_center_{my_x}_{my_y}", f"village_center.py.{my_x}_{my_y}", "build", build_params)
+                    return False
 
     # Check if space is empty
     target_name = f"{structure_type}.{target_x}_{target_y}"
