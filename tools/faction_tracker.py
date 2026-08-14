@@ -280,6 +280,9 @@ def main():
     ps = sub.add_parser("status", help="show current faction state")
     ps.add_argument("container")
 
+    pr = sub.add_parser("reset", help="clear cascade locks from stale cascades")
+    pr.add_argument("container")
+
     args = parser.parse_args()
 
     with Container(args.container) as c:
@@ -303,6 +306,25 @@ def main():
                 print(f"  {name}: attention=({f['attention_x']}, {f['attention_y']}) "
                       f"home=({f['home_x']}, {f['home_y']}) turns_used={f['turns_used']} "
                       f"structures={len(f['structures'])}")
+
+        elif args.cmd == "reset":
+            state = load_factions(c)
+            if state is None:
+                print("No faction game in progress (faction_state not found).")
+                return
+
+            cleared = 0
+            for name, f in state["factions"].items():
+                if f.get("active_cascade") is not None:
+                    f["active_cascade"] = None
+                    cleared += 1
+                    print(f"  Cleared cascade lock for {name}")
+
+            if cleared == 0:
+                print("  No cascade locks to clear")
+            else:
+                save_factions(c, state)
+                print(f"  Saved: {cleared} locks cleared")
 
 
 if __name__ == "__main__":
