@@ -359,6 +359,12 @@ def build_word_project_with_crossfade(word: str, phonemes_list: List[str], use_n
     # Calculate crossfade length in samples
     crossfade_samples = int(CROSSFADE_DURATION_MS / 1000.0 * SAMPLE_RATE)
     
+    # Get amplitude envelopes
+    try:
+        amp_envelopes = phonemes.create_phoneme_amplitude_envelopes()
+    except AttributeError:
+        amp_envelopes = {}
+    
     # Synthesize each phoneme individually with coarticulation
     phoneme_audios = []
     for i, ph in enumerate(phonemes_list):
@@ -380,8 +386,14 @@ def build_word_project_with_crossfade(word: str, phonemes_list: List[str], use_n
         
         voice = UPICVoice(ph, wavetable)
         voice.base_frequency = 1.0
-        voice.base_amplitude = 0.7
+        voice.base_amplitude = 1.0  # Let the amplitude envelope control the full range
         voice.set_frequency_envelope(ph_envelope)
+        if ph in amp_envelopes:
+            voice.set_amplitude_envelope(amp_envelopes[ph])
+        else:
+            # Fallback if no specific amplitude envelope is found
+            voice.base_amplitude = 0.7
+            
         project.add_voice(voice)
         
         # Synthesize this phoneme
@@ -413,10 +425,15 @@ def build_word_project(word: str, phonemes_list: List[str], voice_profile: str =
     """
     # Create phoneme envelopes
     all_envelopes = phonemes.create_phoneme_envelopes()
+    try:
+        amp_envelopes = phonemes.create_phoneme_amplitude_envelopes()
+    except AttributeError:
+        amp_envelopes = {}
     
-    # Build combined frequency envelope for all phonemes
+    # Build combined frequency and amplitude envelopes for all phonemes
     duration = len(phonemes_list) * phonemes.DURATION
-    combined_points = []
+    combined_freq_points = []
+    combined_amp_points = []
     
     for i, ph in enumerate(phonemes_list):
         if ph not in all_envelopes:
@@ -424,31 +441,46 @@ def build_word_project(word: str, phonemes_list: List[str], voice_profile: str =
             continue
         
         ph_envelope = all_envelopes[ph]
+        amp_envelope = amp_envelopes.get(ph)
         ph_duration = phonemes.DURATION
         
         # Map phoneme's local time [0,1] to global time
         t_start = i * ph_duration / duration
         t_end = (i + 1) * ph_duration / duration
         
-        # Transform and append this phoneme's control points
+        # Transform and append this phoneme's frequency control points
         for local_t, value in ph_envelope.control_points:
             global_t = t_start + local_t * (t_end - t_start)
-            combined_points.append((global_t, value))
+            combined_freq_points.append((global_t, value))
+            
+        # Transform and append this phoneme's amplitude control points
+        if amp_envelope:
+            for local_t, value in amp_envelope.control_points:
+                global_t = t_start + local_t * (t_end - t_start)
+                combined_amp_points.append((global_t, value))
+        else:
+            # Fallback flat amplitude
+            combined_amp_points.append((t_start, 0.7))
+            combined_amp_points.append((t_end, 0.7))
     
     # Create project
     project = UPICProject(f"word_{word}")
     wavetable = UPICWaveformTable(voice_profile, create_basic_waveform(voice_profile), SAMPLE_RATE)
     project.add_wavetable(wavetable)
     
-    # Create combined envelope
-    frequency_envelope = UPICEnvelope(f"{word}_freq", combined_points)
+    # Create combined envelopes
+    frequency_envelope = UPICEnvelope(f"{word}_freq", combined_freq_points)
     project.add_envelope(frequency_envelope)
+    
+    amplitude_envelope = UPICEnvelope(f"{word}_amp", combined_amp_points)
+    project.add_envelope(amplitude_envelope)
     
     # Create voice with base_frequency = 1.0 so envelope values are literal Hz
     voice = UPICVoice(word, wavetable)
     voice.base_frequency = 1.0
-    voice.base_amplitude = 0.7
+    voice.base_amplitude = 1.0
     voice.set_frequency_envelope(frequency_envelope)
+    voice.set_amplitude_envelope(amplitude_envelope)
     project.add_voice(voice)
     
     return project

@@ -285,6 +285,50 @@ def create_phoneme_envelopes() -> dict:
     return envelopes
 
 
+def create_phoneme_amplitude_envelopes() -> dict:
+    """
+    Create amplitude envelopes for all 39 ARPAbet phonemes.
+    These shape the volume according to the spectral characteristics of each phoneme.
+    """
+    envelopes = {}
+
+    # Vowels & Diphthongs (Sustained, loud, slight attack/decay)
+    vowel_amp = [
+        (0.0, 0.0), (0.1, 1.0), (0.8, 1.0), (1.0, 0.0)
+    ]
+    for ph in ['AA', 'AE', 'AH', 'AO', 'AW', 'AY', 'EH', 'ER', 'EY', 'IH', 'IY', 'OW', 'OY', 'UH', 'UW']:
+        envelopes[ph] = UPICEnvelope(f"{ph}_amp", vowel_amp)
+
+    # Stops (Silence closure, burst, rapid decay)
+    stop_amp = [
+        (0.0, 0.0), (0.3, 0.0), (0.35, 1.0), (0.45, 1.0), (0.55, 0.2), (1.0, 0.0)
+    ]
+    # Adjust closure for voiced vs voiceless stops to match freq envelope closures
+    stop_amp_voiced = [
+        (0.0, 0.0), (0.25, 0.0), (0.3, 1.0), (0.4, 1.0), (0.5, 0.2), (1.0, 0.0)
+    ]
+    for ph in ['P', 'T', 'K', 'CH']:
+        envelopes[ph] = UPICEnvelope(f"{ph}_amp", stop_amp)
+    for ph in ['B', 'D', 'G', 'JH']:
+        envelopes[ph] = UPICEnvelope(f"{ph}_amp", stop_amp_voiced)
+
+    # Fricatives (Sustained friction, moderate amplitude)
+    fricative_amp = [
+        (0.0, 0.0), (0.2, 0.6), (0.8, 0.6), (1.0, 0.0)
+    ]
+    for ph in ['F', 'V', 'TH', 'DH', 'S', 'Z', 'SH', 'ZH', 'HH']:
+        envelopes[ph] = UPICEnvelope(f"{ph}_amp", fricative_amp)
+
+    # Nasals & Semivowels (Smooth, slightly lower amplitude than vowels)
+    sonorant_amp = [
+        (0.0, 0.0), (0.2, 0.8), (0.8, 0.8), (1.0, 0.0)
+    ]
+    for ph in ['M', 'N', 'NG', 'L', 'R', 'W', 'Y']:
+        envelopes[ph] = UPICEnvelope(f"{ph}_amp", sonorant_amp)
+
+    return envelopes
+
+
 def get_phoneme_envelope(phoneme: str) -> UPICEnvelope:
     """
     Get a specific phoneme envelope by name.
