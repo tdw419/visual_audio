@@ -344,11 +344,21 @@ async def capture_boot_timeline(
         raise RuntimeError("QMP socket did not appear")
     
     # Additional small delay for socket to be fully ready
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(0.5)
     
-    # Connect to QMP
+    # Connect to QMP with retries
     client = BootCaptureClient(qmp_socket, detector)
-    await client.connect()
+    max_retries = 10
+    for attempt in range(max_retries):
+        try:
+            await client.connect()
+            break
+        except (ConnectionRefusedError, FileNotFoundError) as e:
+            if attempt < max_retries - 1:
+                print(f"Connection attempt {attempt + 1} failed: {e}, retrying...")
+                await asyncio.sleep(0.5)
+            else:
+                raise RuntimeError(f"Failed to connect to QMP after {max_retries} attempts: {e}")
     
     # Add initial milestone
     detector.add_milestone(Milestone(
