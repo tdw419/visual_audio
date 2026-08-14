@@ -552,6 +552,10 @@ def main():
     
     args, qemu_cmd = parser.parse_known_args()
     
+    # Strip '--' separator if present
+    if qemu_cmd and qemu_cmd[0] == '--':
+        qemu_cmd = qemu_cmd[1:]
+    
     if args.help:
         parser.print_help()
         print("\nQEMU command should be provided after all options.")
