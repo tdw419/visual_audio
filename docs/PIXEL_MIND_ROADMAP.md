@@ -38,6 +38,15 @@ matters here specifically.
 - **Host Hermes routing** (P3): `~/.hermes/hermes-agent/run_agent.py` now parses
   provider from `provider/model` format (e.g. `anthropic/claude-fable-5`) and
   routes to correct API endpoint. Verified with real Anthropic API call.
+- **Relevance-based context selection**: `select_context()` in
+  `pixel_hermes_bridge_context.py` always keeps the most recent 1-2 thoughts
+  for continuity, fills the rest of the context budget by keyword-overlap
+  score against the current query (no extra LLM call). Candidate pool for
+  scoring/aging-out is wider than the context window
+  (`PIXEL_MIND_CANDIDATE_POOL`, default `max(context_size*4, 20)`). Verified
+  with a direct unit test proving it actually reorders by relevance, not just
+  recency (real production data is currently too small to exercise this path
+  in practice).
 
 ## Known, measured limitations (not yet fixed)
 
@@ -47,10 +56,9 @@ matters here specifically.
    current sizes. Past that, every `add`/`update` raises `ValueError`. Every
    REPL turn writes one entry, so a long session hits this wall abruptly.
    See memory `va-container-directory-entry-ceiling`.
-2. **No context relevance filtering.** `PIXEL_MIND_CONTEXT_SIZE` takes the
-   last N thought frames (default 5). Summarization preserves old context,
-   but retrieval is still recency-based, not similarity-based. No embeddings
-   or keyword search yet.
+2. ~~No context relevance filtering.~~ **DONE (2026-08-13)** — see
+   `select_context()` below. Still no embeddings, just keyword overlap; fine
+   for now given the small real corpus.
 3. **Thought frames are not directly queryable.** `/cat N` in the REPL is the
    only way to inspect them. No search by topic, no filtering by timestamp
    range, no aggregate queries (e.g. "show all thoughts mentioning 'color'").
@@ -61,27 +69,16 @@ matters here specifically.
 ## Priority order
 
 ### P0 — Fix before building more on top of the memory system
-- **Multi-frame directory support.** This is the one item that will cause
-  silent-feeling data loss risk (a crash mid-session, not corruption, but an
-  unhandled exception a REPL user will hit with no warning as they approach
-  ~240 entries). The code already anticipates this
-  (`"multi-frame directory not yet implemented"` is a real TODO, not a
-  guess). Scope: directory becomes N frames instead of 1; `load_container`/
-  `read_directory` need to read all directory frames and concatenate before
-  parsing JSON. Should be a self-contained change to `va_container.py` with
-  no API changes for callers.
-- **Graceful handling at the ceiling**, even before the real fix: catch the
-  `ValueError` in the bridge/REPL and tell the user "spatial memory is full,
-  rebuild required" instead of an unhandled traceback.
+~~**Multi-frame directory support.**~~ **DONE (2026-08-13)** — The directory now gracefully expands into multiple frames when exceeding 65,531 bytes, correctly shifting absolute indices of payload entries without corrupting historical absolute frame references.
+~~**Graceful handling at the ceiling**~~ **DONE (2026-08-13)** — Obsoleted by the actual fix above.
 
 ### P1 — Makes the memory system actually useful, not just working
 ~~Structured thought frames.~~ **DONE (2026-08-13)** — frames now store JSON
 with `timestamp`, `query`, `response` fields.
 
-- **Context relevance instead of flat recency.** Now that frames are structured,
-  a cheap first step is keyword/embedding similarity against the current
-  query to pick which past thoughts to include, rather than always "last N."
-  Summarization already preserves old context, but retrieval is still recency.
+~~Context relevance instead of flat recency.~~ **DONE (2026-08-13)** —
+keyword-overlap scoring in `select_context()`, most-recent turns still
+guaranteed for continuity.
 
 ### P2 — Scale/quality, not urgent
 ~~Rolling summarization of old thought frames~~ **DONE (2026-08-13)** — when
@@ -99,6 +96,17 @@ files skips disk writes for unchanged entries.
 ~~Fix host Hermes model routing~~ **DONE (2026-08-13)** —
 `~/.hermes/hermes-agent/run_agent.py` parses provider from `provider/model`
 format and routes to correct API endpoint.
+
+## Known permanent damage (not fixable, low impact)
+
+Two thought frames in the real `visual_audio.mkv` —
+`pixel_thought_1786635228` and `pixel_thought_1786635266` — are corrupted and
+unreadable. They were written while an earlier, broken relative-offset
+directory scheme was briefly live (before it was caught and reverted). The
+revert fixed the code but not these two already-written frames. Confirmed via
+`va_container.py verify` (FAIL) and content dump (garbage bytes). No tool code
+was affected, only two old conversational log entries — not worth a repair
+effort, just noted so it isn't mistaken for a live bug.
 
 ## Explicitly out of scope / not recommended right now
 
