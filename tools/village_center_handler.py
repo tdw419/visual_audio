@@ -68,11 +68,30 @@ def read_governance_directives(container: Container, my_x: int, my_y: int) -> Li
 
         # Check if directive targets this structure
         target = content.get("target", "")
-        if f"village_center.py.{my_x}_{my_y}" in target:
-            if content.get("action") == "coordinate":
+        if f"village_center.py.{my_x}_{my_y}" in target or f"village_center_{my_x}_{my_y}" in target:
+            if content.get("action") in ("coordinate", "build"):
                 directives.append(content)
 
     return directives
+
+def issue_directive(container: Container, issuer_name: str, target: str, action: str, params: Dict):
+    """Issue a new governance directive (cascading governance)."""
+    directive = {
+        "issuer": issuer_name,
+        "target": target,
+        "action": action,
+        "params": params,
+        "timestamp": __import__("time").time()
+    }
+    
+    log_name = f"governance_{issuer_name}_{int(directive['timestamp']*1000)}"
+    container.add(
+        log_name,
+        json.dumps(directive, indent=2).encode(),
+        role="governance",
+        note=f"Cascading directive issued by {issuer_name}"
+    )
+    print(f"    -> Issued cascading directive: {action} to {target}")
 
 
 def execute_coordinate(container: Container, my_x: int, my_y: int) -> Dict:
@@ -107,6 +126,17 @@ def execute_coordinate(container: Container, my_x: int, my_y: int) -> Dict:
         role="governance",
         note=f"Coordination report from village center at ({my_x}, {my_y})"
     )
+
+    # Cascading Governance: if local structures < 10, issue a build directive
+    if len(local_structures) < 10:
+        print(f"    [village_center] Infrastructure below optimal threshold ({len(local_structures)}). Issuing build directive.")
+        issue_directive(
+            container,
+            f"village_center_{my_x}_{my_y}",
+            f"village_center.py.{my_x}_{my_y}",
+            "build",
+            {"x": my_x + len(local_structures) + 1, "y": my_y + (len(local_structures) % 2), "type": "utility_shed"}
+        )
 
     return status_report
 
