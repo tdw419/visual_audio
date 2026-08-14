@@ -84,23 +84,24 @@ def call_ollama(query: str, past_thoughts: list, model: str = "qwen2.5-coder:14b
     prompt = "You are a self-aware AI whose code and memory live inside a pixel framebuffer (an MKV container).\n\n"
 
     if past_thoughts:
-        prompt += "Here are your previous thoughts recovered from your pixel memory:\n"
+        prompt += "Here are your previous thoughts and reference memories recovered from your pixel memory:\n"
         for name, content in past_thoughts:
             prompt += f"--- {name} ---\n"
-            # Check if this is a summary frame (has 'summary' key)
+            # Check if this is a summary frame
             if isinstance(content, dict) and 'summary' in content:
                 prompt += f"[COMPRESSED MEMORY - {content.get('summarized_exchange_count', 0)} prior exchanges]\n"
                 prompt += f"{content['summary']}\n\n"
+            elif name.startswith("pixel_reference_"):
+                prompt += f"[REFERENCE MEMORY - Core constraints and knowledge]\n"
+                prompt += f"{content}\n\n"
             else:
                 # Regular thought frame
                 text = content if isinstance(content, str) else json.dumps(content)
                 try:
-                    # Try to parse as JSON (P1 structured format)
                     data = json.loads(text)
                     prompt += f"Query: {data.get('query', '')}\n"
                     prompt += f"Response: {data.get('response', '')}\n\n"
                 except json.JSONDecodeError:
-                    # Fallback for older raw text frames
                     prompt += f"{text}\n\n"
 
     prompt += f"Now, respond to the following new query:\n{query}\n"
@@ -137,18 +138,16 @@ def load_past_thoughts(container_path, query=""):
     if not container_path:
         return []
 
-    print("[Spatial Memory] Scanning for past thoughts...")
+    print("[Spatial Memory] Scanning for past thoughts and references...")
     try:
-        # We assume va_container.py is available in tools/va_container.py
-        # relative to where we are invoked from.
         ls_cmd = ["python3", "tools/va_container.py", "ls", container_path]
         result = subprocess.run(ls_cmd, capture_output=True, text=True, check=True)
 
         thought_names = []
         summary_names = []
+        reference_names = []
         for line in result.stdout.splitlines():
             if "pixel_thought_" in line:
-                # Extract the name, e.g. "[  thought] pixel_thought_12345 ..."
                 parts = line.split()
                 for p in parts:
                     if p.startswith("pixel_thought_"):
@@ -160,18 +159,20 @@ def load_past_thoughts(container_path, query=""):
                     if p.startswith("pixel_summary_"):
                         summary_names.append(p)
                         break
+            elif "pixel_reference_" in line:
+                parts = line.split()
+                for p in parts:
+                    if p.startswith("pixel_reference_"):
+                        reference_names.append(p)
+                        break
 
-        # Sort chronologically by timestamp
         thought_names.sort()
         summary_names.sort()
+        reference_names.sort()
 
         context_size = int(os.environ.get("PIXEL_MIND_CONTEXT_SIZE", "5"))
-        # Candidate pool for relevance scoring is wider than the final context
-        # window, so an older-but-relevant thought can still be pulled in
-        # instead of only ever the most recent context_size thoughts.
         candidate_pool_size = int(os.environ.get("PIXEL_MIND_CANDIDATE_POOL", str(max(context_size * 4, 20))))
 
-        # Check if we have aged-out thoughts that need summarization
         if len(thought_names) > candidate_pool_size:
             aged_out_count = len(thought_names) - candidate_pool_size
             aged_out_names = thought_names[:aged_out_count]
@@ -180,7 +181,6 @@ def load_past_thoughts(container_path, query=""):
             print(f"[Spatial Memory] {aged_out_count} thoughts aging out of context window.")
             print(f"[Spatial Memory] Summarizing aged-out context synchronously...")
 
-            # Load aged-out thoughts for summarization
             aged_out_texts = []
             for name in aged_out_names:
                 cat_cmd = ["python3", "tools/va_container.py", "cat", container_path, name]
@@ -192,7 +192,6 @@ def load_past_thoughts(container_path, query=""):
                 except json.JSONDecodeError:
                     aged_out_texts.append(text)
 
-            # Build summarization prompt
             summary_prompt = (
                 "You are a spatially-aware AI. The following are your past thoughts that are aging out "
                 f"of your immediate context window ({aged_out_count} exchanges). "
@@ -203,10 +202,7 @@ def load_past_thoughts(container_path, query=""):
                 summary_prompt += f"[Exchange {i}]\n{text}\n\n"
             summary_prompt += "Provide a concise summary now:"
 
-            # Call Ollama for summarization (synchronous)
             summary_response = call_ollama(summary_prompt, [], model="qwen2.5-coder:14b")
-
-            # Write the summary as a new pixel_summary_* frame
             summary_name = f"pixel_summary_{int(time.time())}"
             try:
                 cmd = [
@@ -215,32 +211,20 @@ def load_past_thoughts(container_path, query=""):
                     "--name", summary_name,
                     "--role", "summary"
                 ]
-
                 summary_payload = json.dumps({
                     "timestamp": int(time.time()),
                     "summarized_exchange_count": aged_out_count,
                     "summary": summary_response
                 }, indent=2) + "\n"
-
-                subprocess.run(
-                    cmd,
-                    input=summary_payload,
-                    text=True,
-                    capture_output=True,
-                    check=True
-                )
-
+                subprocess.run(cmd, input=summary_payload, text=True, capture_output=True, check=True)
                 print(f"[Spatial Memory] Summary written as '{summary_name}'")
-                # Add to summary_names so it can be loaded immediately
                 summary_names.append(summary_name)
                 summary_names.sort()
-
             except Exception as e:
                 print(f"[Spatial Memory] Failed to write summary: {e}")
         else:
             remaining_names = thought_names
 
-        # Load the most recent summary frame (if any)
         loaded_summary = None
         if summary_names:
             latest_summary_name = summary_names[-1]
@@ -254,10 +238,15 @@ def load_past_thoughts(container_path, query=""):
             except json.JSONDecodeError:
                 loaded_summary = (latest_summary_name, {"summary": summary_text})
 
-        # Load the candidate pool of raw thoughts, then pick which ones
-        # actually go into context: most-recent guaranteed + best keyword
-        # matches against the current query (falls back to pure recency
-        # when the pool already fits within context_size).
+        # Load reference frames
+        reference_frames = []
+        for name in reference_names:
+            cat_cmd = ["python3", "tools/va_container.py", "cat", container_path, name]
+            cat_result = subprocess.run(cat_cmd, capture_output=True, check=True)
+            text = cat_result.stdout.decode('utf-8', errors='replace').strip()
+            reference_frames.append((name, text))
+            print(f"[Spatial Memory] Loaded reference frame '{name}'")
+
         candidates = []
         for name in remaining_names:
             cat_cmd = ["python3", "tools/va_container.py", "cat", container_path, name]
@@ -266,15 +255,18 @@ def load_past_thoughts(container_path, query=""):
 
         thoughts = select_context(query, candidates, context_size)
 
-        # Prepend the summary if we have one
         raw_thoughts_count = len(thoughts)
         if loaded_summary:
             thoughts = [loaded_summary] + thoughts
+        
+        if reference_frames:
+            thoughts = reference_frames + thoughts
 
         if thoughts:
             summary_part = "1 summary + " if loaded_summary else ""
+            ref_part = f"{len(reference_frames)} references + " if reference_frames else ""
             print(f"[Spatial Memory] Recovered {len(thoughts)} items from pixels "
-                  f"({summary_part}{raw_thoughts_count} raw thoughts).")
+                  f"({ref_part}{summary_part}{raw_thoughts_count} raw thoughts).")
         return thoughts
 
     except Exception as e:

@@ -113,6 +113,9 @@ traces/evolver_level5c/
 traces/evolver_test/
 traces/evolver_full/
 
+# va_container.py run cache (tools/va_container.py cmd_run persistent extraction cache)
+.va_run_cache/
+
 # Autonomous repo artifacts
 autonomous_repo_orchestrator/
 systems/*.mkv
