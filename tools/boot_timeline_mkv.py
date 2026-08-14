@@ -372,7 +372,8 @@ async def capture_boot_timeline(
     except FileNotFoundError:
         pass
     
-    # Build QEMU command with QMP
+    # Build QEMU command with QMP + serial output capture
+    # Use -serial mon:stdio to get console on stdout, -nographic still needed
     qemu_cmd_full = qemu_cmd + [
         "-qmp", f"unix:{qmp_socket},server,nowait",
         "-nographic"
@@ -380,7 +381,7 @@ async def capture_boot_timeline(
     
     print(f"Starting QEMU: {' '.join(qemu_cmd_full)}")
     
-    # Start QEMU subprocess
+    # Start QEMU subprocess with console capture
     import subprocess
     qemu_proc = subprocess.Popen(
         qemu_cmd_full,
@@ -389,6 +390,31 @@ async def capture_boot_timeline(
         stderr=subprocess.PIPE,
         text=True
     )
+    
+    # Console reader task for pattern detection
+    console_buffer = []
+    console_task = None
+    
+    async def read_console():
+        """Read QEMU stdout for console patterns."""
+        nonlocal console_buffer
+        try:
+            while qemu_proc.poll() is None:
+                line = qemu_proc.stdout.readline()
+                if not line:
+                    await asyncio.sleep(0.01)
+                    continue
+                
+                # Detect milestones from console output
+                milestone = detector.check_console_pattern(line)
+                if milestone:
+                    detector.add_milestone(milestone)
+                
+                console_buffer.append(line)
+                if len(console_buffer) > 1000:  # Keep last 1000 lines
+                    console_buffer.pop(0)
+        except Exception as e:
+            print(f"Console reader error: {e}")
     
     # Wait for QMP socket to appear
     print("Waiting for QMP socket to appear...")
@@ -424,6 +450,10 @@ async def capture_boot_timeline(
         frame_index=0,
         timestamp=0.0
     ))
+    
+    # Start console reader task
+    console_task = asyncio.create_task(read_console())
+    print("Console pattern detection enabled")
     
     # Capture loop
     frames_data = []
@@ -536,6 +566,13 @@ async def capture_boot_timeline(
     
     finally:
         # Cleanup
+        if console_task:
+            console_task.cancel()
+            try:
+                await console_task
+            except asyncio.CancelledError:
+                pass
+        
         try:
             await client.execute({"execute": "quit"})
         except:
