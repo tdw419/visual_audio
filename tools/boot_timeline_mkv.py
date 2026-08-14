@@ -33,6 +33,10 @@ import numpy as np
 from dense_encoder_video import encode_mkv, decode_mkv, md5_hash
 
 
+# Hilbert cache for coordinate mapping
+_hilbert_cache = {}
+
+
 # ============================================================================
 # Milestone Detection
 # ============================================================================
@@ -256,15 +260,19 @@ def map_ram_to_pixels(ram_data: bytes, width: int = 256, height: int = 256) -> n
     """
     Map RAM bytes to 2D pixel grid using Hilbert curve.
     
+    Preserves spatial locality: contiguous RAM → neighboring pixels.
+    Memory pages or C-structures become recognizable 2D patterns.
+    
     Args:
-        ram_data: Raw memory bytes
+        ram_data: Raw RAM bytes
         width: Pixel grid width
         height: Pixel grid height
     
     Returns:
         RGB24 pixel array (height × width × 3)
     """
-    required_bytes = width * height * 3
+    total_pixels = width * height
+    required_bytes = total_pixels * 3
     
     # Pad or truncate to exact size
     if len(ram_data) < required_bytes:
@@ -272,10 +280,57 @@ def map_ram_to_pixels(ram_data: bytes, width: int = 256, height: int = 256) -> n
     else:
         ram_data = ram_data[:required_bytes]
     
-    # Convert to RGB pixels
-    pixels = np.frombuffer(ram_data, dtype=np.uint8).reshape(height, width, 3)
+    # Vectorized Hilbert mapping with cache
+    key = (width, height)
+    if key not in _hilbert_cache:
+        n = max(width, height)
+        y_coords = np.zeros(total_pixels, dtype=np.int32)
+        x_coords = np.zeros(total_pixels, dtype=np.int32)
+        for pixel_idx in range(total_pixels):
+            x, y = hilbert_d2xy(n, pixel_idx)
+            x_coords[pixel_idx] = x
+            y_coords[pixel_idx] = y
+        valid = (x_coords < width) & (y_coords < height)
+        _hilbert_cache[key] = (y_coords[valid], x_coords[valid], valid)
+    
+    y_coords, x_coords, valid = _hilbert_cache[key]
+    
+    pixels = np.zeros((height, width, 3), dtype=np.uint8)
+    ram_pixels = np.frombuffer(ram_data, dtype=np.uint8).reshape(total_pixels, 3)
+    pixels[y_coords, x_coords] = ram_pixels[valid]
     
     return pixels
+
+
+def map_full_ram_to_tiles(ram_data: bytes, tile_width: int, tile_height: int) -> Tuple[List[bytes], int]:
+    """
+    Map full RAM to tiled pixel grids for complete memory capture.
+    
+    Instead of truncating to first N bytes, tile entire RAM across multiple
+    frames. Each tile covers (tile_width × tile_height × 3) bytes of RAM.
+    
+    Args:
+        ram_data: Raw RAM bytes (full guest memory dump)
+        tile_width: Width of each tile in pixels
+        tile_height: Height of each tile in pixels
+    
+    Returns:
+        (tile_frames_bytes, num_tiles): List of encoded tile frames, number of tiles
+    """
+    tile_size = tile_width * tile_height * 3
+    num_tiles = (len(ram_data) + tile_size - 1) // tile_size
+    
+    # Pad to multiple of tile_size
+    if len(ram_data) % tile_size != 0:
+        ram_data = ram_data + b'\x00' * (tile_size - (len(ram_data) % tile_size))
+    
+    tile_frames_bytes = []
+    for tile_idx in range(num_tiles):
+        tile_ram = ram_data[tile_idx * tile_size : (tile_idx + 1) * tile_size]
+        pixels = map_ram_to_pixels(tile_ram, tile_width, tile_height)
+        tile_frames_bytes.append(pixels.tobytes())
+    
+    return tile_frames_bytes, num_tiles
 
 
 # ============================================================================
@@ -289,7 +344,8 @@ async def capture_boot_timeline(
     capture_delay: float = 0.5,
     pixel_width: int = 256,
     pixel_height: int = 256,
-    boot_timeout: float = 60.0
+    boot_timeout: float = 60.0,
+    use_tiling: bool = False
 ) -> Tuple[str, List[Milestone]]:
     """
     Capture boot process as milestone-based MKV video.
@@ -302,6 +358,7 @@ async def capture_boot_timeline(
         pixel_width: Width of pixel grid for memory visualization
         pixel_height: Height of pixel grid
         boot_timeout: Maximum time to wait for boot completion
+        use_tiling: If True, tile entire RAM across multiple frames per capture
     
     Returns:
         (mkv_path, milestones_list)
@@ -378,6 +435,7 @@ async def capture_boot_timeline(
     print(f"Max milestones: {max_milestones}")
     print(f"Capture delay: {capture_delay}s")
     print(f"Pixel grid: {pixel_width}×{pixel_height}")
+    print(f"Full-RAM tiling: {'ON' if use_tiling else 'OFF'}")
     print("=" * 50)
     
     try:
@@ -397,33 +455,66 @@ async def capture_boot_timeline(
             try:
                 dump_size = await client.dump_memory(dump_path)
                 
-                # Read and map to pixels
+                # Read full RAM dump (skip ELF header)
                 with open(dump_path, "rb") as f:
-                    # Skip ELF header (first 64 bytes typically)
                     f.seek(64)
                     ram_data = f.read()
                 
-                # Map to pixel grid
-                pixels = map_ram_to_pixels(ram_data, pixel_width, pixel_height)
-                
-                # Compute delta against previous frame
-                if last_frame_data is not None:
-                    delta_pixels = pixels ^ last_frame_data
-                    # Check if anything changed
-                    if not np.any(delta_pixels):
-                        print(f"Frame {frame_index}: no change, skipping")
-                        await client.resume_guest()
-                        await asyncio.sleep(capture_delay)
-                        continue
+                # Map to pixel grid (tiling or single frame)
+                if use_tiling:
+                    tile_frames_bytes, num_tiles = map_full_ram_to_tiles(
+                        ram_data, pixel_width, pixel_height
+                    )
+                    print(f"Frame {frame_index}: captured {dump_size} bytes RAM "
+                          f"→ {num_tiles} tiles ({len(ram_data) / (1024*1024):.1f} MB)")
+                    
+                    # Compute deltas per tile
+                    if last_frame_data is not None and len(last_frame_data) == num_tiles:
+                        unchanged_tiles = 0
+                        for tile_idx in range(num_tiles):
+                            current_tile = np.frombuffer(tile_frames_bytes[tile_idx], dtype=np.uint8)
+                            prev_tile = np.frombuffer(last_frame_data[tile_idx], dtype=np.uint8)
+                            delta_tile = np.bitwise_xor(current_tile, prev_tile)
+                            tile_frames_bytes[tile_idx] = delta_tile.tobytes()
+                            if not np.any(delta_tile):
+                                unchanged_tiles += 1
+                        
+                        if unchanged_tiles == num_tiles:
+                            print(f"Frame {frame_index}: all {num_tiles} tiles unchanged, skipping")
+                            await client.resume_guest()
+                            await asyncio.sleep(capture_delay)
+                            continue
+                    else:
+                        # First capture or RAM size changed
+                        pass
+                    
+                    # Store all tiles for this frame
+                    for tile_bytes in tile_frames_bytes:
+                        frames_data.append(tile_bytes)
+                    
+                    last_frame_data = tile_frames_bytes.copy()
                 else:
-                    delta_pixels = pixels
-                
-                # Store frame (use delta for compression)
-                frames_data.append(delta_pixels.tobytes())
-                last_frame_data = pixels.copy()
-                
-                print(f"Frame {frame_index}: captured {dump_size} bytes RAM, "
-                      f"{len(delta_pixels.tobytes())} bytes pixels")
+                    # Legacy single-frame mode (truncated)
+                    pixels = map_ram_to_pixels(ram_data, pixel_width, pixel_height)
+                    
+                    # Compute delta against previous frame
+                    if last_frame_data is not None:
+                        delta_pixels = pixels ^ last_frame_data
+                        # Check if anything changed
+                        if not np.any(delta_pixels):
+                            print(f"Frame {frame_index}: no change, skipping")
+                            await client.resume_guest()
+                            await asyncio.sleep(capture_delay)
+                            continue
+                    else:
+                        delta_pixels = pixels
+                    
+                    # Store frame (use delta for compression)
+                    frames_data.append(delta_pixels.tobytes())
+                    last_frame_data = [pixels.tobytes()]
+                    
+                    print(f"Frame {frame_index}: captured {dump_size} bytes RAM, "
+                          f"{len(delta_pixels.tobytes())} bytes pixels (truncated)")
                 
                 frame_index += 1
                 
@@ -479,7 +570,10 @@ async def capture_boot_timeline(
         "pixel_height": pixel_height,
         "qemu_cmd": " ".join(qemu_cmd),
         "capture_delay": capture_delay,
+        "use_tiling": use_tiling,
     }
+    if use_tiling:
+        metadata["tiles_per_capture"] = (last_frame_data and len(last_frame_data)) or 0
     
     # Encode MKV
     mkv_path, manifest = encode_mkv(
@@ -545,6 +639,11 @@ def main():
         help="Boot timeout (seconds)"
     )
     parser.add_argument(
+        "--tiling",
+        action="store_true",
+        help="Enable full-RAM tiling (capture entire RAM across multiple frames)"
+    )
+    parser.add_argument(
         "-h", "--help",
         action="store_true",
         help="Show help message"
@@ -573,7 +672,8 @@ def main():
         capture_delay=args.delay,
         pixel_width=args.pixel_width,
         pixel_height=args.pixel_height,
-        boot_timeout=args.timeout
+        boot_timeout=args.timeout,
+        use_tiling=args.tiling
     ))
     
     print(f"\n✓ Boot timeline captured to: {mkv_path}")
