@@ -1,0 +1,17 @@
+{
+  "word": "speaking",
+  "phonemes": [
+    "S",
+    "P",
+    "IY",
+    "K",
+    "IH",
+    "NG"
+  ],
+  "duration": 0.09505668934240363,
+  "voice_profile": {
+    "F1": 398.0,
+    "F2": 2484.0,
+    "voice": "fritz"
+  }
+}

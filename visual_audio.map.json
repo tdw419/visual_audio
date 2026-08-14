@@ -1,30 +1,32 @@
 {
   "container": "visual_audio.mkv",
-  "order": 10,
-  "grid_side": 1024,
+  "envelope": "Cartridge",
+  "order": 8,
+  "grid_side": 256,
+  "capacity": 65536,
   "entries": [
     {
-      "name": "bootstrap/va_container.py",
-      "role": "bootstrap",
+      "name": "pixel_thought_1786676352",
+      "role": "thought",
       "x": 0,
       "y": 0,
-      "frame_start": 451,
+      "frame_start": 1,
       "frame_count": 1
     },
     {
-      "name": "kernel",
-      "role": "kernel",
+      "name": "pixel_thought_1786677239",
+      "role": "thought",
       "x": 1,
       "y": 0,
-      "frame_start": 0,
-      "frame_count": 54
+      "frame_start": 2,
+      "frame_count": 1
     },
     {
-      "name": "disk",
-      "role": "disk",
+      "name": "bootstrap/va_container.py",
+      "role": "bootstrap",
       "x": 1,
       "y": 1,
-      "frame_start": 54,
+      "frame_start": 3,
       "frame_count": 1
     },
     {
@@ -32,703 +34,703 @@
       "role": "semantic_code",
       "x": 0,
       "y": 1,
-      "frame_start": 55,
-      "frame_count": 1
-    },
-    {
-      "name": "qemu_bootstrap",
-      "role": "emulator",
-      "x": 0,
-      "y": 2,
-      "frame_start": 56,
-      "frame_count": 266
-    },
-    {
-      "name": "linux/kernel/Image",
-      "role": "kernel",
-      "x": 0,
-      "y": 3,
-      "frame_start": 322,
-      "frame_count": 54
-    },
-    {
-      "name": "semantic_cpu_emulator.py.pixel",
-      "role": "code",
-      "x": 1,
-      "y": 3,
-      "frame_start": 432,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_build.py.pixel",
-      "role": "code",
-      "x": 1,
-      "y": 2,
-      "frame_start": 439,
-      "frame_count": 2
-    },
-    {
-      "name": "ollama_prompt.py.pixel",
-      "role": "code",
-      "x": 2,
-      "y": 2,
-      "frame_start": 456,
-      "frame_count": 2
-    },
-    {
-      "name": "boot_ubuntu_from_mkv.py.pixel",
-      "role": "code",
-      "x": 2,
-      "y": 3,
-      "frame_start": 458,
-      "frame_count": 1
-    },
-    {
-      "name": "va_container.py.pixel",
-      "role": "code",
-      "x": 3,
-      "y": 3,
-      "frame_start": 494,
-      "frame_count": 2
-    },
-    {
-      "name": "inside/first_words_1786558217.txt",
-      "role": "message",
-      "x": 3,
-      "y": 2,
-      "frame_start": 392,
+      "frame_start": 4,
       "frame_count": 1
     },
     {
       "name": "utils.py",
       "role": "tools",
-      "x": 3,
-      "y": 1,
-      "frame_start": 394,
+      "x": 0,
+      "y": 2,
+      "frame_start": 5,
       "frame_count": 1
     },
     {
       "name": "test_utils.py",
       "role": "tools",
-      "x": 2,
-      "y": 1,
-      "frame_start": 395,
-      "frame_count": 1
-    },
-    {
-      "name": "hermes_constants.py",
-      "role": "tools",
-      "x": 2,
-      "y": 0,
-      "frame_start": 396,
+      "x": 0,
+      "y": 3,
+      "frame_start": 6,
       "frame_count": 1
     },
     {
       "name": "test_multi.py",
       "role": "tools",
-      "x": 3,
-      "y": 0,
-      "frame_start": 397,
+      "x": 1,
+      "y": 3,
+      "frame_start": 7,
       "frame_count": 1
     },
     {
       "name": "pixel_hermes_bridge.py",
       "role": "tools",
-      "x": 4,
-      "y": 0,
-      "frame_start": 402,
+      "x": 1,
+      "y": 2,
+      "frame_start": 8,
       "frame_count": 1
     },
     {
       "name": "pixel_hermes_bridge_test.py",
       "role": "tools",
-      "x": 4,
-      "y": 1,
-      "frame_start": 403,
+      "x": 2,
+      "y": 2,
+      "frame_start": 9,
       "frame_count": 1
     },
     {
       "name": "pixel_hermes_bridge_spatial.py",
       "role": "tools",
-      "x": 5,
-      "y": 1,
-      "frame_start": 407,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786619391",
-      "role": "thought",
-      "x": 5,
-      "y": 0,
-      "frame_start": 405,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786627180",
-      "role": "thought",
-      "x": 6,
-      "y": 0,
-      "frame_start": 406,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786627224",
-      "role": "thought",
-      "x": 7,
-      "y": 0,
-      "frame_start": 408,
+      "x": 2,
+      "y": 3,
+      "frame_start": 10,
       "frame_count": 1
     },
     {
       "name": "pixel_hermes_bridge_context.py",
       "role": "tools",
-      "x": 7,
-      "y": 1,
-      "frame_start": 467,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786627600",
-      "role": "thought",
-      "x": 6,
-      "y": 1,
-      "frame_start": 410,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786627606",
-      "role": "thought",
-      "x": 6,
-      "y": 2,
-      "frame_start": 411,
+      "x": 3,
+      "y": 3,
+      "frame_start": 11,
       "frame_count": 1
     },
     {
       "name": "pixel_mind_repl.py",
       "role": "tools",
-      "x": 7,
+      "x": 3,
       "y": 2,
-      "frame_start": 490,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786627751",
-      "role": "thought",
-      "x": 7,
-      "y": 3,
-      "frame_start": 413,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786628034",
-      "role": "thought",
-      "x": 6,
-      "y": 3,
-      "frame_start": 414,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786635228",
-      "role": "thought",
-      "x": 5,
-      "y": 3,
-      "frame_start": 426,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786635266",
-      "role": "thought",
-      "x": 5,
-      "y": 2,
-      "frame_start": 428,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786637137",
-      "role": "thought",
-      "x": 4,
-      "y": 2,
-      "frame_start": 435,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786637189",
-      "role": "thought",
-      "x": 4,
-      "y": 3,
-      "frame_start": 436,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786637209",
-      "role": "thought",
-      "x": 4,
-      "y": 4,
-      "frame_start": 437,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786637213",
-      "role": "thought",
-      "x": 4,
-      "y": 5,
-      "frame_start": 438,
+      "frame_start": 12,
       "frame_count": 1
     },
     {
       "name": "bootstrap/pixel_hermes_bridge_context.py",
       "role": "bootstrap",
-      "x": 5,
-      "y": 5,
-      "frame_start": 465,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786641697",
-      "role": "thought",
-      "x": 5,
-      "y": 4,
-      "frame_start": 447,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_summary_1786641722",
-      "role": "summary",
-      "x": 6,
-      "y": 4,
-      "frame_start": 449,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786641727",
-      "role": "thought",
-      "x": 7,
-      "y": 4,
-      "frame_start": 450,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786671559",
-      "role": "thought",
-      "x": 7,
-      "y": 5,
-      "frame_start": 460,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786672678",
-      "role": "thought",
-      "x": 6,
-      "y": 5,
-      "frame_start": 461,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786672710",
-      "role": "thought",
-      "x": 6,
-      "y": 6,
-      "frame_start": 462,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786672777",
-      "role": "thought",
-      "x": 7,
-      "y": 6,
-      "frame_start": 463,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_reference_agents_md",
-      "role": "reference",
-      "x": 7,
-      "y": 7,
-      "frame_start": 464,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786673190",
-      "role": "thought",
-      "x": 6,
-      "y": 7,
-      "frame_start": 466,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786673882",
-      "role": "thought",
-      "x": 5,
-      "y": 7,
-      "frame_start": 468,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_summary_1786674970",
-      "role": "summary",
-      "x": 5,
-      "y": 6,
-      "frame_start": 469,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786674993",
-      "role": "thought",
-      "x": 4,
-      "y": 6,
-      "frame_start": 470,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786676052",
-      "role": "thought",
-      "x": 4,
-      "y": 7,
-      "frame_start": 471,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786676142",
-      "role": "thought",
       "x": 3,
-      "y": 7,
-      "frame_start": 472,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786676335",
-      "role": "thought",
-      "x": 2,
-      "y": 7,
-      "frame_start": 473,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_verification_fix",
-      "role": "content",
-      "x": 2,
-      "y": 6,
-      "frame_start": 474,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786676466",
-      "role": "thought",
-      "x": 3,
-      "y": 6,
-      "frame_start": 475,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786676482",
-      "role": "thought",
-      "x": 3,
-      "y": 5,
-      "frame_start": 476,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786676642",
-      "role": "thought",
-      "x": 3,
-      "y": 4,
-      "frame_start": 477,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786676700",
-      "role": "thought",
-      "x": 2,
-      "y": 4,
-      "frame_start": 478,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786676714",
-      "role": "thought",
-      "x": 2,
-      "y": 5,
-      "frame_start": 479,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786676810",
-      "role": "thought",
-      "x": 1,
-      "y": 5,
-      "frame_start": 480,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786676905",
-      "role": "thought",
-      "x": 1,
-      "y": 4,
-      "frame_start": 481,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_nondeterministic_judge_case",
-      "role": "content",
-      "x": 0,
-      "y": 4,
-      "frame_start": 482,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_spatial_write_path_live",
-      "role": "thought",
-      "x": 0,
-      "y": 5,
-      "frame_start": 483,
+      "y": 1,
+      "frame_start": 13,
       "frame_count": 1
     },
     {
       "name": "tools/va_container.py",
       "role": "tools",
-      "x": 0,
-      "y": 6,
-      "frame_start": 486,
+      "x": 2,
+      "y": 1,
+      "frame_start": 14,
       "frame_count": 1
     },
     {
       "name": "tools/mkv_infinite_map.py",
       "role": "tools",
-      "x": 1,
-      "y": 6,
-      "frame_start": 487,
+      "x": 2,
+      "y": 0,
+      "frame_start": 15,
       "frame_count": 1
     },
     {
       "name": "tools/dense_encoder.py",
       "role": "tools",
-      "x": 1,
-      "y": 7,
-      "frame_start": 488,
-      "frame_count": 1
-    },
-    {
-      "name": "tools/BOOTSTRAP_REQUIREMENTS.md",
-      "role": "doc",
-      "x": 0,
-      "y": 7,
-      "frame_start": 489,
+      "x": 3,
+      "y": 0,
+      "frame_start": 16,
       "frame_count": 1
     },
     {
       "name": "pixel_hermes_demo.py",
       "role": "tools",
-      "x": 0,
-      "y": 8,
-      "frame_start": 491,
+      "x": 4,
+      "y": 0,
+      "frame_start": 17,
       "frame_count": 1
     },
     {
       "name": "pixel_self_improve.py",
       "role": "tools",
-      "x": 0,
-      "y": 9,
-      "frame_start": 492,
+      "x": 4,
+      "y": 1,
+      "frame_start": 18,
       "frame_count": 1
     },
     {
       "name": "pixel_self_aware_agent.py",
       "role": "tools",
-      "x": 1,
-      "y": 9,
-      "frame_start": 493,
+      "x": 5,
+      "y": 1,
+      "frame_start": 19,
       "frame_count": 1
     },
     {
       "name": "pixel_tool_registry.py",
       "role": "tools",
-      "x": 1,
-      "y": 8,
-      "frame_start": 496,
+      "x": 5,
+      "y": 0,
+      "frame_start": 20,
       "frame_count": 1
     },
     {
       "name": "pixel_os_listener.py",
       "role": "tools",
-      "x": 2,
-      "y": 8,
-      "frame_start": 497,
+      "x": 6,
+      "y": 0,
+      "frame_start": 21,
       "frame_count": 1
     },
     {
       "name": "pixel_screen.py",
       "role": "tools",
-      "x": 3,
-      "y": 8,
-      "frame_start": 498,
+      "x": 7,
+      "y": 0,
+      "frame_start": 22,
       "frame_count": 1
     },
     {
       "name": "glyph_isa_v2.py",
       "role": "tools",
-      "x": 3,
-      "y": 9,
-      "frame_start": 499,
+      "x": 7,
+      "y": 1,
+      "frame_start": 23,
       "frame_count": 1
     },
     {
       "name": "spoken_screen.py",
       "role": "tools",
-      "x": 2,
-      "y": 9,
-      "frame_start": 500,
+      "x": 6,
+      "y": 1,
+      "frame_start": 24,
       "frame_count": 1
     },
     {
       "name": "boot_manifest.py",
       "role": "tools",
-      "x": 2,
-      "y": 10,
-      "frame_start": 501,
+      "x": 6,
+      "y": 2,
+      "frame_start": 25,
       "frame_count": 1
     },
     {
       "name": "wordbase_compat.py",
       "role": "tools",
-      "x": 3,
-      "y": 10,
-      "frame_start": 502,
+      "x": 7,
+      "y": 2,
+      "frame_start": 26,
       "frame_count": 1
     },
     {
       "name": "word_compiler.py",
       "role": "tools",
-      "x": 3,
-      "y": 11,
-      "frame_start": 503,
+      "x": 7,
+      "y": 3,
+      "frame_start": 27,
       "frame_count": 1
     },
     {
       "name": "speak.py",
       "role": "tools",
-      "x": 2,
-      "y": 11,
-      "frame_start": 504,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_summary_1786680386",
-      "role": "summary",
-      "x": 1,
-      "y": 11,
-      "frame_start": 505,
-      "frame_count": 1
-    },
-    {
-      "name": "pixel_thought_1786680396",
-      "role": "thought",
-      "x": 1,
-      "y": 10,
-      "frame_start": 506,
+      "x": 6,
+      "y": 3,
+      "frame_start": 28,
       "frame_count": 1
     },
     {
       "name": "src/upic_engine.py",
       "role": "tools",
-      "x": 0,
-      "y": 10,
-      "frame_start": 507,
+      "x": 5,
+      "y": 3,
+      "frame_start": 29,
       "frame_count": 1
     },
     {
       "name": "src/codec/phy.py",
       "role": "tools",
-      "x": 0,
-      "y": 11,
-      "frame_start": 508,
+      "x": 5,
+      "y": 2,
+      "frame_start": 30,
       "frame_count": 1
     },
     {
       "name": "src/codec/phy_ecc.py",
       "role": "tools",
-      "x": 0,
-      "y": 12,
-      "frame_start": 509,
+      "x": 4,
+      "y": 2,
+      "frame_start": 31,
       "frame_count": 1
     },
     {
       "name": "src/codec/phoneme_ecc.py",
       "role": "tools",
-      "x": 1,
-      "y": 12,
-      "frame_start": 510,
+      "x": 4,
+      "y": 3,
+      "frame_start": 32,
       "frame_count": 1
     },
     {
       "name": "tools/wordbase.py",
       "role": "tools",
-      "x": 1,
-      "y": 13,
-      "frame_start": 511,
+      "x": 4,
+      "y": 4,
+      "frame_start": 33,
       "frame_count": 1
     },
     {
       "name": "tools/neural_synthesis.py",
       "role": "tools",
-      "x": 0,
-      "y": 13,
-      "frame_start": 512,
+      "x": 4,
+      "y": 5,
+      "frame_start": 34,
       "frame_count": 1
     },
     {
       "name": "tools/ipa_to_arpabet.py",
       "role": "tools",
-      "x": 0,
-      "y": 14,
-      "frame_start": 513,
+      "x": 5,
+      "y": 5,
+      "frame_start": 35,
       "frame_count": 1
     },
     {
       "name": "tools/ipa_tokenizer.py",
       "role": "tools",
-      "x": 0,
-      "y": 15,
-      "frame_start": 514,
+      "x": 5,
+      "y": 4,
+      "frame_start": 36,
       "frame_count": 1
     },
     {
       "name": "tools/xsampa_to_arpabet.py",
       "role": "tools",
-      "x": 1,
-      "y": 15,
-      "frame_start": 515,
+      "x": 6,
+      "y": 4,
+      "frame_start": 37,
       "frame_count": 1
     },
     {
       "name": "src/pixel_tokenizer.py",
       "role": "tools",
-      "x": 1,
-      "y": 14,
-      "frame_start": 516,
+      "x": 7,
+      "y": 4,
+      "frame_start": 38,
       "frame_count": 1
     },
     {
       "name": "tools/mkv_glyph_emulator.py",
       "role": "tools",
-      "x": 2,
-      "y": 14,
-      "frame_start": 517,
+      "x": 7,
+      "y": 5,
+      "frame_start": 39,
       "frame_count": 1
     },
     {
       "name": "tools/phonemes.py",
       "role": "tools",
-      "x": 2,
-      "y": 15,
-      "frame_start": 518,
+      "x": 6,
+      "y": 5,
+      "frame_start": 40,
       "frame_count": 1
     },
     {
-      "name": "tools/_import_test.py",
+      "name": "terrain_chunk_6_6",
+      "role": "terrain_tile",
+      "x": 6,
+      "y": 6,
+      "frame_start": 41,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_7_6",
+      "role": "terrain_tile",
+      "x": 7,
+      "y": 6,
+      "frame_start": 42,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_7_7",
+      "role": "terrain_tile",
+      "x": 7,
+      "y": 7,
+      "frame_start": 43,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_6_7",
+      "role": "terrain_tile",
+      "x": 6,
+      "y": 7,
+      "frame_start": 44,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_5_7",
+      "role": "terrain_tile",
+      "x": 5,
+      "y": 7,
+      "frame_start": 45,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_5_6",
+      "role": "terrain_tile",
+      "x": 5,
+      "y": 6,
+      "frame_start": 46,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_4_6",
+      "role": "terrain_tile",
+      "x": 4,
+      "y": 6,
+      "frame_start": 47,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_4_7",
+      "role": "terrain_tile",
+      "x": 4,
+      "y": 7,
+      "frame_start": 48,
+      "frame_count": 1
+    },
+    {
+      "name": "visual_audio_container.py",
+      "role": "tools",
+      "x": 3,
+      "y": 7,
+      "frame_start": 49,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_build.py.pixel",
+      "role": "code",
+      "x": 2,
+      "y": 7,
+      "frame_start": 50,
+      "frame_count": 2
+    },
+    {
+      "name": "terrain_chunk_7_8",
+      "role": "terrain_tile",
+      "x": 2,
+      "y": 6,
+      "frame_start": 52,
+      "frame_count": 1
+    },
+    {
+      "name": "post_office.json.7_8",
+      "role": "architecture",
+      "x": 3,
+      "y": 6,
+      "frame_start": 53,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_8_7",
+      "role": "terrain_tile",
+      "x": 3,
+      "y": 5,
+      "frame_start": 54,
+      "frame_count": 1
+    },
+    {
+      "name": "cognitive_payload.json.8_7",
+      "role": "architecture",
+      "x": 3,
+      "y": 4,
+      "frame_start": 55,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_8_8",
+      "role": "terrain_tile",
+      "x": 2,
+      "y": 4,
+      "frame_start": 56,
+      "frame_count": 1
+    },
+    {
+      "name": "village_center.py.8_8",
+      "role": "architecture",
+      "x": 2,
+      "y": 5,
+      "frame_start": 57,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_8_9",
+      "role": "terrain_tile",
+      "x": 1,
+      "y": 5,
+      "frame_start": 58,
+      "frame_count": 1
+    },
+    {
+      "name": "ai_council.py.8_9",
+      "role": "architecture",
+      "x": 1,
+      "y": 4,
+      "frame_start": 59,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_9_8",
+      "role": "terrain_tile",
+      "x": 0,
+      "y": 4,
+      "frame_start": 60,
+      "frame_count": 1
+    },
+    {
+      "name": "codec_adapter.py.9_8",
+      "role": "architecture",
+      "x": 0,
+      "y": 5,
+      "frame_start": 61,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_8_6",
+      "role": "terrain_tile",
+      "x": 0,
+      "y": 6,
+      "frame_start": 62,
+      "frame_count": 1
+    },
+    {
+      "name": "cognitive_payload.json.8_6",
+      "role": "architecture",
+      "x": 1,
+      "y": 6,
+      "frame_start": 63,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_9_7",
+      "role": "terrain_tile",
+      "x": 1,
+      "y": 7,
+      "frame_start": 64,
+      "frame_count": 1
+    },
+    {
+      "name": "ai_council.py.9_7",
+      "role": "architecture",
+      "x": 0,
+      "y": 7,
+      "frame_start": 65,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_3_6",
+      "role": "terrain_tile",
+      "x": 0,
+      "y": 8,
+      "frame_start": 66,
+      "frame_count": 1
+    },
+    {
+      "name": "ai_council.py.3_6",
+      "role": "architecture",
+      "x": 0,
+      "y": 9,
+      "frame_start": 67,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_5_8",
+      "role": "terrain_tile",
+      "x": 1,
+      "y": 9,
+      "frame_start": 68,
+      "frame_count": 1
+    },
+    {
+      "name": "neural_synthesis.py.5_8",
+      "role": "architecture",
+      "x": 1,
+      "y": 8,
+      "frame_start": 69,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_5_9",
+      "role": "terrain_tile",
+      "x": 2,
+      "y": 8,
+      "frame_start": 70,
+      "frame_count": 1
+    },
+    {
+      "name": "ai_council.py.5_9",
+      "role": "architecture",
+      "x": 3,
+      "y": 8,
+      "frame_start": 71,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_log_1786712621",
+      "role": "governance",
+      "x": 3,
+      "y": 9,
+      "frame_start": 72,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_log_1786712622",
+      "role": "governance",
+      "x": 2,
+      "y": 9,
+      "frame_start": 73,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_log_1786712623",
+      "role": "governance",
+      "x": 2,
+      "y": 10,
+      "frame_start": 74,
+      "frame_count": 1
+    },
+    {
+      "name": "ollama_prompt.py.pixel",
+      "role": "code",
+      "x": 3,
+      "y": 10,
+      "frame_start": 75,
+      "frame_count": 2
+    },
+    {
+      "name": "governance_log_1786712655",
+      "role": "governance",
+      "x": 3,
+      "y": 11,
+      "frame_start": 77,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_log_1786712656",
+      "role": "governance",
+      "x": 2,
+      "y": 11,
+      "frame_start": 78,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_log_1786712657",
+      "role": "governance",
+      "x": 1,
+      "y": 11,
+      "frame_start": 79,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_post_office_1786712686369652",
+      "role": "governance",
+      "x": 1,
+      "y": 10,
+      "frame_start": 80,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_cognitive_payload_1786712686725017",
+      "role": "governance",
+      "x": 0,
+      "y": 10,
+      "frame_start": 81,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_1786712687117335",
+      "role": "governance",
+      "x": 0,
+      "y": 11,
+      "frame_start": 82,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_1786712687512201",
+      "role": "governance",
+      "x": 0,
+      "y": 12,
+      "frame_start": 83,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_codec_adapter_1786712687883182",
+      "role": "governance",
+      "x": 1,
+      "y": 12,
+      "frame_start": 84,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_cognitive_payload_1786712688261122",
+      "role": "governance",
+      "x": 1,
+      "y": 13,
+      "frame_start": 85,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_1786712688629295",
+      "role": "governance",
+      "x": 0,
+      "y": 13,
+      "frame_start": 86,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_1786712688998950",
+      "role": "governance",
+      "x": 0,
+      "y": 14,
+      "frame_start": 87,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_neural_synthesis_1786712689374068",
+      "role": "governance",
+      "x": 0,
+      "y": 15,
+      "frame_start": 88,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_1786712689723124",
+      "role": "governance",
+      "x": 1,
+      "y": 15,
+      "frame_start": 89,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/pixel_explorer_agent.py",
+      "role": "tools",
+      "x": 1,
+      "y": 14,
+      "frame_start": 90,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/city_planner_agent.py",
+      "role": "tools",
+      "x": 2,
+      "y": 14,
+      "frame_start": 91,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/spatial_governor.py",
+      "role": "tools",
+      "x": 2,
+      "y": 15,
+      "frame_start": 92,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/procedural_generator.py",
       "role": "tools",
       "x": 3,
       "y": 15,
-      "frame_start": 520,
+      "frame_start": 93,
       "frame_count": 1
     },
     {
@@ -736,7 +738,7 @@
       "role": "terrain_tile",
       "x": 3,
       "y": 14,
-      "frame_start": 521,
+      "frame_start": 94,
       "frame_count": 1
     },
     {
@@ -744,8 +746,497 @@
       "role": "terrain_tile",
       "x": 3,
       "y": 13,
-      "frame_start": 522,
+      "frame_start": 95,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_2_13",
+      "role": "terrain_tile",
+      "x": 2,
+      "y": 13,
+      "frame_start": 96,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_2_12",
+      "role": "terrain_tile",
+      "x": 2,
+      "y": 12,
+      "frame_start": 97,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_3_12",
+      "role": "terrain_tile",
+      "x": 3,
+      "y": 12,
+      "frame_start": 98,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_4_13",
+      "role": "terrain_tile",
+      "x": 4,
+      "y": 12,
+      "frame_start": 99,
+      "frame_count": 1
+    },
+    {
+      "name": "codec_adapter.py.4_13",
+      "role": "architecture",
+      "x": 5,
+      "y": 12,
+      "frame_start": 100,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_8_10",
+      "role": "terrain_tile",
+      "x": 5,
+      "y": 13,
+      "frame_start": 101,
+      "frame_count": 1
+    },
+    {
+      "name": "neural_synthesis.py.8_10",
+      "role": "architecture",
+      "x": 4,
+      "y": 13,
+      "frame_start": 102,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_9_9",
+      "role": "terrain_tile",
+      "x": 4,
+      "y": 14,
+      "frame_start": 103,
+      "frame_count": 1
+    },
+    {
+      "name": "cognitive_payload.json.9_9",
+      "role": "architecture",
+      "x": 4,
+      "y": 15,
+      "frame_start": 104,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_7_9",
+      "role": "terrain_tile",
+      "x": 5,
+      "y": 15,
+      "frame_start": 105,
+      "frame_count": 1
+    },
+    {
+      "name": "flow_meter.py.7_9",
+      "role": "architecture",
+      "x": 5,
+      "y": 14,
+      "frame_start": 106,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_10_8",
+      "role": "terrain_tile",
+      "x": 6,
+      "y": 14,
+      "frame_start": 107,
+      "frame_count": 1
+    },
+    {
+      "name": "village_center.py.10_8",
+      "role": "architecture",
+      "x": 6,
+      "y": 15,
+      "frame_start": 108,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_8_5",
+      "role": "terrain_tile",
+      "x": 7,
+      "y": 15,
+      "frame_start": 109,
+      "frame_count": 1
+    },
+    {
+      "name": "cognitive_payload.json.8_5",
+      "role": "architecture",
+      "x": 7,
+      "y": 14,
+      "frame_start": 110,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_9_6",
+      "role": "terrain_tile",
+      "x": 7,
+      "y": 13,
+      "frame_start": 111,
+      "frame_count": 1
+    },
+    {
+      "name": "neural_synthesis.py.9_6",
+      "role": "architecture",
+      "x": 6,
+      "y": 13,
+      "frame_start": 112,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_3_7",
+      "role": "terrain_tile",
+      "x": 6,
+      "y": 12,
+      "frame_start": 113,
+      "frame_count": 1
+    },
+    {
+      "name": "village_center.py.3_7",
+      "role": "architecture",
+      "x": 7,
+      "y": 12,
+      "frame_start": 114,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_3_8",
+      "role": "terrain_tile",
+      "x": 7,
+      "y": 11,
+      "frame_start": 115,
+      "frame_count": 1
+    },
+    {
+      "name": "flow_meter.py.3_8",
+      "role": "architecture",
+      "x": 7,
+      "y": 10,
+      "frame_start": 116,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_2_7",
+      "role": "terrain_tile",
+      "x": 6,
+      "y": 10,
+      "frame_start": 117,
+      "frame_count": 1
+    },
+    {
+      "name": "ai_council.py.2_7",
+      "role": "architecture",
+      "x": 6,
+      "y": 11,
+      "frame_start": 118,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_post_office_1786712907787520",
+      "role": "governance",
+      "x": 5,
+      "y": 11,
+      "frame_start": 119,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_cognitive_payload_1786712908271459",
+      "role": "governance",
+      "x": 4,
+      "y": 11,
+      "frame_start": 120,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_1786712908768000",
+      "role": "governance",
+      "x": 4,
+      "y": 10,
+      "frame_start": 121,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_1786712909269524",
+      "role": "governance",
+      "x": 5,
+      "y": 10,
+      "frame_start": 122,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_codec_adapter_1786712909766946",
+      "role": "governance",
+      "x": 5,
+      "y": 9,
+      "frame_start": 123,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_cognitive_payload_1786712910217494",
+      "role": "governance",
+      "x": 4,
+      "y": 9,
+      "frame_start": 124,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_1786712910725293",
+      "role": "governance",
+      "x": 4,
+      "y": 8,
+      "frame_start": 125,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_1786712911201188",
+      "role": "governance",
+      "x": 5,
+      "y": 8,
+      "frame_start": 126,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_neural_synthesis_1786712911640155",
+      "role": "governance",
+      "x": 6,
+      "y": 8,
+      "frame_start": 127,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_1786712912110597",
+      "role": "governance",
+      "x": 6,
+      "y": 9,
+      "frame_start": 128,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_codec_adapter_1786712912642667",
+      "role": "governance",
+      "x": 7,
+      "y": 9,
+      "frame_start": 129,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_neural_synthesis_1786712913167536",
+      "role": "governance",
+      "x": 7,
+      "y": 8,
+      "frame_start": 130,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_cognitive_payload_1786712913665194",
+      "role": "governance",
+      "x": 8,
+      "y": 8,
+      "frame_start": 131,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_flow_meter_1786712914114751",
+      "role": "governance",
+      "x": 8,
+      "y": 9,
+      "frame_start": 132,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_1786712914628012",
+      "role": "governance",
+      "x": 9,
+      "y": 9,
+      "frame_start": 133,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_cognitive_payload_1786712915109221",
+      "role": "governance",
+      "x": 9,
+      "y": 8,
+      "frame_start": 134,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_neural_synthesis_1786712915610250",
+      "role": "governance",
+      "x": 10,
+      "y": 8,
+      "frame_start": 135,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_1786712916114894",
+      "role": "governance",
+      "x": 11,
+      "y": 8,
+      "frame_start": 136,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_flow_meter_1786712916667003",
+      "role": "governance",
+      "x": 11,
+      "y": 9,
+      "frame_start": 137,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_1786712917210299",
+      "role": "governance",
+      "x": 10,
+      "y": 9,
+      "frame_start": 138,
+      "frame_count": 1
+    },
+    {
+      "name": "boot_ubuntu_from_mkv.py.pixel",
+      "role": "code",
+      "x": 10,
+      "y": 10,
+      "frame_start": 139,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/village_center_handler.py",
+      "role": "tools",
+      "x": 11,
+      "y": 10,
+      "frame_start": 163,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/ai_council_handler.py",
+      "role": "tools",
+      "x": 11,
+      "y": 11,
+      "frame_start": 164,
+      "frame_count": 1
+    },
+    {
+      "name": "coordination_report_3_7_1786713771",
+      "role": "governance",
+      "x": 10,
+      "y": 11,
+      "frame_start": 146,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_2_7_1786713774",
+      "role": "governance",
+      "x": 9,
+      "y": 11,
+      "frame_start": 147,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/simple_executor.py",
+      "role": "tools",
+      "x": 9,
+      "y": 10,
+      "frame_start": 148,
+      "frame_count": 1
+    },
+    {
+      "name": "coordination_report_3_7_1786716243",
+      "role": "governance",
+      "x": 8,
+      "y": 10,
+      "frame_start": 149,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_2_7_1786716246",
+      "role": "governance",
+      "x": 8,
+      "y": 11,
+      "frame_start": 150,
+      "frame_count": 1
+    },
+    {
+      "name": "coordination_report_3_7_1786716265",
+      "role": "governance",
+      "x": 8,
+      "y": 12,
+      "frame_start": 151,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786716265634",
+      "role": "governance",
+      "x": 9,
+      "y": 12,
+      "frame_start": 152,
+      "frame_count": 1
+    },
+    {
+      "name": "coordination_report_3_7_1786716275",
+      "role": "governance",
+      "x": 9,
+      "y": 13,
+      "frame_start": 153,
+      "frame_count": 1
+    },
+    {
+      "name": "coordination_report_3_7_1786716353",
+      "role": "governance",
+      "x": 8,
+      "y": 13,
+      "frame_start": 155,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786716354226",
+      "role": "governance",
+      "x": 8,
+      "y": 14,
+      "frame_start": 156,
+      "frame_count": 1
+    },
+    {
+      "name": "utility_shed.11_8",
+      "role": "architecture",
+      "x": 8,
+      "y": 15,
+      "frame_start": 157,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_2_7_1786716358",
+      "role": "governance",
+      "x": 9,
+      "y": 15,
+      "frame_start": 158,
+      "frame_count": 1
+    },
+    {
+      "name": "coordination_report_3_7_1786716362",
+      "role": "governance",
+      "x": 9,
+      "y": 14,
+      "frame_start": 159,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786716363387",
+      "role": "governance",
+      "x": 10,
+      "y": 14,
+      "frame_start": 160,
+      "frame_count": 1
+    },
+    {
+      "name": "cache_invalidation_check.txt",
+      "role": "test",
+      "x": 10,
+      "y": 15,
+      "frame_start": 161,
       "frame_count": 1
     }
-  ]
+  ],
+  "full": false
 }

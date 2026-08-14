@@ -252,7 +252,7 @@ def execute_build(container: Container, my_x: int, my_y: int, build_params: Dict
                             # the tile, same as an explicit reject: a
                             # stalemate is a resolution, not a reason to
                             # retry indefinitely.
-                            terminal_status = d_log.get("terminal_status", "")
+                            terminal_status = d_log.get("terminal_status") or ""
                             if terminal_status.startswith("deferred"):
                                 print(f"    ✗ Clash yielded (debate deferred: {terminal_status}). Clearing cascade.")
                                 faction_tracker.clear_active_cascade(state, faction, target_x, target_y)
@@ -293,6 +293,11 @@ def execute_build(container: Container, my_x: int, my_y: int, build_params: Dict
     try:
         container.read(target_name)
         print(f"    ✗ Space already occupied at ({target_x}, {target_y})")
+        if state is not None:
+            faction = faction_tracker.faction_at(state, my_x, my_y)
+            if faction is not None:
+                faction_tracker.clear_active_cascade(state, faction, target_x, target_y)
+                faction_tracker.save_factions(container, state)
         return False
     except KeyError:
         pass
