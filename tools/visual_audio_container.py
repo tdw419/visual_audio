@@ -46,7 +46,7 @@ from va_container import (
     read_frames,
     save_container,
 )
-from mkv_infinite_map import hilbert_d2xy, hilbert_xy2d
+from mkv_infinite_map import hilbert_d2xy, hilbert_xy2d, get_envelope, envelope_capacity
 
 
 class Container:
@@ -60,6 +60,7 @@ class Container:
         self.mkv_path = Path(mkv_path)
         self._directory: Optional[dict] = None
         self._frames: Optional[list] = None
+        self._manifest_cache: dict[int, dict] = {}
 
     def __enter__(self) -> "Container":
         return self
@@ -134,6 +135,7 @@ class Container:
             directory, frames = load_container(self.mkv_path)
             self._directory = directory
             self._frames = frames[directory.get("_dir_frames", 1):]
+            self._manifest_cache.clear()
             yield
 
     def add(
@@ -222,7 +224,7 @@ class Container:
             directory = self._directory
             frames = self._frames
 
-            # Generate manifest to find next writable tile
+            # Generate manifest to find next writable tile (persisted envelope, not a guess)
             manifest = self._generate_manifest(directory)
             target_distance = hilbert_xy2d(manifest["order"], x, y)
             entries_count = len(manifest["tiles"])
@@ -232,6 +234,14 @@ class Container:
                 raise ValueError(
                     f"tile ({x}, {y}) at distance {target_distance} is not "
                     f"the next writable position (distance {entries_count})"
+                )
+
+            capacity = envelope_capacity(manifest["order"])
+            if entries_count >= capacity:
+                raise ValueError(
+                    f"{manifest['envelope']} envelope is full ({capacity} cells) -- "
+                    f"choose a larger envelope with mkv_infinite_map.py set-envelope "
+                    f"before writing further"
                 )
 
             # Read the PNG payload
@@ -253,13 +263,31 @@ class Container:
 
     # ---------------------------------------------------------------- spatial operations
 
-    def get_manifest(self, order: int = 10) -> dict:
-        """Generate Hilbert-space manifest for the container."""
-        directory = self._get_directory()
-        return self._generate_manifest(directory, order)
+    def get_manifest(self, order: Optional[int] = None) -> dict:
+        """Generate Hilbert-space manifest for the container (cached).
 
-    def _generate_manifest(self, directory: dict, order: int = 10) -> dict:
+        order=None (the default) resolves to the container's persisted
+        envelope (see mkv_infinite_map.set_envelope) rather than guessing --
+        this used to default to 10 here while other tools defaulted to 4,
+        which put terrain and structures in physically inconsistent
+        coordinate spaces. See [[mkv-corruption-and-rebuild-2026-08-14]].
+        """
+        directory = self._get_directory()
+        if order is None:
+            _, order = get_envelope(directory)
+
+        if order in self._manifest_cache:
+            return self._manifest_cache[order]
+
+        manifest = self._generate_manifest(directory, order)
+        self._manifest_cache[order] = manifest
+        return manifest
+
+    def _generate_manifest(self, directory: dict, order: Optional[int] = None) -> dict:
         """Generate manifest from directory (internal)."""
+        env_name, env_order = get_envelope(directory)
+        if order is None:
+            order = env_order
         tiles = []
         for i, entry in enumerate(directory["entries"]):
             x, y = hilbert_d2xy(order, i)
@@ -273,13 +301,15 @@ class Container:
             })
 
         return {
+            "envelope": env_name,
             "order": order,
             "grid_size": 2**order,
+            "capacity": envelope_capacity(order),
             "tile_count": len(tiles),
             "tiles": tiles,
         }
 
-    def get_ascii_viewport(self, x0: int, y0: int, w: int, h: int, order: int = 10) -> str:
+    def get_ascii_viewport(self, x0: int, y0: int, w: int, h: int, order: Optional[int] = None) -> str:
         """Return a semantic ASCII representation of a viewport on the map."""
         manifest = self.get_manifest(order)
         by_coord = {(t["x"], t["y"]): t for t in manifest["tiles"]}

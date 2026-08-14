@@ -43,7 +43,67 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from va_container import read_directory, container_lock
+from va_container import read_directory, container_lock, load_container, save_container
+
+
+# Named envelope tiers, same idea as A4/Letter/Legal paper sizes: `order`
+# fixes the map's border as an exact (2**order)x(2**order) square. Different
+# tools used to default to different orders (4 here, 10 there), which meant
+# entries written through different code paths landed in physically
+# inconsistent coordinate spaces. The envelope is now persisted once in the
+# container's own directory JSON (key "envelope") so every tool reads the
+# same border instead of guessing.
+ENVELOPES = {
+    "Datacard":  4,   # 16x16      = 256 cells
+    "Cartridge": 8,   # 256x256    = 65,536 cells
+    "Continent": 10,  # 1024x1024  = ~1.05M cells
+    "World":     12,  # 4096x4096  = ~16.8M cells
+}
+DEFAULT_ENVELOPE = "Cartridge"
+
+
+def get_envelope(directory: dict) -> tuple[str, int]:
+    """Return (name, order) for a container's persisted envelope.
+
+    Falls back to DEFAULT_ENVELOPE if none has been set yet -- this fallback
+    is NOT persisted by reading; call set_envelope() to actually lock it in.
+    """
+    env = directory.get("envelope")
+    if env:
+        return env["name"], env["order"]
+    return DEFAULT_ENVELOPE, ENVELOPES[DEFAULT_ENVELOPE]
+
+
+def set_envelope(mkv_path: Path, name: str) -> int:
+    """Persist a named envelope as the container's one border, going forward.
+
+    Does not touch any existing entries or their already-assigned
+    coordinates -- see [[mkv-corruption-and-rebuild-2026-08-14]]-style
+    memory: don't retroactively move spatial history, just stop future
+    drift.
+    """
+    if name not in ENVELOPES:
+        raise ValueError(f"unknown envelope {name!r}; choices: {sorted(ENVELOPES)}")
+    order = ENVELOPES[name]
+    with container_lock(mkv_path):
+        directory, frames = load_container(mkv_path)
+        entries_count = len(directory["entries"])
+        capacity = (1 << order) ** 2
+        if entries_count > capacity:
+            raise ValueError(
+                f"container already has {entries_count} entries, which exceeds "
+                f"{name}'s capacity of {capacity} ({1 << order}x{1 << order}) -- "
+                f"choose a larger envelope"
+            )
+        directory["envelope"] = {"name": name, "order": order}
+        payload_frames = frames[directory.get("_dir_frames", 1):]
+        save_container(directory, payload_frames, mkv_path)
+    return order
+
+
+def envelope_capacity(order: int) -> int:
+    """Total addressable cells for a given order -- the hard border."""
+    return (1 << order) ** 2
 
 
 def hilbert_d2xy(order: int, d: int) -> tuple[int, int]:
@@ -84,8 +144,11 @@ def hilbert_xy2d(order: int, x: int, y: int) -> int:
     return d
 
 
-def build_manifest(mkv_path: Path, order: int) -> dict:
+def build_manifest(mkv_path: Path, order: int = None) -> dict:
     directory = read_directory(mkv_path)
+    env_name, env_order = get_envelope(directory)
+    if order is None:
+        order = env_order
     entries = []
     for i, e in enumerate(directory["entries"]):
         x, y = hilbert_d2xy(order, i)
@@ -97,11 +160,15 @@ def build_manifest(mkv_path: Path, order: int) -> dict:
             "frame_start": e["frames"][0],
             "frame_count": e["frames"][1],
         })
+    capacity = envelope_capacity(order)
     return {
         "container": str(mkv_path),
+        "envelope": env_name,
         "order": order,
         "grid_side": 1 << order,
+        "capacity": capacity,
         "entries": entries,
+        "full": len(entries) >= capacity,
     }
 
 
@@ -109,8 +176,19 @@ def cmd_manifest(args):
     manifest = build_manifest(Path(args.container), args.order)
     out = Path(args.output) if args.output else Path(args.container).with_suffix(".map.json")
     out.write_text(json.dumps(manifest, indent=2))
+    fill_pct = 100 * len(manifest["entries"]) / manifest["capacity"]
     print(f"wrote {out}: {len(manifest['entries'])} entries on a "
-          f"{manifest['grid_side']}x{manifest['grid_side']} Hilbert grid")
+          f"{manifest['grid_side']}x{manifest['grid_side']} {manifest['envelope']} grid "
+          f"({fill_pct:.1f}% full, capacity {manifest['capacity']})")
+    if manifest["full"]:
+        print(f"  *** {manifest['envelope']} envelope is FULL -- no more spatial writes possible "
+              f"without choosing a larger envelope (see `set-envelope`) ***")
+
+
+def cmd_set_envelope(args):
+    order = set_envelope(Path(args.container), args.name)
+    print(f"container envelope set to {args.name} (order={order}, "
+          f"{1 << order}x{1 << order} = {envelope_capacity(order)} cells)")
 
 
 def cmd_ascii(args):
@@ -204,6 +282,11 @@ def cmd_patch(args):
         print(f"({args.x},{args.y}) -> distance {d}, occupied by {target['name']!r}; updating in place")
         subprocess.run(cmd, check=True)
     elif d == len(entries):
+        capacity = manifest.get("capacity", envelope_capacity(order))
+        if d >= capacity:
+            sys.exit(f"({args.x},{args.y}) -> distance {d} is at or past the {manifest.get('envelope', 'current')} "
+                      f"envelope's border (capacity {capacity}, order {order}). The map is full under "
+                      f"this envelope -- choose a larger one with `set-envelope` before writing further.")
         if not args.name:
             sys.exit(f"({args.x},{args.y}) -> distance {d} is empty and is the next writable tile, "
                       f"but --name is required to create a new entry there")
@@ -233,8 +316,15 @@ def main():
     pm = sub.add_parser("manifest")
     pm.add_argument("container")
     pm.add_argument("-o", "--output")
-    pm.add_argument("--order", type=int, default=4, help="grid side = 2**order (default 4 -> 16x16)")
+    pm.add_argument("--order", type=int, default=None,
+                     help="grid side = 2**order; default is the container's persisted envelope "
+                          "(see `set-envelope`), falling back to Cartridge (order=8) if unset")
     pm.set_defaults(func=cmd_manifest)
+
+    pe = sub.add_parser("set-envelope", help="persist this container's one Hilbert-space border")
+    pe.add_argument("container")
+    pe.add_argument("name", choices=sorted(ENVELOPES), help="envelope tier name")
+    pe.set_defaults(func=cmd_set_envelope)
 
     pa = sub.add_parser("ascii")
     pa.add_argument("manifest")
