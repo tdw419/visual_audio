@@ -13,16 +13,23 @@ Usage (from container):
 
 import json
 import sys
+import time
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from visual_audio_container import Container
 
 
-def read_governance_directives(container: Container, my_x: int, my_y: int) -> List[Dict]:
-    """Read governance directives addressed to this AI council."""
+def read_governance_directives(container: Container, my_x: int, my_y: int) -> List[Tuple[str, Dict]]:
+    """Read unconsumed governance directives addressed to this AI council.
+
+    Returns (entry_name, content) pairs so callers can mark them consumed
+    after execution -- without this, re-running the executor (e.g. in a
+    scheduled loop) re-triggers every directive ever logged for this
+    structure from scratch every time, including whole debate cascades.
+    """
     all_gov = container.list(filter_role="governance")
     directives = []
 
@@ -33,16 +40,46 @@ def read_governance_directives(container: Container, my_x: int, my_y: int) -> Li
         except Exception:
             continue
 
+        if content.get("consumed"):
+            continue
+
         # Check if directive targets this structure
         target = content.get("target", "")
         if f"ai_council.py.{my_x}_{my_y}" in target:
             if content.get("action") in ("debate", "vote", "synthesize"):
-                directives.append(content)
+                directives.append((e["name"], content))
 
     return directives
 
 
-def find_neighbor_councils(container: Container, my_x: int, my_y: int) -> List[Dict]:
+def mark_consumed(container: Container, name: str, content: Dict) -> None:
+    """Mark a directive as executed so it won't be re-run on future passes."""
+    content = dict(content)
+    content["consumed"] = True
+    content["consumed_at"] = time.time()
+    container.update(name, json.dumps(content, indent=2).encode())
+
+def issue_directive(container: Container, issuer_name: str, target: str, action: str, params: Dict):
+    """Issue a new governance directive (cascading governance)."""
+    directive = {
+        "issuer": issuer_name,
+        "target": target,
+        "action": action,
+        "params": params,
+        "timestamp": __import__("time").time()
+    }
+    
+    log_name = f"governance_{issuer_name}_{int(directive['timestamp']*1000)}"
+    container.add(
+        log_name,
+        json.dumps(directive, indent=2).encode(),
+        role="governance",
+        note=f"Cascading directive issued by {issuer_name}"
+    )
+    print(f"    -> Issued cascading directive: {action} to {target}")
+
+
+def find_neighbor_councils(container: Container, my_x: int, my_y: int, radius: int = 3) -> List[Dict]:
     """Find other AI councils nearby for multi-council deliberation."""
     all_arch = container.list(filter_role="architecture")
     neighbors = []
@@ -63,9 +100,9 @@ def find_neighbor_councils(container: Container, my_x: int, my_y: int) -> List[D
         except (ValueError, AttributeError):
             continue
 
-        # Include this council and nearby ones (within 3 tiles)
+        # Include this council and nearby ones within radius
         dist = max(abs(x - my_x), abs(y - my_y))
-        if dist <= 3:
+        if dist <= radius:
             neighbors.append({
                 "name": e["name"],
                 "x": x,
@@ -120,15 +157,18 @@ def simulate_debate(topic: str, participants: int = 3) -> Dict:
     }
 
 
-def execute_debate(container: Container, my_x: int, my_y: int, params: Dict) -> Dict:
+def execute_debate(container: Container, my_x: int, my_y: int, params: Dict, log_name_override: str = None) -> Dict:
     """Execute a debate directive."""
     topic = params.get("topic", "resource_allocation")
     consensus_threshold = params.get("consensus_threshold", 0.7)
+    attempt = params.get("attempt", 1)
+    radius = params.get("radius", 3)
+    previous_participants = params.get("previous_participants", 0)
 
-    print(f"  [ai_council] Debating topic: {topic}")
+    print(f"  [ai_council] Debating topic: {topic} (Attempt {attempt})")
 
     # Find neighbor councils for multi-council deliberation
-    neighbors = find_neighbor_councils(container, my_x, my_y)
+    neighbors = find_neighbor_councils(container, my_x, my_y, radius=radius)
     participants = len(neighbors)
 
     if participants < 2:
@@ -144,12 +184,14 @@ def execute_debate(container: Container, my_x: int, my_y: int, params: Dict) -> 
     total_strength = debate_result["pro_strength"] + debate_result["con_strength"]
     consensus_strength = max(debate_result["pro_strength"], debate_result["con_strength"]) / total_strength if total_strength > 0 else 0
 
-    debate_result["meets_threshold"] = consensus_strength >= consensus_threshold
+    meets_threshold = consensus_strength >= consensus_threshold
+    debate_result["meets_threshold"] = meets_threshold
     debate_result["consensus_strength"] = consensus_strength
     debate_result["threshold"] = consensus_threshold
+    debate_result["attempt"] = attempt
 
     # Write debate log
-    log_name = f"debate_log_{my_x}_{my_y}_{int(debate_result['timestamp'])}"
+    log_name = log_name_override or f"debate_log_{my_x}_{my_y}_{int(debate_result['timestamp'])}"
     container.add(
         log_name,
         json.dumps(debate_result, indent=2).encode(),
@@ -158,6 +200,31 @@ def execute_debate(container: Container, my_x: int, my_y: int, params: Dict) -> 
     )
 
     print(f"    ✓ Debate complete: consensus={debate_result['consensus']} ({consensus_strength:.2f})")
+
+    # Cascading Governance: Re-debate logic
+    if not meets_threshold:
+        if attempt >= 5:
+            print(f"    ✗ Hard cap reached (5 attempts). Consensus failed. Resolving to deterministic default: deferred.")
+            debate_result["terminal_status"] = "deferred_due_to_cap"
+        elif participants == previous_participants and attempt > 1:
+            print(f"    ✗ Radius expansion ({radius}) yielded no new participants. Consensus failed. Resolving to deterministic default: deferred.")
+            debate_result["terminal_status"] = "deferred_due_to_exhaustion"
+        else:
+            print(f"    [ai_council] Consensus not met. Cascading a re-debate directive (Attempt {attempt + 1}, Radius {radius + 1})")
+            issue_directive(
+                container,
+                f"ai_council_{my_x}_{my_y}",
+                f"ai_council.py.{my_x}_{my_y}",
+                "debate",
+                {
+                    "topic": topic,
+                    "consensus_threshold": consensus_threshold,
+                    "attempt": attempt + 1,
+                    "radius": radius + 1,
+                    "previous_participants": participants,
+                    "retry_of": log_name
+                }
+            )
 
     return debate_result
 
@@ -290,7 +357,7 @@ def main():
             directives = read_governance_directives(c, my_x, my_y)
             print(f"Found {len(directives)} directives")
 
-            for idx, directive in enumerate(directives):
+            for idx, (name, directive) in enumerate(directives):
                 print(f"\n  Executing directive {idx + 1}/{len(directives)}:")
 
                 params = directive.get("params", {})
@@ -303,6 +370,8 @@ def main():
 
                 elif directive.get("action") == "synthesize":
                     result = execute_synthesize(c, my_x, my_y, params)
+
+                mark_consumed(c, name, directive)
 
         else:
             # Default: show neighbors

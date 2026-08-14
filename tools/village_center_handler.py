@@ -13,8 +13,9 @@ Usage (from container):
 
 import json
 import sys
+import time
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -54,8 +55,14 @@ def find_local_structures(container: Container, my_x: int, my_y: int, radius: in
     return local
 
 
-def read_governance_directives(container: Container, my_x: int, my_y: int) -> List[Dict]:
-    """Read governance directives addressed to this village center."""
+def read_governance_directives(container: Container, my_x: int, my_y: int) -> List[Tuple[str, Dict]]:
+    """Read unconsumed governance directives addressed to this village center.
+
+    Returns (entry_name, content) pairs so callers can mark them consumed
+    after execution -- without this, re-running the executor (e.g. in a
+    scheduled loop) re-triggers every directive ever logged for this
+    structure from scratch every time.
+    """
     all_gov = container.list(filter_role="governance")
     directives = []
 
@@ -66,13 +73,24 @@ def read_governance_directives(container: Container, my_x: int, my_y: int) -> Li
         except Exception:
             continue
 
+        if content.get("consumed"):
+            continue
+
         # Check if directive targets this structure
         target = content.get("target", "")
         if f"village_center.py.{my_x}_{my_y}" in target or f"village_center_{my_x}_{my_y}" in target:
             if content.get("action") in ("coordinate", "build"):
-                directives.append(content)
+                directives.append((e["name"], content))
 
     return directives
+
+
+def mark_consumed(container: Container, name: str, content: Dict) -> None:
+    """Mark a directive as executed so it won't be re-run on future passes."""
+    content = dict(content)
+    content["consumed"] = True
+    content["consumed_at"] = time.time()
+    container.update(name, json.dumps(content, indent=2).encode())
 
 def issue_directive(container: Container, issuer_name: str, target: str, action: str, params: Dict):
     """Issue a new governance directive (cascading governance)."""
@@ -240,7 +258,7 @@ def main():
             directives = read_governance_directives(c, my_x, my_y)
             print(f"Found {len(directives)} coordination directives")
 
-            for idx, directive in enumerate(directives):
+            for idx, (name, directive) in enumerate(directives):
                 print(f"\n  Executing directive {idx + 1}/{len(directives)}:")
 
                 params = directive.get("params", {})
@@ -253,6 +271,8 @@ def main():
                     success = execute_build(c, my_x, my_y, params)
                     if not success:
                         print(f"    ✗ Build failed")
+
+                mark_consumed(c, name, directive)
 
         else:
             # Default: just show local structures
