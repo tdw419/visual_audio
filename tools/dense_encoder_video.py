@@ -348,7 +348,7 @@ def decode_mkv(mkv_path: str, output_dir: Optional[str] = None) -> Tuple[bytes, 
         # Use ffmpeg to extract attachment
         extract_cmd = [
             FFMPEG_PATH, "-y",
-            "-dump_attachment:t", "0", str(manifest_path),
+            "-dump_attachment:t:0", str(manifest_path),
             "-i", str(mkv_path),
             "-f", "null", "-"  # Don't decode anything
         ]

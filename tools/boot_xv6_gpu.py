@@ -639,7 +639,9 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
             # Save MKV trace frame
             if trace_mkv is not None and len(trace_mkv_frames) < trace_max:
                 # 528 bytes cpu state padded to 582 bytes (14x14x3 - 6 bytes overhead)
-                padded = cpu_readback_bytes + b'\x00' * (582 - len(cpu_readback_bytes))
+                # Convert memoryview to bytes first
+                cpu_bytes = bytes(cpu_readback_bytes)
+                padded = cpu_bytes + b'\x00' * (582 - len(cpu_bytes))
                 trace_mkv_frames.append(padded)
 
             # Progress indicator (less frequent to not spam)
