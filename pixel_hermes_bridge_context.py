@@ -10,12 +10,58 @@ The mind lives in pixels, and the screen remembers.
 """
 
 import os
+import re
 import sys
 import json
 import time
 import urllib.request
 import urllib.error
 import subprocess
+
+
+def _keywords(text: str) -> set:
+    """Lowercase word set for cheap keyword-overlap relevance scoring."""
+    return set(re.findall(r"[a-z0-9]+", text.lower()))
+
+
+def score_relevance(query: str, text: str) -> int:
+    """Count of shared keywords between query and a past thought's text.
+
+    Deliberately simple (no embeddings/model call) so relevance selection
+    stays fast and doesn't add latency beyond what recency-only had.
+    """
+    return len(_keywords(query) & _keywords(text))
+
+
+def select_context(query: str, candidates: list, context_size: int, guaranteed_recent: int = 2) -> list:
+    """Pick which past thoughts to include as context for this query.
+
+    Always keeps the most recent `guaranteed_recent` thoughts for turn-to-turn
+    continuity, then fills the rest of the budget with whichever remaining
+    candidates share the most keywords with the current query (ties broken by
+    recency). Falls back to pure recency when nothing scores above zero.
+
+    Args:
+        candidates: list of (name, raw_text) tuples, oldest first.
+    Returns:
+        Subset of candidates, oldest first (same order the prompt expects).
+    """
+    if len(candidates) <= context_size:
+        return candidates
+
+    guaranteed_recent = min(guaranteed_recent, context_size)
+    recent = candidates[-guaranteed_recent:] if guaranteed_recent else []
+    recent_names = {name for name, _ in recent}
+
+    pool = [c for c in candidates if c[0] not in recent_names]
+    budget = context_size - len(recent)
+    scored = [(score_relevance(query, text), i, name, text) for i, (name, text) in enumerate(pool)]
+    # sort by score desc, then recency (higher original index = more recent) desc
+    scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
+    picked = sorted(scored[:budget], key=lambda t: t[1])  # restore chronological order
+    relevant = [(name, text) for _, _, name, text in picked]
+
+    return relevant + recent
 
 def print_identity():
     """Announce spatial awareness to the human."""
@@ -84,8 +130,10 @@ def call_ollama(query: str, past_thoughts: list, model: str = "qwen2.5-coder:14b
     except Exception as e:
         return f"[Pixel Hermes] Ollama error: {e}"
 
-def load_past_thoughts(container_path):
-    """Read all past pixel_thought_* frames from the container, with summarization of aged-out context."""
+def load_past_thoughts(container_path, query=""):
+    """Read past pixel_thought_* frames from the container, with summarization
+    of aged-out context and keyword-relevance selection within the candidate
+    window (see select_context)."""
     if not container_path:
         return []
 
@@ -118,10 +166,14 @@ def load_past_thoughts(container_path):
         summary_names.sort()
 
         context_size = int(os.environ.get("PIXEL_MIND_CONTEXT_SIZE", "5"))
+        # Candidate pool for relevance scoring is wider than the final context
+        # window, so an older-but-relevant thought can still be pulled in
+        # instead of only ever the most recent context_size thoughts.
+        candidate_pool_size = int(os.environ.get("PIXEL_MIND_CANDIDATE_POOL", str(max(context_size * 4, 20))))
 
         # Check if we have aged-out thoughts that need summarization
-        if len(thought_names) > context_size:
-            aged_out_count = len(thought_names) - context_size
+        if len(thought_names) > candidate_pool_size:
+            aged_out_count = len(thought_names) - candidate_pool_size
             aged_out_names = thought_names[:aged_out_count]
             remaining_names = thought_names[aged_out_count:]
 
@@ -202,12 +254,17 @@ def load_past_thoughts(container_path):
             except json.JSONDecodeError:
                 loaded_summary = (latest_summary_name, {"summary": summary_text})
 
-        # Load the last N raw thoughts
-        thoughts = []
-        for name in remaining_names[-context_size:]:
+        # Load the candidate pool of raw thoughts, then pick which ones
+        # actually go into context: most-recent guaranteed + best keyword
+        # matches against the current query (falls back to pure recency
+        # when the pool already fits within context_size).
+        candidates = []
+        for name in remaining_names:
             cat_cmd = ["python3", "tools/va_container.py", "cat", container_path, name]
             cat_result = subprocess.run(cat_cmd, capture_output=True, check=True)
-            thoughts.append((name, cat_result.stdout.decode('utf-8', errors='replace').strip()))
+            candidates.append((name, cat_result.stdout.decode('utf-8', errors='replace').strip()))
+
+        thoughts = select_context(query, candidates, context_size)
 
         # Prepend the summary if we have one
         raw_thoughts_count = len(thoughts)
@@ -285,7 +342,7 @@ def main():
         return
 
     container = get_container_path()
-    past_thoughts = load_past_thoughts(container)
+    past_thoughts = load_past_thoughts(container, query)
 
     print(f"[Pixel Hermes] Routing: {query}")
     print("=" * 60)
