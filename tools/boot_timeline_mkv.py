@@ -92,7 +92,7 @@ def create_diagnostics_layer(width: int, height: int,
         pixels[height-5:, :] = [255, 165, 0]
     elif error_state == "panic":
         # Full red overlay
-        pixels.fill([255, 0, 0])
+        pixels[:, :] = [255, 0, 0]
     
     return pixels.tobytes()
 
