@@ -86,6 +86,8 @@ def hilbert_d2xy(n: int, d: int) -> Tuple[int, int]:
     return x, y
 
 
+_hilbert_cache = {}
+
 def map_ram_to_pixels(ram_data: bytes, width: int, height: int) -> np.ndarray:
     """
     Map linear RAM data to 2D pixel grid using Hilbert curve.
@@ -101,6 +103,7 @@ def map_ram_to_pixels(ram_data: bytes, width: int, height: int) -> np.ndarray:
     Returns:
         2D pixel array (width x height x 3 RGB)
     """
+    key = (width, height)
     total_pixels = width * height
     required_bytes = total_pixels * 3
     
@@ -111,28 +114,22 @@ def map_ram_to_pixels(ram_data: bytes, width: int, height: int) -> np.ndarray:
         # Truncate to fit
         ram_data = ram_data[:required_bytes]
     
-    # Create pixel array
+    if key not in _hilbert_cache:
+        n = max(width, height)
+        y_coords = np.zeros(total_pixels, dtype=np.int32)
+        x_coords = np.zeros(total_pixels, dtype=np.int32)
+        for pixel_idx in range(total_pixels):
+            x, y = hilbert_d2xy(n, pixel_idx)
+            x_coords[pixel_idx] = x
+            y_coords[pixel_idx] = y
+        valid = (x_coords < width) & (y_coords < height)
+        _hilbert_cache[key] = (y_coords[valid], x_coords[valid], valid)
+    
+    y_coords, x_coords, valid = _hilbert_cache[key]
+    
     pixels = np.zeros((height, width, 3), dtype=np.uint8)
-    
-    # Map each 3-byte chunk to a pixel via Hilbert curve
-    n = max(width, height)
-    
-    for pixel_idx in range(total_pixels):
-        if pixel_idx * 3 >= len(ram_data):
-            break
-        
-        # Get pixel coordinates via Hilbert curve
-        x, y = hilbert_d2xy(n, pixel_idx)
-        
-        if x >= width or y >= height:
-            continue
-        
-        # Extract 3 bytes for this pixel (RGB)
-        r = ram_data[pixel_idx * 3 + 0]
-        g = ram_data[pixel_idx * 3 + 1]
-        b = ram_data[pixel_idx * 3 + 2]
-        
-        pixels[y, x] = [r, g, b]
+    ram_pixels = np.frombuffer(ram_data, dtype=np.uint8).reshape(total_pixels, 3)
+    pixels[y_coords, x_coords] = ram_pixels[valid]
     
     return pixels
 
@@ -155,29 +152,49 @@ class QMPClient:
             self.socket_path
         )
         
-        # Receive greeting
+        # Receive greeting (QMP sends it immediately on connect)
         greeting = await self.reader.readline()
-        greeting = json.loads(greeting)
+        if not greeting:
+            raise RuntimeError("No QMP greeting received")
+        
+        # QMP greeting is multi-line JSON, read until we have complete object
+        greeting_str = greeting.decode()
+        while True:
+            try:
+                greeting_data = json.loads(greeting_str)
+                break
+            except json.JSONDecodeError:
+                # Need more data
+                line = await self.reader.readline()
+                if not line:
+                    raise RuntimeError("Incomplete QMP greeting")
+                greeting_str += line.decode()
         
         # Execute qmp_capabilities
         await self.execute({'execute': 'qmp_capabilities'})
     
     async def execute(self, command: dict) -> dict:
-        """Send command and receive response"""
+        """Send command and wait for its matching response, transparently
+        skipping any unsolicited QMP events (e.g. RESUME/STOP) that may be
+        sitting in the stream ahead of the reply."""
         cmd_json = json.dumps(command) + '\n'
         self.writer.write(cmd_json.encode())
         await self.writer.drain()
-        
-        response_line = await self.reader.readline()
-        if not response_line:
-            raise RuntimeError("QMP connection closed")
-        
-        response = json.loads(response_line)
-        
-        if 'error' in response:
-            raise RuntimeError(f"QMP error: {response['error']}")
-        
-        return response
+
+        while True:
+            response_line = await self.reader.readline()
+            if not response_line:
+                raise RuntimeError("QMP connection closed")
+
+            response = json.loads(response_line)
+
+            if 'event' in response:
+                continue  # unsolicited event, not our command's reply
+
+            if 'error' in response:
+                raise RuntimeError(f"QMP error: {response['error']}")
+
+            return response
     
     async def pause(self):
         """Pause VM execution"""
@@ -273,13 +290,15 @@ async def capture_boot_trace(
         qemu_binary,
         "-m", memory,
         "-nographic",  # No display needed
-        "-monitor", f"unix:{qmp_socket},server,nowait",  # QMP socket
+        "-qmp", f"unix:{qmp_socket},server,nowait",  # QMP socket
     ]
     
     # Add disk
     if arch == "riscv64":
         cmd.extend(["-M", "virt"])
-        cmd.extend(["-kernel", disk_path])  # Direct kernel boot
+        cmd.extend(["-drive", f"file={disk_path},format=qcow2,if=virtio"])
+        # Alpine RISC-V boots from disk, need OpenSBI firmware
+        cmd.extend(["-bios", "default"])
     elif arch == "x86_64":
         cmd.extend(["-M", "pc"])
         cmd.extend(["-drive", f"file={disk_path},format=qcow2,if=virtio"])
@@ -288,19 +307,27 @@ async def capture_boot_trace(
     print(f"Command: {' '.join(cmd)}")
     
     # Start QEMU in background
+    print(f"  Spawning QEMU process...")
     qemu_proc = await asyncio.create_subprocess_exec(
         *cmd,
-        stdout=asyncio.subprocess.DEVNULL,
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE
     )
     
+    print(f"  QEMU PID: {qemu_proc.pid}")
+    print(f"  Waiting for QMP socket at {qmp_socket}...")
+    
     # Wait for QMP socket to be ready
-    print("[2] Waiting for QMP socket...")
     for i in range(30):  # 30 seconds timeout
         if os.path.exists(qmp_socket):
+            print(f"  ✓ QMP socket ready after {i+1}s")
             break
         await asyncio.sleep(1)
     else:
+        print(f"  ✗ QMP socket not created after 30s")
+        stderr_data = await qemu_proc.stderr.read()
+        print(f"  QEMU stderr: {stderr_data.decode() if stderr_data else 'empty'}")
         raise RuntimeError(f"QMP socket not created: {qmp_socket}")
     
     # Connect to QMP
@@ -322,10 +349,18 @@ async def capture_boot_trace(
         tmpdir = Path(tmpdir)
         mem_dump_path = tmpdir / "guest_memory.dump"
         
+        prev_pixels = None
+        hang_count = 0
+        
         while captured < max_frames:
             # Dump memory
             print(f"  Frame {captured + 1}/{max_frames}: Dumping memory...", end="\r")
-            
+
+            # QEMU writes dump-guest-memory output as read-only (mode 0400);
+            # reusing the same path on the next capture fails to overwrite it.
+            if mem_dump_path.exists():
+                mem_dump_path.unlink()
+
             try:
                 size = await qmp.dump_guest_memory(str(mem_dump_path))
                 print(f"  Frame {captured + 1}/{max_frames}: {size / (1024*1024):.1f} MB    ", end="\r")
@@ -337,14 +372,47 @@ async def capture_boot_trace(
             with open(mem_dump_path, 'rb') as f:
                 ram_data = f.read()
             
-            # Map to 2D pixels
-            pixels = map_ram_to_pixels(ram_data, memory_width, memory_height)
+            # Tile mapping for full RAM capture
+            tile_size = memory_width * memory_height * 3
+            num_tiles = (len(ram_data) + tile_size - 1) // tile_size
             
-            # Convert to bytes (RGB24)
-            frame_bytes = pixels.tobytes()
+            # Pad to multiple of tile_size
+            if len(ram_data) % tile_size != 0:
+                ram_data += b'\x00' * (tile_size - (len(ram_data) % tile_size))
+                
+            capture_frames_bytes = []
+            capture_identical_tiles = 0
             
-            # Store frame
-            frames_data.append(frame_bytes)
+            if prev_pixels is None:
+                prev_pixels = [None] * num_tiles
+                
+            for tile_idx in range(num_tiles):
+                tile_ram = ram_data[tile_idx * tile_size : (tile_idx + 1) * tile_size]
+                pixels = map_ram_to_pixels(tile_ram, memory_width, memory_height)
+                
+                if prev_pixels[tile_idx] is not None:
+                    if np.array_equal(pixels, prev_pixels[tile_idx]):
+                        capture_identical_tiles += 1
+                    
+                    delta_pixels = np.bitwise_xor(pixels, prev_pixels[tile_idx])
+                    frame_bytes = delta_pixels.tobytes()
+                else:
+                    frame_bytes = pixels.tobytes()
+                    
+                prev_pixels[tile_idx] = pixels.copy()
+                capture_frames_bytes.append(frame_bytes)
+            
+            # Hang Detection
+            if capture_identical_tiles == num_tiles:
+                hang_count += 1
+                print(f"\n[!] Hang detected at capture {captured + 1}! All tiles identical to previous.")
+                if hang_count >= 3:
+                    print("  Stopping capture due to consecutive hangs.")
+                    break
+            else:
+                hang_count = 0
+                
+            frames_data.extend(capture_frames_bytes)
             captured += 1
             
             # Resume execution
@@ -377,8 +445,10 @@ async def capture_boot_trace(
             'interval': interval,
             'grid_width': memory_width,
             'grid_height': memory_height,
-            'total_frames': captured,
-            'capture_time': time.time()
+            'total_captures': captured,
+            'tiles_per_capture': num_tiles if captured > 0 else 1,
+            'capture_time': time.time(),
+            'delta_encoding': 'xor'
         }
     )
     
@@ -392,16 +462,16 @@ async def capture_boot_trace(
     print(f"Extract frame: python3 tools/qemu_to_mkv.py {output_mkv} --extract-frame <N>")
 
 
-async def extract_frame_from_mkv(mkv_path: str, frame_num: int, output_path: str):
+async def extract_frame_from_mkv(mkv_path: str, capture_num: int, output_path: str):
     """
-    Extract a specific frame from MKV back to memory dump.
+    Extract a specific capture (which spans multiple tile frames) back to memory dump.
     
     Args:
         mkv_path: MKV file
-        frame_num: Frame number to extract
+        capture_num: Capture number to extract
         output_path: Output memory dump path
     """
-    print(f"Extracting frame {frame_num} from {mkv_path}...")
+    print(f"Extracting capture {capture_num} from {mkv_path}...")
     
     # Decode MKV
     payload, manifest = decode_mkv(mkv_path)
@@ -411,45 +481,65 @@ async def extract_frame_from_mkv(mkv_path: str, frame_num: int, output_path: str
         meta = manifest['metadata']
         width = meta.get('grid_width', 512)
         height = meta.get('grid_height', 512)
+        is_delta = meta.get('delta_encoding') == 'xor'
+        tiles_per_capture = meta.get('tiles_per_capture', 1)
+        total_captures = meta.get('total_captures', len(payload) // (width * height * 3))
     else:
         width = height = 512
+        is_delta = False
+        tiles_per_capture = 1
+        total_captures = len(payload) // (width * height * 3)
     
     frame_size = width * height * 3  # RGB24
-    total_frames = len(payload) // frame_size
     
-    if frame_num >= total_frames:
-        raise ValueError(f"Frame {frame_num} out of range (total: {total_frames})")
+    if capture_num >= total_captures:
+        raise ValueError(f"Capture {capture_num} out of range (total captures: {total_captures})")
     
-    # Extract specific frame
-    offset = frame_num * frame_size
-    frame_data = payload[offset:offset + frame_size]
-    
-    # Convert back to linear RAM
-    # Reverse Hilbert mapping
-    n = max(width, height)
-    ram_bytes = bytearray(width * height * 3)
-    
-    for pixel_idx in range(width * height):
-        x, y = hilbert_d2xy(n, pixel_idx)
+    # Fast reverse Hilbert mapping
+    key = (width, height)
+    total_pixels = width * height
+    if key not in _hilbert_cache:
+        n = max(width, height)
+        y_coords = np.zeros(total_pixels, dtype=np.int32)
+        x_coords = np.zeros(total_pixels, dtype=np.int32)
+        for pixel_idx in range(total_pixels):
+            x, y = hilbert_d2xy(n, pixel_idx)
+            x_coords[pixel_idx] = x
+            y_coords[pixel_idx] = y
+        valid = (x_coords < width) & (y_coords < height)
+        _hilbert_cache[key] = (y_coords[valid], x_coords[valid], valid)
         
-        if x >= width or y >= height:
-            continue
+    y_coords, x_coords, valid = _hilbert_cache[key]
+    
+    ram_data_chunks = []
+    
+    for tile_idx in range(tiles_per_capture):
+        # Extract specific tile
+        if is_delta:
+            accumulated_pixels = np.zeros(frame_size, dtype=np.uint8)
+            for i in range(capture_num + 1):
+                offset = (i * tiles_per_capture + tile_idx) * frame_size
+                frame_data_chunk = np.frombuffer(payload[offset:offset + frame_size], dtype=np.uint8)
+                accumulated_pixels = np.bitwise_xor(accumulated_pixels, frame_data_chunk)
+            frame_data = accumulated_pixels.tobytes()
+        else:
+            offset = (capture_num * tiles_per_capture + tile_idx) * frame_size
+            frame_data = payload[offset:offset + frame_size]
         
-        src_offset = (y * width + x) * 3
-        dst_offset = pixel_idx * 3
-        
-        if src_offset + 3 <= len(frame_data):
-            ram_bytes[dst_offset + 0] = frame_data[src_offset + 0]
-            ram_bytes[dst_offset + 1] = frame_data[src_offset + 1]
-            ram_bytes[dst_offset + 2] = frame_data[src_offset + 2]
+        # Convert back to linear RAM
+        frame_pixels = np.frombuffer(frame_data, dtype=np.uint8).reshape(height, width, 3)
+        tile_ram_pixels = np.zeros((total_pixels, 3), dtype=np.uint8)
+        tile_ram_pixels[valid] = frame_pixels[y_coords, x_coords]
+        ram_data_chunks.append(tile_ram_pixels.tobytes())
+    
+    full_ram = b''.join(ram_data_chunks)
     
     # Write to output
     with open(output_path, 'wb') as f:
-        f.write(ram_bytes)
+        f.write(full_ram)
     
-    print(f"✓ Frame {frame_num} extracted to {output_path}")
-    print(f"  Size: {len(ram_bytes) / (1024*1024):.1f} MB")
-    print(f"  Grid: {width}x{height}")
+    print(f"✓ Capture {capture_num} extracted to {output_path}")
+    print(f"  Size: {len(full_ram) / (1024*1024):.1f} MB (from {tiles_per_capture} tiles)")
     
     return manifest
 
