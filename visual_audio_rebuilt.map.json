@@ -1,0 +1,383 @@
+{
+  "container": "visual_audio_rebuilt.mkv",
+  "order": 10,
+  "grid_side": 1024,
+  "entries": [
+    {
+      "name": "pixel_thought_1786676352",
+      "role": "thought",
+      "x": 0,
+      "y": 0,
+      "frame_start": 1,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786677239",
+      "role": "thought",
+      "x": 1,
+      "y": 0,
+      "frame_start": 2,
+      "frame_count": 1
+    },
+    {
+      "name": "bootstrap/va_container.py",
+      "role": "bootstrap",
+      "x": 1,
+      "y": 1,
+      "frame_start": 3,
+      "frame_count": 1
+    },
+    {
+      "name": "semantic_cpu_emulator.py",
+      "role": "semantic_code",
+      "x": 0,
+      "y": 1,
+      "frame_start": 4,
+      "frame_count": 1
+    },
+    {
+      "name": "utils.py",
+      "role": "tools",
+      "x": 0,
+      "y": 2,
+      "frame_start": 5,
+      "frame_count": 1
+    },
+    {
+      "name": "test_utils.py",
+      "role": "tools",
+      "x": 0,
+      "y": 3,
+      "frame_start": 6,
+      "frame_count": 1
+    },
+    {
+      "name": "test_multi.py",
+      "role": "tools",
+      "x": 1,
+      "y": 3,
+      "frame_start": 7,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_hermes_bridge.py",
+      "role": "tools",
+      "x": 1,
+      "y": 2,
+      "frame_start": 8,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_hermes_bridge_test.py",
+      "role": "tools",
+      "x": 2,
+      "y": 2,
+      "frame_start": 9,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_hermes_bridge_spatial.py",
+      "role": "tools",
+      "x": 2,
+      "y": 3,
+      "frame_start": 10,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_hermes_bridge_context.py",
+      "role": "tools",
+      "x": 3,
+      "y": 3,
+      "frame_start": 11,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_mind_repl.py",
+      "role": "tools",
+      "x": 3,
+      "y": 2,
+      "frame_start": 12,
+      "frame_count": 1
+    },
+    {
+      "name": "bootstrap/pixel_hermes_bridge_context.py",
+      "role": "bootstrap",
+      "x": 3,
+      "y": 1,
+      "frame_start": 13,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/va_container.py",
+      "role": "tools",
+      "x": 2,
+      "y": 1,
+      "frame_start": 14,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/mkv_infinite_map.py",
+      "role": "tools",
+      "x": 2,
+      "y": 0,
+      "frame_start": 15,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/dense_encoder.py",
+      "role": "tools",
+      "x": 3,
+      "y": 0,
+      "frame_start": 16,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_hermes_demo.py",
+      "role": "tools",
+      "x": 4,
+      "y": 0,
+      "frame_start": 17,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_self_improve.py",
+      "role": "tools",
+      "x": 4,
+      "y": 1,
+      "frame_start": 18,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_self_aware_agent.py",
+      "role": "tools",
+      "x": 5,
+      "y": 1,
+      "frame_start": 19,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_tool_registry.py",
+      "role": "tools",
+      "x": 5,
+      "y": 0,
+      "frame_start": 20,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_os_listener.py",
+      "role": "tools",
+      "x": 6,
+      "y": 0,
+      "frame_start": 21,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_screen.py",
+      "role": "tools",
+      "x": 7,
+      "y": 0,
+      "frame_start": 22,
+      "frame_count": 1
+    },
+    {
+      "name": "glyph_isa_v2.py",
+      "role": "tools",
+      "x": 7,
+      "y": 1,
+      "frame_start": 23,
+      "frame_count": 1
+    },
+    {
+      "name": "spoken_screen.py",
+      "role": "tools",
+      "x": 6,
+      "y": 1,
+      "frame_start": 24,
+      "frame_count": 1
+    },
+    {
+      "name": "boot_manifest.py",
+      "role": "tools",
+      "x": 6,
+      "y": 2,
+      "frame_start": 25,
+      "frame_count": 1
+    },
+    {
+      "name": "wordbase_compat.py",
+      "role": "tools",
+      "x": 7,
+      "y": 2,
+      "frame_start": 26,
+      "frame_count": 1
+    },
+    {
+      "name": "word_compiler.py",
+      "role": "tools",
+      "x": 7,
+      "y": 3,
+      "frame_start": 27,
+      "frame_count": 1
+    },
+    {
+      "name": "speak.py",
+      "role": "tools",
+      "x": 6,
+      "y": 3,
+      "frame_start": 28,
+      "frame_count": 1
+    },
+    {
+      "name": "src/upic_engine.py",
+      "role": "tools",
+      "x": 5,
+      "y": 3,
+      "frame_start": 29,
+      "frame_count": 1
+    },
+    {
+      "name": "src/codec/phy.py",
+      "role": "tools",
+      "x": 5,
+      "y": 2,
+      "frame_start": 30,
+      "frame_count": 1
+    },
+    {
+      "name": "src/codec/phy_ecc.py",
+      "role": "tools",
+      "x": 4,
+      "y": 2,
+      "frame_start": 31,
+      "frame_count": 1
+    },
+    {
+      "name": "src/codec/phoneme_ecc.py",
+      "role": "tools",
+      "x": 4,
+      "y": 3,
+      "frame_start": 32,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/wordbase.py",
+      "role": "tools",
+      "x": 4,
+      "y": 4,
+      "frame_start": 33,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/neural_synthesis.py",
+      "role": "tools",
+      "x": 4,
+      "y": 5,
+      "frame_start": 34,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/ipa_to_arpabet.py",
+      "role": "tools",
+      "x": 5,
+      "y": 5,
+      "frame_start": 35,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/ipa_tokenizer.py",
+      "role": "tools",
+      "x": 5,
+      "y": 4,
+      "frame_start": 36,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/xsampa_to_arpabet.py",
+      "role": "tools",
+      "x": 6,
+      "y": 4,
+      "frame_start": 37,
+      "frame_count": 1
+    },
+    {
+      "name": "src/pixel_tokenizer.py",
+      "role": "tools",
+      "x": 7,
+      "y": 4,
+      "frame_start": 38,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/mkv_glyph_emulator.py",
+      "role": "tools",
+      "x": 7,
+      "y": 5,
+      "frame_start": 39,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/phonemes.py",
+      "role": "tools",
+      "x": 6,
+      "y": 5,
+      "frame_start": 40,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_6_6",
+      "role": "terrain_tile",
+      "x": 6,
+      "y": 6,
+      "frame_start": 41,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_7_6",
+      "role": "terrain_tile",
+      "x": 7,
+      "y": 6,
+      "frame_start": 42,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_7_7",
+      "role": "terrain_tile",
+      "x": 7,
+      "y": 7,
+      "frame_start": 43,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_6_7",
+      "role": "terrain_tile",
+      "x": 6,
+      "y": 7,
+      "frame_start": 44,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_5_7",
+      "role": "terrain_tile",
+      "x": 5,
+      "y": 7,
+      "frame_start": 45,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_5_6",
+      "role": "terrain_tile",
+      "x": 5,
+      "y": 6,
+      "frame_start": 46,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_4_6",
+      "role": "terrain_tile",
+      "x": 4,
+      "y": 6,
+      "frame_start": 47,
+      "frame_count": 1
+    }
+  ]
+}

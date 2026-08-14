@@ -1,0 +1,519 @@
+{
+  "container": "visual_audio.mkv",
+  "order": 4,
+  "grid_side": 16,
+  "entries": [
+    {
+      "name": "bootstrap/va_container.py",
+      "role": "bootstrap",
+      "x": 0,
+      "y": 0,
+      "frame_start": 451,
+      "frame_count": 1
+    },
+    {
+      "name": "kernel",
+      "role": "kernel",
+      "x": 1,
+      "y": 0,
+      "frame_start": 0,
+      "frame_count": 54
+    },
+    {
+      "name": "disk",
+      "role": "disk",
+      "x": 1,
+      "y": 1,
+      "frame_start": 54,
+      "frame_count": 1
+    },
+    {
+      "name": "semantic_cpu_emulator.py",
+      "role": "semantic_code",
+      "x": 0,
+      "y": 1,
+      "frame_start": 55,
+      "frame_count": 1
+    },
+    {
+      "name": "qemu_bootstrap",
+      "role": "emulator",
+      "x": 0,
+      "y": 2,
+      "frame_start": 56,
+      "frame_count": 266
+    },
+    {
+      "name": "linux/kernel/Image",
+      "role": "kernel",
+      "x": 0,
+      "y": 3,
+      "frame_start": 322,
+      "frame_count": 54
+    },
+    {
+      "name": "semantic_cpu_emulator.py.pixel",
+      "role": "code",
+      "x": 1,
+      "y": 3,
+      "frame_start": 432,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_build.py.pixel",
+      "role": "code",
+      "x": 1,
+      "y": 2,
+      "frame_start": 439,
+      "frame_count": 2
+    },
+    {
+      "name": "ollama_prompt.py.pixel",
+      "role": "code",
+      "x": 2,
+      "y": 2,
+      "frame_start": 456,
+      "frame_count": 2
+    },
+    {
+      "name": "boot_ubuntu_from_mkv.py.pixel",
+      "role": "code",
+      "x": 2,
+      "y": 3,
+      "frame_start": 458,
+      "frame_count": 1
+    },
+    {
+      "name": "va_container.py.pixel",
+      "role": "code",
+      "x": 3,
+      "y": 3,
+      "frame_start": 484,
+      "frame_count": 2
+    },
+    {
+      "name": "inside/first_words_1786558217.txt",
+      "role": "message",
+      "x": 3,
+      "y": 2,
+      "frame_start": 392,
+      "frame_count": 1
+    },
+    {
+      "name": "utils.py",
+      "role": "tools",
+      "x": 3,
+      "y": 1,
+      "frame_start": 394,
+      "frame_count": 1
+    },
+    {
+      "name": "test_utils.py",
+      "role": "tools",
+      "x": 2,
+      "y": 1,
+      "frame_start": 395,
+      "frame_count": 1
+    },
+    {
+      "name": "hermes_constants.py",
+      "role": "tools",
+      "x": 2,
+      "y": 0,
+      "frame_start": 396,
+      "frame_count": 1
+    },
+    {
+      "name": "test_multi.py",
+      "role": "tools",
+      "x": 3,
+      "y": 0,
+      "frame_start": 397,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_hermes_bridge.py",
+      "role": "tools",
+      "x": 4,
+      "y": 0,
+      "frame_start": 402,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_hermes_bridge_test.py",
+      "role": "tools",
+      "x": 4,
+      "y": 1,
+      "frame_start": 403,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_hermes_bridge_spatial.py",
+      "role": "tools",
+      "x": 5,
+      "y": 1,
+      "frame_start": 407,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786619391",
+      "role": "thought",
+      "x": 5,
+      "y": 0,
+      "frame_start": 405,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786627180",
+      "role": "thought",
+      "x": 6,
+      "y": 0,
+      "frame_start": 406,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786627224",
+      "role": "thought",
+      "x": 7,
+      "y": 0,
+      "frame_start": 408,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_hermes_bridge_context.py",
+      "role": "tools",
+      "x": 7,
+      "y": 1,
+      "frame_start": 467,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786627600",
+      "role": "thought",
+      "x": 6,
+      "y": 1,
+      "frame_start": 410,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786627606",
+      "role": "thought",
+      "x": 6,
+      "y": 2,
+      "frame_start": 411,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_mind_repl.py",
+      "role": "tools",
+      "x": 7,
+      "y": 2,
+      "frame_start": 412,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786627751",
+      "role": "thought",
+      "x": 7,
+      "y": 3,
+      "frame_start": 413,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786628034",
+      "role": "thought",
+      "x": 6,
+      "y": 3,
+      "frame_start": 414,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786635228",
+      "role": "thought",
+      "x": 5,
+      "y": 3,
+      "frame_start": 426,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786635266",
+      "role": "thought",
+      "x": 5,
+      "y": 2,
+      "frame_start": 428,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786637137",
+      "role": "thought",
+      "x": 4,
+      "y": 2,
+      "frame_start": 435,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786637189",
+      "role": "thought",
+      "x": 4,
+      "y": 3,
+      "frame_start": 436,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786637209",
+      "role": "thought",
+      "x": 4,
+      "y": 4,
+      "frame_start": 437,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786637213",
+      "role": "thought",
+      "x": 4,
+      "y": 5,
+      "frame_start": 438,
+      "frame_count": 1
+    },
+    {
+      "name": "bootstrap/pixel_hermes_bridge_context.py",
+      "role": "bootstrap",
+      "x": 5,
+      "y": 5,
+      "frame_start": 465,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786641697",
+      "role": "thought",
+      "x": 5,
+      "y": 4,
+      "frame_start": 447,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_summary_1786641722",
+      "role": "summary",
+      "x": 6,
+      "y": 4,
+      "frame_start": 449,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786641727",
+      "role": "thought",
+      "x": 7,
+      "y": 4,
+      "frame_start": 450,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786671559",
+      "role": "thought",
+      "x": 7,
+      "y": 5,
+      "frame_start": 460,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786672678",
+      "role": "thought",
+      "x": 6,
+      "y": 5,
+      "frame_start": 461,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786672710",
+      "role": "thought",
+      "x": 6,
+      "y": 6,
+      "frame_start": 462,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786672777",
+      "role": "thought",
+      "x": 7,
+      "y": 6,
+      "frame_start": 463,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_reference_agents_md",
+      "role": "reference",
+      "x": 7,
+      "y": 7,
+      "frame_start": 464,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786673190",
+      "role": "thought",
+      "x": 6,
+      "y": 7,
+      "frame_start": 466,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786673882",
+      "role": "thought",
+      "x": 5,
+      "y": 7,
+      "frame_start": 468,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_summary_1786674970",
+      "role": "summary",
+      "x": 5,
+      "y": 6,
+      "frame_start": 469,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786674993",
+      "role": "thought",
+      "x": 4,
+      "y": 6,
+      "frame_start": 470,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786676052",
+      "role": "thought",
+      "x": 4,
+      "y": 7,
+      "frame_start": 471,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786676142",
+      "role": "thought",
+      "x": 3,
+      "y": 7,
+      "frame_start": 472,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786676335",
+      "role": "thought",
+      "x": 2,
+      "y": 7,
+      "frame_start": 473,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_verification_fix",
+      "role": "content",
+      "x": 2,
+      "y": 6,
+      "frame_start": 474,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786676466",
+      "role": "thought",
+      "x": 3,
+      "y": 6,
+      "frame_start": 475,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786676482",
+      "role": "thought",
+      "x": 3,
+      "y": 5,
+      "frame_start": 476,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786676642",
+      "role": "thought",
+      "x": 3,
+      "y": 4,
+      "frame_start": 477,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786676700",
+      "role": "thought",
+      "x": 2,
+      "y": 4,
+      "frame_start": 478,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786676714",
+      "role": "thought",
+      "x": 2,
+      "y": 5,
+      "frame_start": 479,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786676810",
+      "role": "thought",
+      "x": 1,
+      "y": 5,
+      "frame_start": 480,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786676905",
+      "role": "thought",
+      "x": 1,
+      "y": 4,
+      "frame_start": 481,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_nondeterministic_judge_case",
+      "role": "content",
+      "x": 0,
+      "y": 4,
+      "frame_start": 482,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_spatial_write_path_live",
+      "role": "thought",
+      "x": 0,
+      "y": 5,
+      "frame_start": 483,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/va_container.py",
+      "role": "tools",
+      "x": 0,
+      "y": 6,
+      "frame_start": 486,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/mkv_infinite_map.py",
+      "role": "tools",
+      "x": 1,
+      "y": 6,
+      "frame_start": 487,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/dense_encoder.py",
+      "role": "tools",
+      "x": 1,
+      "y": 7,
+      "frame_start": 488,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/BOOTSTRAP_REQUIREMENTS.md",
+      "role": "doc",
+      "x": 0,
+      "y": 7,
+      "frame_start": 489,
+      "frame_count": 1
+    }
+  ]
+}
