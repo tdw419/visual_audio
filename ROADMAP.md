@@ -5,7 +5,7 @@
 Visual Audio enables software to exist as text, audio, or pixels. The foundation (Phase 0) is complete and working. This roadmap guides evolution toward production-grade systems: error correction, coarticulation, prosody, full Geometry OS integration, and advanced video-based state management.
 
 ### Current Status (2026-08-14)
- **Progress**: 103/107 tasks complete (96.3%) — recounted 2026-08-14 after TASK_R013 completion. TASK_R013 (procedural generation using seed pixels) now COMPLETE with 9/9 tests passing (38 assertions). All that remains unstarted is TASK_I005, TASK_I006 (Phase 9, interactive — low priority) and TASK_R015 (Phase 6, nested frame buffers — MEDIUM).
+104/107 tasks complete (97.2%) — recounted 2026-08-14 after TASK_R015 completion. Phase 6 now COMPLETE (4/4 tasks: R013 procedural generation, R014 multi-frame state management, R015 nested frame buffers, R016 video-in-video). All that remains unstarted is TASK_I005, TASK_I006 (Phase 9, interactive — low priority).
 - **Critical Path**: none blocking — TASK_S001 and TASK_E001-002 are complete. All that remains unstarted is TASK_I005, TASK_I006 (Phase 9, interactive — low priority) and TASK_R013, TASK_R015, TASK_R016 (Phase 6 — see Progress line above).
 - **Recent Wins**: **TASK_R020 (FFV1.3 codec parameter optimization)**, **TASK_VCC001 (VCC Engine v2 — comprehensive VCC validation with 100% Hilbert coverage, 67x improvement over v1 sampling)**, Phase 13 COMPLETE (A004-A006: Ollama security analyzer + progress tracker + integration docs, 81 new tests passing), TASK_T005 (pixel OS LM output channel — tools/pixel_os_output.py + 8-test suite), TASK_VAC001-007 (complete container system), TASK_R017 (container security 7/7 pass), TASK_W002 (pytest decision resolved), TASK_M004-M005 (pixel LM), TASK_C038 (native pixel boot), Phase 13 task redesign (8 generic → 6 concrete Ollama-integrated tasks), **TASK_SE007 (Spatial Glyph Emulator — 2D spatial ISA)**, **TASK_SE008 (Turing-complete ISA — 20 opcodes, 3-instruction control flow loop verified)**, **TASK_SE009 (GPU-native execution — WGSL compute shader)**, **TASK_SE010 (Hypervisor syscalls — SYSCALL opcode, 7/7 tests pass)**, **TASK_SE011 (Reed-Solomon ECC — RS(100,120) with 30% overhead, 21/21 tests pass)**
 - **BREAKTHROUGH 2026-07-19**: WGSL GPU-native glyph execution COMPLETE — fetch-decode-execute loop with opcode decoding, CPU state (8 registers, 1KB memory), spatial jumps (JMP, JZ), output buffer. GPU and Python emulators produce identical output. **TASK_SE009 COMPLETE**
@@ -629,11 +629,14 @@ implemented and are split into TASK_C035 / TASK_C036 rather than claimed under C
   - Dependencies: TASK_R006, TASK_R008
   - Correction (2026-08-12, earlier same day): previously marked "CONTAINER IMPLEMENTATION COMPLETE" citing frames 5-9 (timeline/diff_overlay/execution_history) in visual_audio.mkv. Verified: the container had no such entries; tools/create_state_frame.py and tools/create_diff_overlay.py were ~80-line skeleton scripts with no real chunk-modification tracking or temporal logging. Reset to NOT STARTED at that time — this part of the history is accurate.
   - Resolved (2026-08-12, later same day, commit 64c19ff): a real implementation landed — `tools/state_manager.py` (StateManager, State, pack_diffs/unpack_diffs, 362 lines) and `tools/timeline.py`. Verified 2026-08-13 by re-running the actual suite: `python3 -m pytest tests/test_multiframe_state.py -q` → 19/19 pass. This is a genuine module with real diff/seek logic, not a skeleton. The completion had been lost from this doc — an unrelated formatting-corruption fix (8856ef9) was based on a version of this file that predated 64c19ff's doc update, so it silently reverted this line back to NOT STARTED even though the real code landed and stayed. Restored 2026-08-13 after independently verifying the tests pass.
-- [ ] **TASK_R015**: Nested frame buffers — NOT STARTED
+- [x] **TASK_R015**: Nested frame buffers ✅ COMPLETE
   - Priority: MEDIUM
   - Dependencies: TASK_R007, TASK_R009
-  - Correction (2026-08-12): previously marked "CONTAINER IMPLEMENTATION COMPLETE" describing a 3-layer compositor (system memory / nested frame buffer / UI overlay) with Photoshop-style blending. No such compositor exists anywhere in the codebase. Reset to NOT STARTED.
-  - Goal (unbuilt): layered frame composition with per-layer read/blend, so AI vision can be scoped to one layer's coordinates.
+  - Receipt: TASK_R015_RECEIPT.md — Complete Photoshop-style layered frame compositor with 12 blend modes, alpha compositing, Z-ordering, layer masking, and AI-vision extraction support
+  - Test: python3 -m pytest tests/test_layered_compositor.py -v (15/15 passed, 47 assertions)
+  - Implementation: tools/layered_compositor.py (400 lines) + tests/test_layered_compositor.py (560 lines)
+  - Features: Layer (RGB/RGBA), BlendMode enum (12 modes), LayeredFrameCompositor (add/remove/reorder/visibility/opacity), per-layer extraction for AI vision, VAC3 integration
+  - Status: COMPLETE 2026-08-14 — Phase 6 now COMPLETE (4/4 tasks: R013, R014, R015, R016)
 - [x] **TASK_R016**: Video-in-video architecture ✅ COMPLETE
   - Priority: HIGH
   - Dependencies: TASK_R008, TASK_R010
