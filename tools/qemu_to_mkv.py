@@ -574,15 +574,15 @@ Examples:
     parser.add_argument('--output', '-o', help='Output MKV file')
     parser.add_argument('--arch', default='riscv64', choices=['riscv64', 'x86_64'])
     parser.add_argument('--memory', default='512M', help='Memory size')
-    parser.add_argument('--interval', type=int, default=10000,
+    parser.add_argument('--interval', type=int, default=50000,
                        help='Instructions between captures')
     parser.add_argument('--max-frames', type=int, default=500,
                        help='Maximum frames to capture')
     parser.add_argument('--qmp-socket', default='/tmp/qemu_qmp.sock',
                        help='QMP socket path')
-    parser.add_argument('--memory-width', type=int, default=512,
+    parser.add_argument('--memory-width', type=int, default=1024,
                        help='Pixel grid width')
-    parser.add_argument('--memory-height', type=int, default=512,
+    parser.add_argument('--memory-height', type=int, default=1024,
                        help='Pixel grid height')
     
     # Extract mode arguments

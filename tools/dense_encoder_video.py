@@ -33,7 +33,7 @@ from PIL import Image
 
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src'))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from dense_encoder import frame, unframe, bytes_to_pixels, pixels_to_bytes
 
@@ -352,6 +352,7 @@ def decode_mkv(mkv_path: str, output_dir: Optional[str] = None) -> Tuple[bytes, 
             FFMPEG_PATH, "-y",
             "-dump_attachment:t:0", str(manifest_path),
             "-i", str(mkv_path),
+            "-map", "0:v", "-c", "copy",
             "-f", "null", "-"  # Don't decode anything
         ]
         
