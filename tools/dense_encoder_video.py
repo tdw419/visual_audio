@@ -179,13 +179,8 @@ def frame_to_chunk(frame_array: np.ndarray, size: int = FRAME_SIZE) -> bytes:
     # Flatten to bytes
     frame_bytes = frame_array.flatten().tobytes()
     
-    # Find end (strip trailing zeros)
-    end = len(frame_bytes)
-    while end > 0 and frame_bytes[end-1:end] == b'\x00':
-        end -= 1
-    
-    # Unframe
-    return unframe(frame_bytes[:end])
+    # Unframe (unframe parses exact length from header, safely ignoring padding)
+    return unframe(frame_bytes)
 
 
 def encode_mkv(
