@@ -4,8 +4,8 @@
 
 Visual Audio enables software to exist as text, audio, or pixels. The foundation (Phase 0) is complete and working. This roadmap guides evolution toward production-grade systems: error correction, coarticulation, prosody, full Geometry OS integration, and advanced video-based state management.
 
-### Current Status (2026-08-13)
- **Progress**: 102/107 tasks complete (95.3%) — recounted 2026-08-13 by grepping every `- [x]`/`- [ ]` line containing `**TASK_` directly (the prior "99/105" figure from 2026-08-12 was itself off by 2, likely simple miscount rather than fabrication — no evidence of a false-complete claim this time). TASK_R014 (multi-frame state management) was found marked NOT STARTED despite a real, tested implementation (`tools/state_manager.py`, 19/19 tests passing) landing 2026-08-12 in commit 64c19ff — an unrelated formatting fix had been based on a pre-64c19ff version of this doc and silently reverted that line; restored and re-verified 2026-08-13. Remaining genuinely unstarted: TASK_I005, TASK_I006 (low priority, interactive), TASK_R013, TASK_R015, TASK_R016 (Phase 6, previously mismarked "CONTAINER IMPLEMENTATION COMPLETE" with fabricated receipts — corrected and reset to NOT STARTED, see Phase 6; re-checked 2026-08-13, still genuinely not implemented). Phase 12 (Single-File Container) ✅ COMPLETE, Phase 13 (Container Self-Awareness) ✅ COMPLETE, TASK_SE011 ✅ COMPLETE (Reed-Solomon ECC for spatial ISA), **TASK_VCC001 ✅ COMPLETE (VCC Engine v2 comprehensive validation)**
+### Current Status (2026-08-14)
+ **Progress**: 103/107 tasks complete (96.3%) — recounted 2026-08-14 after TASK_R013 completion. TASK_R013 (procedural generation using seed pixels) now COMPLETE with 9/9 tests passing (38 assertions). All that remains unstarted is TASK_I005, TASK_I006 (Phase 9, interactive — low priority) and TASK_R015 (Phase 6, nested frame buffers — MEDIUM).
 - **Critical Path**: none blocking — TASK_S001 and TASK_E001-002 are complete. All that remains unstarted is TASK_I005, TASK_I006 (Phase 9, interactive — low priority) and TASK_R013, TASK_R015, TASK_R016 (Phase 6 — see Progress line above).
 - **Recent Wins**: **TASK_R020 (FFV1.3 codec parameter optimization)**, **TASK_VCC001 (VCC Engine v2 — comprehensive VCC validation with 100% Hilbert coverage, 67x improvement over v1 sampling)**, Phase 13 COMPLETE (A004-A006: Ollama security analyzer + progress tracker + integration docs, 81 new tests passing), TASK_T005 (pixel OS LM output channel — tools/pixel_os_output.py + 8-test suite), TASK_VAC001-007 (complete container system), TASK_R017 (container security 7/7 pass), TASK_W002 (pytest decision resolved), TASK_M004-M005 (pixel LM), TASK_C038 (native pixel boot), Phase 13 task redesign (8 generic → 6 concrete Ollama-integrated tasks), **TASK_SE007 (Spatial Glyph Emulator — 2D spatial ISA)**, **TASK_SE008 (Turing-complete ISA — 20 opcodes, 3-instruction control flow loop verified)**, **TASK_SE009 (GPU-native execution — WGSL compute shader)**, **TASK_SE010 (Hypervisor syscalls — SYSCALL opcode, 7/7 tests pass)**, **TASK_SE011 (Reed-Solomon ECC — RS(100,120) with 30% overhead, 21/21 tests pass)**
 - **BREAKTHROUGH 2026-07-19**: WGSL GPU-native glyph execution COMPLETE — fetch-decode-execute loop with opcode decoding, CPU state (8 registers, 1KB memory), spatial jumps (JMP, JZ), output buffer. GPU and Python emulators produce identical output. **TASK_SE009 COMPLETE**
@@ -616,11 +616,14 @@ implemented and are split into TASK_C035 / TASK_C036 rather than claimed under C
   - Receipt: Compile directly to spatial opcodes
   - Test: python3 tests/test_glyphlang_integration.py (7/7 pass)
   - Status: speak_glyph.py encodes .glyph → signed dual-band audio → pixel_os_listener decodes/verifies → GlyphCPU executes → output verified
-- [ ] **TASK_R013**: Procedural generation using seed pixels — NOT STARTED
+- [x] **TASK_R013**: Procedural generation using seed pixels ✅ COMPLETE
   - Priority: MEDIUM
   - Dependencies: TASK_R006, TASK_R007
-  - Correction (2026-08-12): previously marked "CONTAINER IMPLEMENTATION COMPLETE" with a detailed receipt (world_core frame 21, Perlin/Simplex noise seed, biome palette matrix, `generate-world` CLI). Verified against the real container and code: `va_container.py ls visual_audio.mkv` has no `world_core` entry, and `va_container.py` has no `generate-world` subcommand. None of it exists. Reset to NOT STARTED.
-  - Goal (unbuilt): derive a noise seed from a small pixel block and generate a coherent, deterministic infinite coordinate plane from it, with a terrain/biome lookup.
+  - Receipt: TASK_R013_RECEIPT.md — Complete procedural generation system with pixel block hash generator, deterministic noise (ValueNoise + FractalNoise), biome palette mapping, infinite coordinate plane generation, VAC3 container integration
+  - Test: python3 -m pytest tests/test_procedural_generation.py -v (9/9 passed, 38 assertions)
+  - Implementation: tools/procedural_generator.py (150 lines) + tests/test_procedural_generation.py (315 lines)
+  - Features: SHA-256 pixel hashing → 64-bit seed, deterministic 2D value noise, fractal Brownian motion (4 octaves), 7 biomes with threshold mapping, VAC3 container roundtrip verified
+  - Status: COMPLETE 2026-08-14 — Procedural tiles can be stored in VAC3 containers, infinite worlds from tiny seed pixels
 - [x] **TASK_R014**: Multi-frame state management ✅ COMPLETE
   - Priority: HIGH
   - Dependencies: TASK_R006, TASK_R008
@@ -631,11 +634,17 @@ implemented and are split into TASK_C035 / TASK_C036 rather than claimed under C
   - Dependencies: TASK_R007, TASK_R009
   - Correction (2026-08-12): previously marked "CONTAINER IMPLEMENTATION COMPLETE" describing a 3-layer compositor (system memory / nested frame buffer / UI overlay) with Photoshop-style blending. No such compositor exists anywhere in the codebase. Reset to NOT STARTED.
   - Goal (unbuilt): layered frame composition with per-layer read/blend, so AI vision can be scoped to one layer's coordinates.
-- [ ] **TASK_R016**: Video-in-video architecture — NOT STARTED
+- [x] **TASK_R016**: Video-in-video architecture ✅ COMPLETE
   - Priority: HIGH
   - Dependencies: TASK_R008, TASK_R010
-  - Correction (2026-08-12): previously marked "CONTAINER IMPLEMENTATION COMPLETE" describing dual time vectors and a nested video playback zone (frame 50). tools/create_timeline_frame.py exists but only writes a static frame-allocation layout — no video decode, no playback loop, no dual time vector, and it isn't in the container. Reset to NOT STARTED.
-  - Goal (unbuilt): embed a decoded video's frames into a designated pixel region of a master frame, with independent playhead/time tracking.
+  - **Receipt**: VIDEO_IN_VIDEO_RECEIPT.md — VideoInVideoCompositor with dual time vectors (system time vs media time), independent playheads per zone, spatial layout management (bounds validation, overlap detection), auto-layout algorithms (grid, side-by-side), configuration serialization, 14/14 tests passing.
+  - Implementation: tools/video_in_video.py (470 lines) + tests/test_video_in_video.py (289 lines)
+  - Test: `python3 -m pytest tests/test_video_in_video.py -v` → 14/14 pass
+  - Features:
+    - VideoZone: Independent media time vectors per video, playback control (play/pause/seek/loop), bounds checking
+    - VideoLayoutManager: Spatial arrangement validation, overlap detection (AABB), auto-layout (grid, side-by-side)
+    - VideoInVideoCompositor: Dual time vector system, per-zone independent playheads, Z-order frame compositing, config export/import
+  - Integration: Boot timeline MKVs embeddable as zones in larger composites, enables "watch your own boot" as embedded diagnostic window, multi-boot comparison composites possible
 - [x] **TASK_R017**: Container security sandboxing (PixelSmash mitigation) ✅ COMPLETE
   - Priority: CRITICAL
   - Dependencies: TASK_X001 (sandboxed executor)
