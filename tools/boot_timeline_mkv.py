@@ -686,9 +686,18 @@ async def capture_boot_timeline(
             pass
         
         qemu_proc.terminate()
+        # Non-blocking wait to avoid blocking finalization
         try:
-            qemu_proc.wait(timeout=5)
+            # Check if process terminated within timeout
+            for _ in range(50):  # 5 seconds max (50 × 0.1s)
+                if qemu_proc.poll() is not None:
+                    break
+                await asyncio.sleep(0.1)
         except:
+            pass
+        
+        # Force kill if still running
+        if qemu_proc.poll() is None:
             qemu_proc.kill()
         
         try:
