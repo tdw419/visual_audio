@@ -1736,4 +1736,36 @@ git commit -m "container: add frame allocation scheme + self-hosting tools"
 
 ---
 
+## Phase 26: Fully Native Glyph-Based OS (GPU-First) ⚪ NOT STARTED
+
+**Goal**: Eliminate high-level compositor dependencies (Smithay/Wayland) and transition to a purely spatial execution model. In this phase, the OS acts as a Spatial Program Coordinator where windows are autonomous regions of instructions executing natively on the GPU via the Glyph ISA. This marks the transition from "Visual Bootstrapping" (using legacy RISC-V/Linux as a crutch) to a self-sufficient spatial substrate.
+
+### Tasks
+
+- [ ] **TASK_G001: Visual Consistency Contract (VCC) Enforcer Engine**
+  - Priority: HIGH
+  - Description: Build the continuous validation engine that verifies SHA256 hashes of autonomous GPU memory regions. As programs patch and copy each other (visual self-modification), VCC ensures structural health and Phase Alignment Stability (PAS).
+  - Scope: The enforcer must run seamlessly over the `.npy` spatial grid without interrupting WGSL execution.
+  - Receipt: `python3 tools/vcc_enforcer.py --monitor` continuously watches a memory region, immediately detecting and logging illegal spatial modifications or hash drift.
+
+- [ ] **TASK_G002: Spatial Window Manager (GPU-First Coordinate System)**
+  - Priority: HIGH
+  - Description: Replace Smithay/Wayland with a pure WGPU/WGSL spatial coordinator. "Windows" are no longer OS-level processes, but 2D bounding boxes of `.glyph` instructions mapped to the Hilbert curve.
+  - Scope: Needs an arbiter to manage bounding box collisions and prevent stray writes between autonomous window particles.
+  - Receipt: A WGSL pipeline that hosts 3 distinct `.glyph` programs in separate bounding boxes on the same spatial grid, executing concurrently without memory corruption.
+
+- [ ] **TASK_G003: Native Glyph I/O Primitives (Event System)**
+  - Priority: MEDIUM
+  - Description: Replace the `spatial_daemon.py` host-polling model with native event rings inside the spatial grid. Keyboard/mouse inputs map directly to spatial memory writes in an "Input Region" that `.glyph` programs poll natively.
+  - Scope: Event queues represented as circular 2D pixel buffers.
+  - Receipt: Keypresses map instantly to spatial memory writes, and an autonomous `.glyph` window reacts without a Python host-daemon intermediating the OS call.
+
+- [ ] **TASK_G004: The Glyph-Native Init System (pid 1)**
+  - Priority: HIGH
+  - Description: A self-describing, font-atomic bootloader/init program written entirely in `.glyph` that spawns the VCC Enforcer (TASK_G001) and Window Manager (TASK_G002) as its first sub-particles.
+  - Scope: Eliminates the Python boot scripts (`boot_xv6_gpu.py`). The GPU boots directly from the spatial init grid.
+  - Receipt: The system achieves stability (PAS > 0.95) with zero human-made languages (Rust, WGSL host scripts) running after initialization.
+
+---
+
 ## Backlog (Unprioritized Tasks)

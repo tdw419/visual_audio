@@ -162,8 +162,8 @@ class ListenerDaemon:
         Otherwise they are refused, never silently dropped into the framebuffer path.
         """
         boot_ops = [op for op in ops if isinstance(op, (list, tuple)) and op and op[0] == 'boot']
-        driver_ops = [op for op in ops if isinstance(op, (list, tuple)) and op and op[0] in ('write', 'run')]
-        draw_ops = [op for op in ops if isinstance(op, (list, tuple)) and op and op[0] not in ('boot', 'write', 'run')]
+        driver_ops = [op for op in ops if isinstance(op, (list, tuple)) and op and op[0] in ('write', 'run', 'mv', 'spawn')]
+        draw_ops = [op for op in ops if isinstance(op, (list, tuple)) and op and op[0] not in ('boot', 'write', 'run', 'mv', 'spawn')]
 
         ok = True
         for op in boot_ops:
@@ -197,6 +197,88 @@ class ListenerDaemon:
         verb = "Would launch" if self.boot_dry_run else "Launched"
         logger.info(f"{verb} QEMU from signed boot op: {' '.join(argv)}")
         return True
+
+    def _validate_path_in_sandbox(self, filename: str, desc: str = "path") -> tuple[bool, Path | None]:
+        """
+        Validate and resolve a path within driver_output_dir sandbox.
+
+        Args:
+            filename: Relative filename to validate
+            desc: Description for error messages
+
+        Returns:
+            (success, resolved_path) tuple, None on failure
+        """
+        # Prevent path traversal: reject .. and absolute paths
+        if '..' in filename or filename.startswith('/'):
+            logger.error(f"Refusing op with dangerous {desc}: {filename!r}")
+            return False, None
+
+        output_path = Path(self.driver_output_dir) / filename
+
+        # Verify the resolved path is still within driver_output_dir
+        try:
+            resolved_path = output_path.resolve()
+            resolved_dir = Path(self.driver_output_dir).resolve()
+            if not str(resolved_path).startswith(str(resolved_dir)):
+                logger.error(f"Refusing op: path traversal attempt detected: {output_path}")
+                return False, None
+        except Exception as e:
+            logger.error(f"Failed to resolve path {output_path}: {e}")
+            return False, None
+
+        return True, resolved_path
+
+    def _execute_mv(self, src_name: str, dst_name: str) -> bool:
+        """Execute mv operation after validation."""
+        src_valid, src_path = self._validate_path_in_sandbox(src_name, "source filename")
+        if not src_valid or src_path is None:
+            return False
+
+        dst_valid, dst_path = self._validate_path_in_sandbox(dst_name, "destination filename")
+        if not dst_valid or dst_path is None:
+            return False
+
+        if not src_path.exists():
+            logger.error(f"mv source not found: {src_path}")
+            return False
+
+        try:
+            src_path.rename(dst_path)
+            logger.info(f"Moved {src_path} → {dst_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to move {src_path} to {dst_path}: {e}")
+            return False
+
+    def _execute_spawn(self, script_name: str, args: list) -> bool:
+        """Execute spawn operation after validation."""
+        path_valid, script_path = self._validate_path_in_sandbox(script_name, "script filename")
+        if not path_valid or script_path is None:
+            return False
+
+        if not script_path.exists():
+            logger.error(f"Spawn script not found: {script_path}")
+            return False
+
+        try:
+            import subprocess
+
+            cmd = [sys.executable, str(script_path)] + [str(a) for a in args]
+            process = subprocess.Popen(
+                cmd,
+                cwd=self.driver_output_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                stdin=subprocess.DEVNULL
+            )
+            logger.info(f"Spawned background process: PID={process.pid}, cmd={' '.join(cmd)}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to spawn {script_path}: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
 
     def _handle_driver_op(self, op) -> bool:
         """Validate and (unless testing) execute write/run ops."""
@@ -332,6 +414,18 @@ class ListenerDaemon:
                 import traceback
                 traceback.print_exc()
                 return False
+
+        elif op_type == 'mv':
+            if len(op) < 3:
+                logger.error(f"Invalid mv op: {op!r}")
+                return False
+            return self._execute_mv(op[1], op[2])
+
+        elif op_type == 'spawn':
+            if len(op) < 2:
+                logger.error(f"Invalid spawn op: {op!r}")
+                return False
+            return self._execute_spawn(op[1], op[2:])
 
         logger.error(f"Unknown driver op type: {op_type!r}")
         return False
