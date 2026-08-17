@@ -1,10 +1,12 @@
 # Alpine Boot Trace — Software-to-Video Pipeline Verification
 
-**Status**: BLOCKED — Alpine RISC-V cannot boot; use xv6.img for working demos
+**Status**: PARTIALLY UNBLOCKED (2026-08-16) — EDK2/UEFI firmware works; GRUB reaches
+the kernel but produces no serial output because of its own config, not a firmware
+limitation. See "2026-08-16 Update" below.
 
-**Date**: 2026-08-15 (Updated)
+**Date**: 2026-08-15 (original), updated 2026-08-16
 
-## Root Cause
+## Root Cause (original, now resolved)
 
 **Alpine RISC-V uses PE32+ EFI kernel format, not ELF64.**
 
@@ -16,7 +18,71 @@ OpenSBI (the default RISC-V firmware for QEMU virt) only loads raw ELF64 kernels
 - `boot_images/hello.img`: ELF 64-bit at 0x80200000 — Boots and prints message ✅
 - `boot_images/xv6.img`: ELF 64-bit at 0x80000000 — Conflicts with OpenSBI firmware region ❌
 
-PE32+ EFI requires EDK2/UEFI firmware stack (e.g., `virtio-flash-device` firmware), which adds significant complexity and is not currently supported by `qemu_to_mkv.py`.
+PE32+ EFI requires EDK2/UEFI firmware stack. This was previously assumed out of
+scope, but **the firmware is already installed on this machine** (`qemu-efi-riscv64`
+package, `/usr/share/qemu-efi-riscv64/RISCV_VIRT_{CODE,VARS}.fd`) and works.
+
+## 2026-08-16 Update — EDK2 firmware confirmed working, new precise blocker found
+
+Booted `boot_images/alpine-standard-3.24.1-riscv64.iso` (isohybrid) as a raw
+`virtio-blk-device` disk with EDK2 pflash firmware attached:
+
+```bash
+qemu-system-riscv64 -machine virt -m 3G -smp 4 \
+    -pflash /usr/share/qemu-efi-riscv64/RISCV_VIRT_CODE.fd \
+    -pflash /usr/share/qemu-efi-riscv64/RISCV_VIRT_VARS.fd \
+    -drive file=boot_images/alpine-standard-3.24.1-riscv64.iso,if=none,format=raw,id=cd0,readonly=on \
+    -device virtio-blk-device,drive=cd0 \
+    -nographic -no-reboot
+```
+
+(pflash files must be writable copies, not the read-only package originals —
+copy them to a scratch dir first.)
+
+**Confirmed working**: OpenSBI → EDK2 RISC-V UEFI firmware boots cleanly →
+correctly enumerates the ISO's GPT partitions → mounts the small FAT ESP
+partition as `FS0:` → finds `\EFI\BOOT\BOOTRISCV64.EFI` (GRUB) at the standard
+path. This directly refutes the old "out of scope" / "BLOCKED" verdict — the
+UEFI firmware stack is not the blocker.
+
+**New, more precise blocker**: launching `FS0:\EFI\BOOT\BOOTRISCV64.EFI` from
+the UEFI Shell produces **zero serial output**, even after 4+ minutes (ruled out
+as merely "TCG software emulation is slow" — GRUB should print something within
+seconds even under slow emulation).
+
+Root cause, confirmed by extracting `boot/grub/grub.cfg` from the ISO
+(`isoinfo -R -x /boot/grub/grub.cfg -i alpine-standard-3.24.1-riscv64.iso`):
+
+```
+set timeout=1
+
+menuentry "Linux lts" {
+linux	/boot/vmlinuz-lts modules=loop,squashfs,sd-mod,usb-storage quiet
+initrd	/boot/initramfs-lts
+}
+```
+
+This is **not a hang** — it's silent-by-design:
+- `timeout=1` with a single menu entry means GRUB never prints a menu.
+- The kernel cmdline has `quiet` and **no `console=ttyS0`**, so nothing is
+  routed to the serial UART we're capturing, even if boot succeeds.
+- Alpine's inittab/openrc typically only spawns a serial getty when
+  `console=ttyS0` appears on the kernel cmdline, so even a fully-booted system
+  would show no login prompt over this pipe.
+
+Also confirmed: EDK2's built-in Shell has no ISO9660 filesystem driver, so
+`vmlinuz-lts`/`initramfs-lts` (which live on the ISO9660 rootfs partition, not
+the FAT ESP) are invisible to `FS0:` — only GRUB's own bundled fs drivers
+(baked into `boot/grub/efi.img`) can read them. This rules out bypassing GRUB
+entirely from the Shell; the fix has to happen through GRUB.
+
+## Next Step (not yet done)
+
+Interrupt GRUB's 1-second menu timeout (send a keypress immediately after
+invoking `BOOTRISCV64.EFI`, before the menu auto-boots) to edit the boot entry
+and append `console=ttyS0` (and drop `quiet`), or build a custom ISO/GRUB
+config with those changes baked in. Either should make the actual boot
+progress (or actual failure) visible over serial for the first time.
 
 ## What Works
 
