@@ -1,8 +1,8 @@
 # Alpine Boot Trace — Software-to-Video Pipeline Verification
 
-**Status**: PARTIALLY UNBLOCKED (2026-08-16) — EDK2/UEFI firmware works; GRUB reaches
-the kernel but produces no serial output because of its own config, not a firmware
-limitation. See "2026-08-16 Update" below.
+**Status**: FURTHER UNBLOCKED (2026-08-16) — EDK2/UEFI firmware works, kernel
+boots directly (GRUB bypassed) with full serial output, panics on a specific,
+reproducible kernel bug in SMP bring-up. See "2026-08-16 Update #2" below.
 
 **Date**: 2026-08-15 (original), updated 2026-08-16
 
@@ -76,13 +76,56 @@ the FAT ESP) are invisible to `FS0:` — only GRUB's own bundled fs drivers
 (baked into `boot/grub/efi.img`) can read them. This rules out bypassing GRUB
 entirely from the Shell; the fix has to happen through GRUB.
 
-## Next Step (not yet done)
+## 2026-08-16 Update #2 — GRUB bypassed entirely, kernel boots, hits a real kernel bug
 
-Interrupt GRUB's 1-second menu timeout (send a keypress immediately after
-invoking `BOOTRISCV64.EFI`, before the menu auto-boots) to edit the boot entry
-and append `console=ttyS0` (and drop `quiet`), or build a custom ISO/GRUB
-config with those changes baked in. Either should make the actual boot
-progress (or actual failure) visible over serial for the first time.
+Interactive GRUB-menu automation (spamming keypresses via pexpect to catch its
+1s timeout window) proved unreliable — pty echo/timing made it impossible to
+tell whether keystrokes were reaching the guest at all. Abandoned that
+approach in favor of a fully deterministic, no-interaction path:
+
+1. Extracted `boot/vmlinuz-lts` and `boot/initramfs-lts` from the ISO's
+   ISO9660 partition on the host (`isoinfo -R -x ... -i alpine-standard-*.iso`)
+   — EDK2's Shell has no ISO9660 driver so these are otherwise invisible to it.
+2. Decompressed `vmlinuz-lts` (`zcat`) to get the actual PE32+ EFI kernel
+   image the RISC-V EFI stub can run directly, bypassing GRUB entirely.
+3. Built a small FAT16 disk (`mtools`/`mkfs.vfat`, no root needed) containing
+   the kernel, initrd, and a `startup.nsh`:
+   ```
+   echo -off
+   vmlinuz-lts.efi console=ttyS0 earlycon=uart8250,mmio,0x10000000 initrd=initramfs-lts modules=loop,squashfs,sd-mod,usb-storage
+   ```
+   EDK2 auto-executes `startup.nsh` on an otherwise-idle console (the same
+   "press any key to skip" countdown from before) — no keystroke automation
+   needed at all.
+
+**Result**: this reaches full kernel boot with complete serial dmesg output —
+the first time this project has ever seen real Alpine kernel output over
+serial. It panics deterministically at:
+
+```
+kernel BUG at arch/riscv/kernel/smpboot.c:151!
+epc : setup_smp+0x9e/0x11c
+Kernel panic - not syncing: Fatal exception in interrupt
+```
+
+Reproduced identically across:
+- `-smp 1` and `-smp 4` (rules out a hart-count race)
+- `acpi=off` (rules out ACPI vs. DT hart-topology parsing)
+- QEMU 8.2.2 (distro, OpenSBI v1.3) **and** self-built QEMU 9.0.0 with its own
+  bundled EDK2/OpenSBI (`/home/jericho/qemu-build/qemu-9.0.0/build/qemu-system-riscv64`)
+  — rules out a QEMU/firmware version mismatch.
+- Only one Alpine kernel build exists locally (`6.18.35-0-lts`,
+  `#1-Alpine SMP PREEMPT_DYNAMIC 2026-06-09`) — no older build to fall back to.
+
+This is now a **kernel-level bug**, not a firmware/tooling/config gap. Fixing
+it requires either a different Alpine kernel build or patching
+`arch/riscv/kernel/smpboot.c`, both out of scope for a config/flag-level fix.
+
+**Reusable artifact**: `/home/jericho/scratch/alpine_uefi/boot_disk.img` (FAT
+disk with kernel+initrd+startup.nsh) and the pflash pairs in
+`/home/jericho/scratch/alpine_uefi/` and `/home/jericho/scratch/alpine_uefi_v2/`
+are the fastest way to re-test this without repeating the ISO-extraction
+steps.
 
 ## What Works
 
