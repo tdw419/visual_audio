@@ -127,6 +127,45 @@ disk with kernel+initrd+startup.nsh) and the pflash pairs in
 are the fastest way to re-test this without repeating the ISO-extraction
 steps.
 
+## 2026-08-16 Update #3 — same direct-EFI-stub method tried on Ubuntu's riscv64
+## kernel, different early panic; points at a systemic ACPI/memory-map issue
+
+Applied the identical FAT-disk/startup.nsh technique to
+`boot_images/ubuntu_Image` + `ubuntu_initrd` (Ubuntu 22.04,
+`6.8.0-136-generic`, older/more mainstream than Alpine's 6.18 build). No real
+rootfs was attached (`ubuntu_desktop.qcow2` is an empty sparse placeholder),
+so this could never reach userspace, but it usefully tests whether the
+Alpine SMP panic was Alpine-specific.
+
+**Result**: Ubuntu's kernel gets much further than Alpine — past `setup_smp`
+entirely, into `kthreadd`/early process creation — before hitting its own
+Oops:
+```
+Unable to handle kernel paging request at virtual address 0000000000001389
+epc : prepare_alloc_pages.constprop.0+0xbc/0x150   (in dup_task_struct -> vmalloc)
+```
+Retried with `nokaslr` and `-m 4G` (vs 3G) — different but structurally
+similar fault, one step earlier:
+```
+Unable to handle kernel paging request at virtual address 0000004000000008
+epc : ___slab_alloc+0x4f8/0x85a   (in kmalloc_trace -> kthread_create_worker -> workqueue_init)
+```
+Both bad addresses cluster near the 1GiB (`0x40000000`) boundary, in early
+slab/vmalloc allocator paths, right after ACPI core init
+(`ACPI: Core revision 20230628`).
+
+**Conclusion**: two unrelated kernel builds (Alpine 6.18, Ubuntu 6.8) each
+hit an early memory-management panic specifically when booted via the direct
+EFI-stub path, which relies on QEMU/EDK2's **ACPI**-based memory map. The toy
+kernels that already boot fine (`hello.img`, `xv6.img`) never exercise this
+path — they're bare ELF64 images booted straight by OpenSBI, no UEFI/ACPI
+involved at all. This reframes the earlier GRUB blocker: GRUB normally hands
+the kernel a **devicetree**, not ACPI tables, which may avoid this failure
+mode entirely. **Fixing GRUB's silent console** (append `console=ttyS0`,
+drop `quiet`, either by interrupting its 1s menu timeout or building a
+patched `grub.cfg`) is likely a more promising path than continuing to
+hand-roll direct EFI-stub boots.
+
 ## What Works
 
 1. **QMP Memory Dump Pipeline** — VERIFIED:
