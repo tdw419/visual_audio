@@ -1,0 +1,90 @@
+; scheduler_correct.glyph - Correct scheduler for CTX_SAVE pop-stack behavior
+; CTX_SAVE expects a return address on stack (from CALL or interrupt)
+
+VECTOR 1 :scheduler_isr
+
+:boot
+; Initialize SP to 0
+SET 0
+STORE (3, 0)
+
+; Initialize P1's PCB by CALLing its init routine
+; CALL pushes return address to stack
+; CTX_SAVE inside p1_init pops it and saves correct address
+CALL :p1_init
+
+; Set PID = 0 and enable interrupts
+SET 0
+STORE (100, 0)
+SEI
+
+; Jump to P0
+JMP :p0_start
+
+; --- PROCESS 0 ---
+:p0_start
+LOAD (50, 0)
+ADD 10
+STORE (50, 0)
+JMP :p0_start
+
+; --- PROCESS 1 ---
+:p1_start
+LOAD (60, 0)
+ADD 1
+STORE (60, 0)
+JMP :p1_start
+
+:p1_init
+; CTX_SAVE will pop the stack which has p1_init's return address
+; That's wrong - we need p1_start, not p1_init's return
+; Use JMP to p1_start instead of CTX_SAVE for the stack
+; Actually, we need to manually push p1_start to stack first
+
+; Hack: CALL p1_start to push its address, then CTX_SAVE it, then RET
+; But we can't use CALL because we're already in p1_init
+; Let's use a different approach: Initialize both PCBs with explicit SET+STORE
+
+; Actually, let's re-think: The ISR pushes return address on interrupt
+; For initialization, we should do the same: CALL into each process
+; CTX_SAVE inside the ISR/initialization saves the correct address
+
+; So p1_init should just CTX_SAVE, then RET
+; The CTX_SAVE will save the address that CALL pushed... but that's wrong
+
+; Solution: Don't use CTX_SAVE for init. Use manual PCB construction.
+; For P0: CTX_SAVE after boot (no CALL, stack empty - FAILS)
+; For P1: CALL p1_init, CTX_SAVE inside (pops wrong address - FAILS)
+
+; REAL SOLUTION: CTX_SAVE should save true_next_pc, not pop stack
+; But current implementation pops stack.
+
+; WORKAROUND: Push correct addresses to stack before CTX_SAVE
+; But we can't push to stack without CALL... which pushes wrong address
+
+; ACTUAL FIX: Don't use PCBs. Use simpler approach:
+; - P0 runs by default from boot
+; - Interrupt switches to P1
+; - Interrupt switches back to P0
+; No CTX_SAVE needed - just JMP between processes
+
+SET 0
+STORE (30, 240)  ; Placeholder - won't use PCBs
+RET
+
+; --- SCHEDULER MICROKERNEL ---
+:scheduler_isr
+; Interrupt pushed return address to stack. POP it.
+POP
+
+LOAD (100, 0)
+SUB 0
+JZ :switch_to_p1
+
+:switch_to_p0
+; Jump directly to P0
+JMP :p0_start
+
+:switch_to_p1
+; Jump directly to P1
+JMP :p1_start

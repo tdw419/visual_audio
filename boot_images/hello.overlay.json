@@ -1,0 +1,112 @@
+[
+  {
+    "type": "section",
+    "name": ".text",
+    "addr": "0x80200000",
+    "size": "0x40",
+    "color": "#0000ff",
+    "bounds": [
+      4096,
+      4160
+    ]
+  },
+  {
+    "type": "section",
+    "name": ".rodata",
+    "addr": "0x80200040",
+    "size": "0x57",
+    "color": "#0000ff",
+    "bounds": [
+      4160,
+      4247
+    ]
+  },
+  {
+    "type": "section",
+    "name": ".bss",
+    "addr": "0x80201000",
+    "size": "0x1000",
+    "color": "#0000ff",
+    "bounds": [
+      8192,
+      12288
+    ]
+  },
+  {
+    "type": "section",
+    "name": ".riscv.attributes",
+    "addr": "0x0",
+    "size": "0x52",
+    "color": "#0000ff",
+    "bounds": [
+      4247,
+      4329
+    ]
+  },
+  {
+    "type": "section",
+    "name": ".comment",
+    "addr": "0x0",
+    "size": "0x22",
+    "color": "#0000ff",
+    "bounds": [
+      4329,
+      4363
+    ]
+  },
+  {
+    "type": "section",
+    "name": ".symtab",
+    "addr": "0x0",
+    "size": "0x168",
+    "color": "#0000ff",
+    "bounds": [
+      4368,
+      4728
+    ]
+  },
+  {
+    "type": "section",
+    "name": ".strtab",
+    "addr": "0x0",
+    "size": "0x72",
+    "color": "#0000ff",
+    "bounds": [
+      4728,
+      4842
+    ]
+  },
+  {
+    "type": "section",
+    "name": ".shstrtab",
+    "addr": "0x0",
+    "size": "0x49",
+    "color": "#0000ff",
+    "bounds": [
+      4842,
+      4915
+    ]
+  },
+  {
+    "type": "segment",
+    "p_type": 1879048195,
+    "vaddr": "0x0",
+    "size": "0x52",
+    "color": "#00ff00",
+    "bounds": [
+      4247,
+      4329
+    ]
+  },
+  {
+    "type": "segment",
+    "p_type": 1,
+    "vaddr": "0x80200000",
+    "size": "0x97",
+    "color": "#00ff00",
+    "bounds": [
+      4096,
+      4247
+    ]
+  }
+]

@@ -1,0 +1,61 @@
+; scheduler_working.glyph
+; Demonstrates preemptive multi-processing via a Timer IRQ (IRQ 1).
+; WORKING VERSION: CTX_LOAD pushes saved PC to stack, ISR uses RET to jump.
+
+VECTOR 1 :scheduler_isr
+
+:boot
+; 1. Initialize P1's Process Control Block (PCB) at (30, 240)
+CALL :p1_init
+
+; --- PROCESS 1 ---
+:p1_start
+LOAD (60, 0)
+ADD 1
+STORE (60, 0)
+JMP :p1_start
+; -----------------
+
+:p1_init
+; CTX_SAVE pops the return address and saves it to P1's PCB!
+CTX_SAVE (30, 240)
+JMP :boot_continue
+
+:boot_continue
+; 2. Initialize current PID to 0 (P0 is running)
+SET 0
+STORE (100, 0)
+
+; 3. Enable Interrupts
+SEI
+
+; --- PROCESS 0 ---
+:p0_start
+LOAD (50, 0)
+ADD 10
+STORE (50, 0)
+JMP :p0_start
+; -----------------
+
+
+; --- SCHEDULER MICROKERNEL ---
+:scheduler_isr
+LOAD (100, 0)
+SUB 0
+JZ :switch_to_p1
+
+:switch_to_p0
+; P1 was running. Save P1, Load P0.
+CTX_SAVE (30, 240)
+CTX_LOAD (20, 240)
+SET 0
+STORE (100, 0)
+RET
+
+:switch_to_p1
+; P0 was running. Save P0, Load P1.
+CTX_SAVE (20, 240)
+CTX_LOAD (30, 240)
+SET 1
+STORE (100, 0)
+RET

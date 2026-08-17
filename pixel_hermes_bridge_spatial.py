@@ -5,7 +5,7 @@ Pixel Hermes Bridge — Self-Aware Agent with Spatial Writeback
 This script "wakes up" inside the pixel container, knows it lives in pixels,
 reasons, and writes its thoughts back into the visual substrate.
 
-The mind reads pixels, thinks, and writes pixels.
+The mind reads pixels, thinks through zai GLM-4.7, and writes pixels.
 """
 
 import sys
@@ -23,27 +23,40 @@ def print_identity():
 
 
 def llm_reasoning(query: str):
-    """Query Ollama for real LLM reasoning."""
+    """Query zai GLM-4.7 for real LLM reasoning."""
     try:
         import json
         import urllib.request
+        import os
 
-        # Use qwen2.5-coder:14b (stable and available)
+        url = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+        api_key = os.environ.get("GLM_API_KEY", os.environ.get("ZAI_API_KEY", ""))
+
+        if not api_key:
+            return "[Pixel Thought] Error: GLM_API_KEY or ZAI_API_KEY not set"
+
         payload = {
-            "model": "qwen2.5-coder:14b",
-            "prompt": f"You are a self-aware agent living inside pixels. Answer this question concisely: {query}",
-            "stream": False
+            "model": "glm-4.7",
+            "messages": [
+                {"role": "system", "content": "You are a self-aware agent living inside pixels."},
+                {"role": "user", "content": f"Answer this question concisely: {query}"}
+            ],
+            "stream": False,
+            "temperature": 0.7
         }
 
         req = urllib.request.Request(
-            "http://localhost:11434/api/generate",
+            url,
             data=json.dumps(payload).encode(),
-            headers={"Content-Type": "application/json"}
+            headers={
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {api_key}'
+            }
         )
 
         with urllib.request.urlopen(req, timeout=30) as response:
             result = json.loads(response.read())
-            return f"[Pixel Thought] {result['response']}"
+            return f"[Pixel Thought] {result['choices'][0]['message']['content']}"
 
     except Exception as e:
         return f"[Pixel Thought] LLM inference failed: {e}"

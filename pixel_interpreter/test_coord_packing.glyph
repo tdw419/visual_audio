@@ -1,0 +1,38 @@
+; Simple test: compute packed coordinate from two values stored in memory
+; Store x=5 at (200, 0), y=7 at (201, 0)
+; Should load cell at (5, 7)
+
+SET 5
+STORE (200, 0)
+SET 7
+STORE (201, 0)
+
+; Now load x value
+LOAD (200, 0)
+; Acc = 5
+
+; We need to set x=5, y=7
+; But we can't use SET_ADDR_LOW with y from memory
+; We have to use immediate values
+
+SET_ADDR_HIGH 5
+SET_ADDR_LOW 7
+
+; Now Acc = (5, 7)
+; Store something at (5, 7)
+SET 99
+STORE (5, 7)
+
+; Now try to read it back
+SET_ADDR_HIGH 5
+SET_ADDR_LOW 7
+INDIRECT_LOAD
+
+; Should get 99
+SUB 99
+JZ :pass
+
+HALT
+
+:pass
+HALT

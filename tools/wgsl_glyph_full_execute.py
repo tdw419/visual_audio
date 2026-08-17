@@ -18,6 +18,14 @@ Key differences from minimal engine:
 - Spatial jumps (JMP, JZ)
 """
 
+import os
+
+# Dual-GPU (Intel + NVIDIA) sandboxes: Vulkan mesa device-select can pick the
+# NVIDIA render node and spin forever waiting on a fence that never signals.
+# Forcing GL + the Intel iris driver avoids that hang.
+os.environ.setdefault("WGPU_BACKEND", "gl")
+os.environ.setdefault("MESA_LOADER_DRIVER_OVERRIDE", "iris")
+
 import wgpu
 import struct
 import numpy as np

@@ -1,0 +1,77 @@
+; scheduler_manual_pcb.glyph - Manual PCB construction using STORE_XY
+
+VECTOR 1 :scheduler_isr
+
+:boot
+; Initialize SP to 0
+SET 0
+STORE (3, 0)
+
+; --- P0 PCB at (20, 240) ---
+SET 24
+STORE_XY (20, 240)  ; PC = (24, 1) - p0_start
+
+SET 0
+STORE (20, 241)  ; Acc = 0
+SET 0
+STORE (20, 242)  ; SP = 0
+SET 0
+STORE (20, 243)  ; ZF = 0
+
+; --- P1 PCB at (30, 240) ---
+SET 29
+STORE_XY (30, 240)  ; PC = (29, 1) - p1_start
+
+SET 0
+STORE (30, 241)  ; Acc = 0
+SET 0
+STORE (30, 242)  ; SP = 0
+SET 0
+STORE (30, 243)  ; ZF = 0
+
+; Set PID = 0 and enable interrupts
+SET 0
+STORE (100, 0)
+SEI
+
+; Load P0 and start
+CTX_LOAD (20, 240)
+
+; --- PROCESS 0 ---
+:p0_start
+LOAD (50, 0)
+ADD 10
+STORE (50, 0)
+JMP :p0_start
+
+; --- PROCESS 1 ---
+:p1_start
+LOAD (60, 0)
+ADD 1
+STORE (60, 0)
+JMP :p1_start
+
+; --- SCHEDULER MICROKERNEL ---
+:scheduler_isr
+; Interrupt pushed return address to stack. POP it before CTX_LOAD.
+POP
+
+LOAD (100, 0)
+SUB 0
+JZ :switch_to_p1
+
+:switch_to_p0
+; P1 was running. Save P1, Load P0.
+CTX_SAVE (30, 240)
+CTX_LOAD (20, 240)
+SET 0
+STORE (100, 0)
+RET
+
+:switch_to_p1
+; P0 was running. Save P0, Load P1.
+CTX_SAVE (20, 240)
+CTX_LOAD (30, 240)
+SET 1
+STORE (100, 0)
+RET

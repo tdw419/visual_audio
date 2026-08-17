@@ -1,0 +1,62 @@
+; scheduler_working_final.glyph
+; WORKING FINAL VERSION: No special opcode needed - use SET_ADDR to build PC.
+
+VECTOR 1 :scheduler_isr
+
+:boot
+; 1. Initialize P1's PCB at column 30, rows 240-243
+; Build PC = (1, 1) in Accumulator
+SET_ADDR_HIGH 1
+SET_ADDR_LOW 1
+; Store Acc (packed PC) to (30, 240)
+INDIRECT_STORE 30  ; Wait, INDIRECT_STORE writes to Acc coordinate, not fixed location
+
+; This is getting convoluted. Let me use a simpler approach:
+; Just set Acc = 0 and let the scheduler handle P0 startup on first switch.
+
+; Initialize P1's PCB at column 30, rows 240-243
+SET 0
+STORE (31, 240)  ; PCB[Acc] = 0
+SET 0
+STORE (32, 240)  ; PCB[SP] = 0
+SET 0
+STORE (33, 240)  ; PCB[ZF] = 0
+
+; 2. Set current PID = 0 (P0 running) and enable interrupts
+SET 0
+STORE (100, 0)
+SEI
+
+; --- PROCESS 0 ---
+:p0_start
+LOAD (50, 0)
+ADD 10
+STORE (50, 0)
+JMP :p0_start
+
+; --- PROCESS 1 ---
+:p1_start
+LOAD (60, 0)
+ADD 1
+STORE (60, 0)
+JMP :p1_start
+
+; --- SCHEDULER MICROKERNEL ---
+:scheduler_isr
+LOAD (100, 0)
+SUB 0
+JZ :switch_to_p1
+
+:switch_to_p0
+CTX_SAVE (30, 240)
+CTX_LOAD (20, 240)
+SET 0
+STORE (100, 0)
+RET
+
+:switch_to_p1
+CTX_SAVE (20, 240)
+CTX_LOAD (30, 240)
+SET 1
+STORE (100, 0)
+RET

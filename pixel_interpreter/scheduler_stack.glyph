@@ -1,0 +1,89 @@
+; scheduler_stack.glyph - Stack-based scheduler
+; Simplest: CTX_SAVE pushes to stack, CTX_LOAD pops
+
+VECTOR 1 :scheduler_isr
+
+:boot
+; Initialize SP to 0
+SET 0
+STORE (3, 0)
+
+; Initialize P1 state on stack (save Acc=0, SP=0, ZF=0, PC=p1_start)
+SET 0
+PUSH          ; Acc
+SET 0
+PUSH          ; SP
+SET 0
+PUSH          ; ZF
+SET 29
+PUSH          ; PC.x = 29 (p1_start after assembly)
+SET 1
+PUSH          ; PC.y = 1
+
+; Set PID = 0 and enable interrupts, start P0
+SET 0
+STORE (100, 0)
+SEI
+JMP :p0_start
+
+; --- PROCESS 0 ---
+:p0_start
+LOAD (50, 0)
+ADD 10
+STORE (50, 0)
+JMP :p0_start
+
+; --- PROCESS 1 ---
+:p1_start
+LOAD (60, 0)
+ADD 1
+STORE (60, 0)
+JMP :p1_start
+
+; --- SCHEDULER MICROKERNEL ---
+:scheduler_isr
+; Interrupt pushed return address to stack.
+; Save current process state, load other process
+
+LOAD (100, 0)
+SUB 0
+JZ :save_p0_load_p1
+
+; Save P1, Load P0
+POP            ; Discard interrupt return
+POP            ; PC.y
+POP            ; PC.x
+POP            ; ZF
+POP            ; SP
+POP            ; Acc
+
+; Load P0 from stack (where we initialized it at boot)
+POP            ; PC.y
+POP            ; PC.x
+POP            ; ZF
+POP            ; SP
+POP            ; Acc
+JMP_PC_IMM     ; Jump to loaded PC
+SET 0
+STORE (100, 0)
+RET
+
+:save_p0_load_p1
+; Save P0, Load P1
+POP            ; Discard interrupt return
+POP            ; PC.y
+POP            ; PC.x
+POP            ; ZF
+POP            ; SP
+POP            ; Acc
+
+; Load P1 from stack (it should be below what we just pushed)
+POP            ; PC.y
+POP            ; PC.x
+POP            ; ZF
+POP            ; SP
+POP            ; Acc
+JMP_PC_IMM
+SET 1
+STORE (100, 0)
+RET

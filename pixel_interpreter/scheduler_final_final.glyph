@@ -1,0 +1,70 @@
+; scheduler_final_final.glyph - Fix PCB initialization
+; CTX_SAVE each process when we're AT its start address
+
+VECTOR 1 :scheduler_isr
+
+:boot
+; Initialize SP to 0
+SET 0
+STORE (3, 0)
+
+; Initialize P0's PCB by jumping to it and saving state
+JMP :p0_init_save
+
+; Initialize P1's PCB by jumping to it and saving state
+JMP :p1_init_save
+
+; Boot complete - set PID and enable interrupts, start P0
+SET 0
+STORE (100, 0)
+SEI
+CTX_LOAD (20, 240)  ; Load P0
+
+; --- PROCESS 0 ---
+:p0_start
+LOAD (50, 0)
+ADD 10
+STORE (50, 0)
+JMP :p0_start
+
+:p0_init_save
+; We're at P0's loop - save this state to P0's PCB
+CTX_SAVE (20, 240)
+RET
+
+; --- PROCESS 1 ---
+:p1_start
+LOAD (60, 0)
+ADD 1
+STORE (60, 0)
+JMP :p1_start
+
+:p1_init_save
+; We're at P1's loop - save this state to P1's PCB
+CTX_SAVE (30, 240)
+RET
+
+; --- SCHEDULER MICROKERNEL ---
+:scheduler_isr
+; Interrupt pushed return address to stack. POP it before CTX_LOAD.
+POP
+
+LOAD (100, 0)
+SUB 0
+JZ :switch_to_p1
+
+:switch_to_p0
+; P1 was running. Save P1, Load P0.
+CTX_SAVE (30, 240)
+CTX_LOAD (20, 240)
+SET 0
+STORE (100, 0)
+RET
+
+:switch_to_p1
+; P0 was running. Save P0, Load P1.
+CTX_SAVE (20, 240)
+CTX_LOAD (30, 240)
+SET 1
+STORE (100, 0)
+RET

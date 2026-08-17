@@ -1,0 +1,122 @@
+; ascii_lexer.glyph
+; In-Pixel Text Parser: Reads raw ASCII characters from y=220 and synthesizes AST tokens at y=200
+
+ORG (0, 1)
+
+; --- 1. SETUP POINTERS ---
+SET 0
+STORE (50, 0)       ; REG_ASCII_X (Source string ptr, starts at x=0)
+SET 220
+STORE (51, 0)       ; REG_ASCII_Y = 220
+
+SET 0
+STORE (52, 0)       ; REG_TOK_X (AST Token pointer, starts at x=0)
+SET 200
+STORE (53, 0)       ; REG_TOK_Y = 200
+
+; --- 2. POPULATE TEST STRING at y = 220 ---
+; We will manually populate "S" "E" "T" " " "1" "0" 
+; 'S'=83, 'E'=69, 'T'=84, ' '=32, '1'=49, '0'=48, EOF=0
+; Write S
+SET 83
+STORE (30, 0)
+SET_ADDR_HIGH 0
+SET_ADDR_LOW 220
+CH_WRITE_MEM (30, 0) 0
+; Write E
+SET 69
+STORE (30, 0)
+SET_ADDR_HIGH 1
+SET_ADDR_LOW 220
+CH_WRITE_MEM (30, 0) 0
+; Write T
+SET 84
+STORE (30, 0)
+SET_ADDR_HIGH 2
+SET_ADDR_LOW 220
+CH_WRITE_MEM (30, 0) 0
+; Write Space
+SET 32
+STORE (30, 0)
+SET_ADDR_HIGH 3
+SET_ADDR_LOW 220
+CH_WRITE_MEM (30, 0) 0
+; Write 1
+SET 49
+STORE (30, 0)
+SET_ADDR_HIGH 4
+SET_ADDR_LOW 220
+CH_WRITE_MEM (30, 0) 0
+; Write 0
+SET 48
+STORE (30, 0)
+SET_ADDR_HIGH 5
+SET_ADDR_LOW 220
+CH_WRITE_MEM (30, 0) 0
+; Write EOF
+SET 0
+STORE (30, 0)
+SET_ADDR_HIGH 6
+SET_ADDR_LOW 220
+CH_WRITE_MEM (30, 0) 0
+
+
+; --- 3. LEXER LOOP ---
+:lexer_loop
+; Read character from (REG_ASCII_X, REG_ASCII_Y)
+LOAD_COORD (50, 51)
+CH_READ 0
+STORE (60, 0)       ; REG_CUR_CHAR
+
+; Check if EOF (0)
+SUB 0
+JZ :lexer_done
+
+; Here we would implement a full DFA state machine to parse "SET", "SUB", etc.
+; For this MVP, if it sees 'S' (83), it emits a SET (1) token at y=200!
+LOAD (60, 0)
+STORE (150, 0)      ; Save to temp
+SET 83
+STORE (151, 0)
+LOAD (150, 0)
+; Let's just do it with self-modification:
+SET_ADDR_HIGH 100
+SET_ADDR_LOW 1
+CH_WRITE_MEM (150, 0) 2
+
+LOAD (151, 0)       ; Acc = 83 ('S')
+JMP :dynamic_sub
+
+:after_sub
+; If Acc == 0, we matched 'S'!
+JZ :emit_set_token
+
+; Next char
+:lexer_next
+LOAD (50, 0)
+ADD 1
+STORE (50, 0)
+JMP :lexer_loop
+
+:emit_set_token
+; We matched 'S' (start of "SET"). Let's emit Token Opcode 1 (SET) to AST
+SET 1
+STORE (30, 0)
+LOAD_COORD (52, 53)
+CH_WRITE_MEM (30, 0) 0
+
+; Advance AST pointer
+LOAD (52, 0)
+ADD 1
+STORE (52, 0)
+JMP :lexer_next
+
+
+:lexer_done
+HALT
+
+; --- DYNAMIC SUB ---
+ORG (100, 1)
+:dynamic_sub
+SUB 0
+JMP :after_sub

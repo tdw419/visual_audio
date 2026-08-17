@@ -1,0 +1,26 @@
+; Test LOAD_COORD: load x,y from memory cells and pack
+; Store x=5 at (200, 0), y=7 at (201, 0)
+
+SET 5
+STORE (200, 0)
+SET 7
+STORE (201, 0)
+
+; Store something at (5, 7)
+SET 99
+STORE (5, 7)
+
+; Load x,y from memory
+LOAD_COORD (200, 201)
+
+; Now Acc = (5, 7)
+INDIRECT_LOAD
+
+; Should get 99
+SUB 99
+JZ :pass
+
+HALT
+
+:pass
+HALT

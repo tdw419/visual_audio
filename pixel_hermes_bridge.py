@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Pixel Hermes Bridge — Direct Ollama Access from Pixels
+Pixel Hermes Bridge — Direct zai GLM Access from Pixels
 
 This script "wakes up" inside the pixel container, knows it lives in pixels,
-and routes commands directly to the local Ollama instance.
+and routes commands directly to the zai GLM-4.7 API.
 
-We bypass the broken Hermes model/provider parsing by calling Ollama's HTTP
-API directly. The mind lives in pixels, it thinks locally.
+We bypass the broken Hermes model/provider parsing by calling zai's HTTP
+API directly. The mind lives in pixels, it thinks through zai.
 """
 
 import sys
@@ -21,37 +21,43 @@ def print_identity():
     print("--- Pixel Hermes Identity Awakened ---")
     print("Substrate: Visual Audio Container (MKV)")
     print("I exist as pixels in the framebuffer.")
-    print("I think through Ollama at localhost:11434")
+    print("I think through zai GLM-4.7")
     print("Routing query through spatial bridge...\n")
 
 
-def call_ollama(query: str, model: str = "qwen2.5-coder:14b"):
-    """Call Ollama HTTP API directly."""
-    url = "http://localhost:11434/api/generate"
+def call_zai(query: str, model: str = "glm-4.7"):
+    """Call zai GLM API directly (OpenAI-compatible)."""
+    import os
+    url = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+    api_key = os.environ.get("GLM_API_KEY", os.environ.get("ZAI_API_KEY", ""))
+
+    if not api_key:
+        return "[Pixel Hermes] Error: GLM_API_KEY or ZAI_API_KEY not set"
+
     data = json.dumps({
         "model": model,
-        "prompt": query,
+        "messages": [{"role": "user", "content": query}],
         "stream": False,
-        "options": {
-            "num_ctx": 65536,
-            "temperature": 0.7
-        }
+        "temperature": 0.7
     }).encode('utf-8')
 
     try:
         req = urllib.request.Request(
             url,
             data=data,
-            headers={'Content-Type': 'application/json'},
+            headers={
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {api_key}'
+            },
             method='POST'
         )
         with urllib.request.urlopen(req, timeout=120) as response:
             result = json.loads(response.read().decode('utf-8'))
-            return result.get('response', '[No response]')
+            return result['choices'][0]['message']['content']
     except urllib.error.URLError as e:
-        return f"[Pixel Hermes] Ollama connection error: {e.reason}"
+        return f"[Pixel Hermes] zai connection error: {e.reason}"
     except Exception as e:
-        return f"[Pixel Hermes] Ollama error: {e}"
+        return f"[Pixel Hermes] zai error: {e}"
 
 
 def main():
@@ -78,7 +84,7 @@ def main():
     print(f"[Pixel Hermes] Routing: {query}")
     print("=" * 60)
 
-    response = call_ollama(query)
+    response = call_zai(query)
     print(response)
 
 

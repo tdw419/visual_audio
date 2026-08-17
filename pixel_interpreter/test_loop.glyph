@@ -1,0 +1,16 @@
+; Simple counter loop
+; Counts from 10 down to 0, then halts
+
+SET 10
+STORE (0, 128)  ; Store counter in memory row 128
+
+:loop
+LOAD (0, 128)   ; Load counter
+SUB 1           ; Decrement by 1
+STORE (0, 128)  ; Save it back
+
+JZ :done        ; If Acc == 0, jump to done
+JMP :loop       ; Else, loop back
+
+:done
+HALT

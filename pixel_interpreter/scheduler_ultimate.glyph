@@ -1,0 +1,70 @@
+; scheduler_ultimate.glyph
+; ULTIMATE VERSION: Initialize PCBs via CALL into each process.
+
+VECTOR 1 :scheduler_isr
+
+:boot
+; Initialize SP to 0
+SET 0
+STORE (3, 0)
+
+; Initialize P1's PCB
+CALL :p1_init
+
+; Initialize P0's PCB
+SET 0
+STORE (3, 0)  ; Reset SP
+CALL :p0_init
+
+; Restore P0 and start running
+CTX_LOAD (20, 240)
+
+; Set PID = 0 and enable interrupts
+SET 0
+STORE (100, 0)
+SEI
+
+; --- PROCESS 0 ---
+:p0_start
+LOAD (50, 0)
+ADD 10
+STORE (50, 0)
+JMP :p0_start
+
+:p0_init
+CTX_SAVE (20, 240)
+JMP :boot_continue
+
+; --- PROCESS 1 ---
+:p1_start
+LOAD (60, 0)
+ADD 1
+STORE (60, 0)
+JMP :p1_start
+
+:p1_init
+CTX_SAVE (30, 240)
+JMP :boot_continue
+
+:boot_continue
+NOP  ; Dummy - should never execute
+
+; --- SCHEDULER MICROKERNEL ---
+:scheduler_isr
+LOAD (100, 0)
+SUB 0
+JZ :switch_to_p1
+
+:switch_to_p0
+CTX_SAVE (30, 240)
+CTX_LOAD (20, 240)
+SET 0
+STORE (100, 0)
+RET
+
+:switch_to_p1
+CTX_SAVE (20, 240)
+CTX_LOAD (30, 240)
+SET 1
+STORE (100, 0)
+RET

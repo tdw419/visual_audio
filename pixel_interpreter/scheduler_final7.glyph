@@ -1,0 +1,63 @@
+; scheduler_final7.glyph
+; FINAL VERSION v7: Fixed assembler encoding.
+
+VECTOR 1 :scheduler_isr
+
+:boot
+; 1. Initialize P1's PCB at column 30, rows 240-243
+; STORE_XY x y writes to (dst, y) - so we need dst=30, src_b=240 to write to (30, 240)
+STORE_XY (30, 240) 1 1
+SET 0
+STORE (31, 240)
+SET 0
+STORE (32, 240)
+SET 0
+STORE (33, 240)
+
+; 2. Initialize P0's PCB at column 20, rows 240-243
+STORE_XY (20, 240) 10 1
+SET 0
+STORE (21, 240)
+SET 0
+STORE (22, 240)
+SET 0
+STORE (23, 240)
+
+; 3. Set current PID and enable interrupts
+SET 0
+STORE (100, 0)
+SEI
+
+; --- PROCESS 0 ---
+:p0_start
+LOAD (50, 0)
+ADD 10
+STORE (50, 0)
+JMP :p0_start
+
+; --- PROCESS 1 ---
+:p1_start
+LOAD (60, 0)
+ADD 1
+STORE (60, 0)
+JMP :p1_start
+
+; --- SCHEDULER MICROKERNEL ---
+:scheduler_isr
+LOAD (100, 0)
+SUB 0
+JZ :switch_to_p1
+
+:switch_to_p0
+CTX_SAVE (30, 240)
+CTX_LOAD (20, 240)
+SET 0
+STORE (100, 0)
+RET
+
+:switch_to_p1
+CTX_SAVE (20, 240)
+CTX_LOAD (30, 240)
+SET 1
+STORE (100, 0)
+RET

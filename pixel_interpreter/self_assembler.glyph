@@ -1,0 +1,182 @@
+; self_assembler.glyph
+; Compiles AST tokens at y=200 into ROM at y=1
+
+; --- 1. POPULATE TEST AST AT y = 200 ---
+ORG (0, 1)
+; Initialize Token 0: SET 42 [1, 0, 0, 42]
+SET_ADDR_HIGH 0
+SET_ADDR_LOW 200
+; R = 1
+SET 1
+STORE (30, 0)
+SET_ADDR_HIGH 0
+SET_ADDR_LOW 200
+CH_WRITE_MEM (30, 0) 0
+; G = 0
+SET 0
+STORE (30, 0)
+SET_ADDR_HIGH 0
+SET_ADDR_LOW 200
+CH_WRITE_MEM (30, 0) 1
+; B = 0
+SET 0
+STORE (30, 0)
+SET_ADDR_HIGH 0
+SET_ADDR_LOW 200
+CH_WRITE_MEM (30, 0) 2
+; A = 42
+SET 42
+STORE (30, 0)
+SET_ADDR_HIGH 0
+SET_ADDR_LOW 200
+CH_WRITE_MEM (30, 0) 3
+
+; Initialize Token 1: STORE (10, 130) [5, 10, 130, 0]
+; R = 5
+SET 5
+STORE (30, 0)
+SET_ADDR_HIGH 1
+SET_ADDR_LOW 200
+CH_WRITE_MEM (30, 0) 0
+; G = 10
+SET 10
+STORE (30, 0)
+SET_ADDR_HIGH 1
+SET_ADDR_LOW 200
+CH_WRITE_MEM (30, 0) 1
+; B = 130
+SET 130
+STORE (30, 0)
+SET_ADDR_HIGH 1
+SET_ADDR_LOW 200
+CH_WRITE_MEM (30, 0) 2
+; A = 0
+SET 0
+STORE (30, 0)
+SET_ADDR_HIGH 1
+SET_ADDR_LOW 200
+CH_WRITE_MEM (30, 0) 3
+
+; Initialize Token 2: HALT [255, 0, 0, 0]
+SET 255
+STORE (30, 0)
+SET_ADDR_HIGH 2
+SET_ADDR_LOW 200
+CH_WRITE_MEM (30, 0) 0
+SET 0
+STORE (30, 0)
+SET_ADDR_HIGH 2
+SET_ADDR_LOW 200
+CH_WRITE_MEM (30, 0) 1
+SET_ADDR_HIGH 2
+SET_ADDR_LOW 200
+CH_WRITE_MEM (30, 0) 2
+SET_ADDR_HIGH 2
+SET_ADDR_LOW 200
+CH_WRITE_MEM (30, 0) 3
+
+; Initialize Token 3: EOF [255, 0, 0, 0]
+SET 255
+STORE (30, 0)
+SET_ADDR_HIGH 3
+SET_ADDR_LOW 200
+CH_WRITE_MEM (30, 0) 0
+SET 0
+STORE (30, 0)
+SET_ADDR_HIGH 3
+SET_ADDR_LOW 200
+CH_WRITE_MEM (30, 0) 1
+SET_ADDR_HIGH 3
+SET_ADDR_LOW 200
+CH_WRITE_MEM (30, 0) 2
+SET_ADDR_HIGH 3
+SET_ADDR_LOW 200
+CH_WRITE_MEM (30, 0) 3
+
+
+; --- 2. INITIALIZE COMPILER POINTERS ---
+SET 0
+STORE (20, 0)           ; REG_TOK_X = 0
+SET 200
+STORE (21, 0)           ; REG_TOK_Y = 200 (Source AST Base)
+
+SET 0
+STORE (22, 0)           ; REG_OUT_X = 0
+SET 1
+STORE (23, 0)           ; REG_OUT_Y = 1   (Target ROM Base)
+
+
+; --- 3. COMPILATION LOOP ---
+:compile_loop
+; Load Opcode (R=ch0) from (REG_TOK_X, REG_TOK_Y)
+LOAD_COORD (20, 21)
+CH_READ 0
+STORE (24, 0)           ; REG_CUR_OP
+
+; Check for EOF (Opcode == 255)
+SUB 255
+JZ :compile_done
+
+; Load Operand G (ch1)
+LOAD_COORD (20, 21)
+CH_READ 1
+STORE (25, 0)           ; REG_CUR_G
+
+; Load Operand B (ch2)
+LOAD_COORD (20, 21)
+CH_READ 2
+STORE (26, 0)           ; REG_CUR_B
+
+; Load Operand A (ch3)
+LOAD_COORD (20, 21)
+CH_READ 3
+STORE (27, 0)           ; REG_CUR_A
+
+
+; --- 4. EMIT BYTECODE TO TARGET ROM ---
+; Write R (Opcode)
+LOAD_COORD (22, 23)
+CH_WRITE_MEM (24, 0) 0
+
+; Write G
+LOAD_COORD (22, 23)
+CH_WRITE_MEM (25, 0) 1
+
+; Write B
+LOAD_COORD (22, 23)
+CH_WRITE_MEM (26, 0) 2
+
+; Write A
+LOAD_COORD (22, 23)
+CH_WRITE_MEM (27, 0) 3
+
+
+; Advance Target ROM pointer (OUT_X += 1)
+LOAD (22, 0)
+ADD 1
+STORE (22, 0)
+
+; Advance Source Token pointer (TOK_X += 1)
+LOAD (20, 0)
+ADD 1
+STORE (20, 0)
+
+JMP :compile_loop
+
+
+; --- 5. FINALIZE & BOOTSTRAP ---
+:compile_done
+; Emit trailing HALT into target ROM (Opcode 255)
+SET 255
+STORE (30, 0)
+LOAD_COORD (22, 23)
+CH_WRITE_MEM (30, 0) 0
+
+; Reset machine state
+SET 0
+STORE (1, 0)            ; ACC = 0
+SET 16
+STORE (15, 0)           ; SP = 16
+
+; Branch to freshly synthesized binary
+JMP (0, 1)

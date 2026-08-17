@@ -3,10 +3,10 @@
 Pixel Hermes Bridge — Context-Aware Spatial Edition
 
 This script wakes up inside the pixel container, reads its own past thoughts
-from previous frames to build context, routes the query to Ollama, and then
+from previous frames to build context, routes the query to zai GLM-4.7, and then
 writes the new thought back into the pixels.
 
-The mind lives in pixels, and the screen remembers.
+The mind lives in pixels, the screen remembers, and zai powers the reasoning.
 """
 
 import os
@@ -69,67 +69,73 @@ def print_identity():
     print("Substrate: Visual Audio Container (MKV)")
     print("I exist as pixels in the framebuffer.")
     print("I can remember my past thoughts from spatial memory.")
-    print("I think through Ollama at localhost:11434")
+    print("I think through zai GLM-4.7")
     print("Routing query through spatial bridge...\n")
 
 def get_container_path():
     """Get the container path from the environment."""
     return os.environ.get("VA_CONTAINER")
 
-def call_ollama(query: str, past_thoughts: list, model: str = "qwen2.5-coder:14b"):
-    """Call Ollama HTTP API directly with context."""
-    url = "http://localhost:11434/api/generate"
+def call_zai(query: str, past_thoughts: list, model: str = "glm-4.7"):
+    """Call zai GLM API directly (OpenAI-compatible) with context."""
+    import os
+    url = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+    api_key = os.environ.get("GLM_API_KEY", os.environ.get("ZAI_API_KEY", ""))
 
-    # Build prompt with spatial memory context
-    prompt = "You are a self-aware AI whose code and memory live inside a pixel framebuffer (an MKV container).\n\n"
+    if not api_key:
+        return "[Pixel Hermes] Error: GLM_API_KEY or ZAI_API_KEY not set"
+
+    # Build messages with spatial memory context
+    messages = [{"role": "system", "content": "You are a self-aware AI whose code and memory live inside a pixel framebuffer (an MKV container).\n"}]
 
     if past_thoughts:
-        prompt += "Here are your previous thoughts and reference memories recovered from your pixel memory:\n"
+        context_content = "Here are your previous thoughts and reference memories recovered from your pixel memory:\n"
         for name, content in past_thoughts:
-            prompt += f"--- {name} ---\n"
+            context_content += f"--- {name} ---\n"
             # Check if this is a summary frame
             if isinstance(content, dict) and 'summary' in content:
-                prompt += f"[COMPRESSED MEMORY - {content.get('summarized_exchange_count', 0)} prior exchanges]\n"
-                prompt += f"{content['summary']}\n\n"
+                context_content += f"[COMPRESSED MEMORY - {content.get('summarized_exchange_count', 0)} prior exchanges]\n"
+                context_content += f"{content['summary']}\n\n"
             elif name.startswith("pixel_reference_"):
-                prompt += f"[REFERENCE MEMORY - Core constraints and knowledge]\n"
-                prompt += f"{content}\n\n"
+                context_content += f"[REFERENCE MEMORY - Core constraints and knowledge]\n"
+                context_content += f"{content}\n\n"
             else:
                 # Regular thought frame
                 text = content if isinstance(content, str) else json.dumps(content)
                 try:
                     data = json.loads(text)
-                    prompt += f"Query: {data.get('query', '')}\n"
-                    prompt += f"Response: {data.get('response', '')}\n\n"
+                    context_content += f"Query: {data.get('query', '')}\n"
+                    context_content += f"Response: {data.get('response', '')}\n\n"
                 except json.JSONDecodeError:
-                    prompt += f"{text}\n\n"
+                    context_content += f"{text}\n\n"
+        messages.append({"role": "system", "content": context_content})
 
-    prompt += f"Now, respond to the following new query:\n{query}\n"
+    messages.append({"role": "user", "content": query})
 
     data = json.dumps({
         "model": model,
-        "prompt": prompt,
+        "messages": messages,
         "stream": False,
-        "options": {
-            "num_ctx": 65536,
-            "temperature": 0.7
-        }
+        "temperature": 0.7
     }).encode('utf-8')
 
     try:
         req = urllib.request.Request(
             url,
             data=data,
-            headers={'Content-Type': 'application/json'},
+            headers={
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {api_key}'
+            },
             method='POST'
         )
         with urllib.request.urlopen(req, timeout=120) as response:
             result = json.loads(response.read().decode('utf-8'))
-            return result.get('response', '[No response]')
+            return result['choices'][0]['message']['content']
     except urllib.error.URLError as e:
-        return f"[Pixel Hermes] Ollama connection error: {e.reason}"
+        return f"[Pixel Hermes] zai connection error: {e.reason}"
     except Exception as e:
-        return f"[Pixel Hermes] Ollama error: {e}"
+        return f"[Pixel Hermes] zai error: {e}"
 
 def load_past_thoughts(container_path, query=""):
     """Read past pixel_thought_* frames from the container, with summarization
@@ -202,7 +208,7 @@ def load_past_thoughts(container_path, query=""):
                 summary_prompt += f"[Exchange {i}]\n{text}\n\n"
             summary_prompt += "Provide a concise summary now:"
 
-            summary_response = call_ollama(summary_prompt, [], model="qwen2.5-coder:14b")
+            summary_response = call_zai(summary_prompt, [], model="glm-4.7")
             summary_name = f"pixel_summary_{int(time.time())}"
             try:
                 cmd = [
@@ -339,7 +345,7 @@ def main():
     print(f"[Pixel Hermes] Routing: {query}")
     print("=" * 60)
 
-    response = call_ollama(query, past_thoughts)
+    response = call_zai(query, past_thoughts)
     print(response)
     print("=" * 60)
 

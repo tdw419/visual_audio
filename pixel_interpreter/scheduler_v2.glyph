@@ -1,0 +1,68 @@
+; scheduler_v2.glyph - Simplified scheduler that works with interrupt return address
+; Key insight: The interrupt pushed a return address (8,1) to stack.
+; ISR pops it, saves P0's state, loads P1's state (with its own PC), then returns.
+
+VECTOR 1 :scheduler_isr
+
+:boot
+; Initialize SP to 0
+SET 0
+STORE (3, 0)
+
+; Initialize P1's PCB manually - set PC to p1_start address
+; We need to know where p1_start will be assembled
+; Let's use a trick: JMP to p1_start and let it save its own state
+
+; Set PID = 0 and enable interrupts
+SET 0
+STORE (100, 0)
+SEI
+
+; Jump to P0 (will be saved on first switch)
+JMP :p0_start
+
+; --- PROCESS 0 ---
+:p0_start
+LOAD (50, 0)
+ADD 10
+STORE (50, 0)
+JMP :p0_start
+
+; --- PROCESS 1 ---
+:p1_start
+LOAD (60, 0)
+ADD 1
+STORE (60, 0)
+JMP :p1_start
+
+:p1_init
+; Save current state to P1's PCB
+; PC = p1_start (will be pushed by interrupt on first switch)
+; But since we're here during init, we manually save
+CTX_SAVE (30, 240)
+RET
+
+; --- SCHEDULER MICROKERNEL ---
+:scheduler_isr
+; Interrupt pushed return address to stack. POP it.
+POP
+
+LOAD (100, 0)
+SUB 0
+JZ :switch_to_p1
+
+:switch_to_p0
+; P1 was running. Save P1, Load P0.
+CTX_SAVE (30, 240)
+CTX_LOAD (20, 240)
+SET 0
+STORE (100, 0)
+RET
+
+:switch_to_p1
+; P0 was running. Save P0, Load P1.
+CTX_SAVE (20, 240)
+CTX_LOAD (30, 240)
+SET 1
+STORE (100, 0)
+RET

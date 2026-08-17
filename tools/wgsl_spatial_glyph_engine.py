@@ -59,10 +59,15 @@ const OPCODE_CMP: u32 = 6;
 const OPCODE_MOV: u32 = 7;
 const OPCODE_PRT: u32 = 8;
 const OPCODE_HALT: u32 = 9;
+const OPCODE_PARALLEL_LD: u32 = 10;
+const OPCODE_PARALLEL_ST: u32 = 11;
+const OPCODE_PARALLEL_ADD: u32 = 12;
+const OPCODE_PARALLEL_SUB: u32 = 13;
+const OPCODE_PARALLEL_REDUCE_SUM: u32 = 14;
 
 // Simple opcode lookup by color (simpler than vector comparison)
 fn get_opcode_from_color(r: u32, g: u32, b: u32) -> u32 {
-    // Exact matches only
+    // Original scalar opcodes
     if (r == 236u && g == 80u && b == 80u) { return OPCODE_LDI; }
     if (r == 80u && g == 236u && b == 120u) { return OPCODE_ADD; }
     if (r == 151u && g == 244u && b == 80u) { return OPCODE_SUB; }
@@ -73,6 +78,13 @@ fn get_opcode_from_color(r: u32, g: u32, b: u32) -> u32 {
     if (r == 178u && g == 34u && b == 34u) { return OPCODE_MOV; }
     if (r == 247u && g == 83u && b == 80u) { return OPCODE_PRT; }
     if (r == 255u && g == 0u && b == 0u) { return OPCODE_HALT; }
+    
+    // GPU-native parallel opcodes (matching FIXED_COLORS in glyph_isa_v2.py)
+    if (r == 147u && g == 51u && b == 234u) { return OPCODE_PARALLEL_LD; }          // Purple
+    if (r == 255u && g == 20u && b == 147u) { return OPCODE_PARALLEL_ST; }         // Deep Pink
+    if (r == 0u && g == 255u && b == 127u) { return OPCODE_PARALLEL_ADD; }        // Spring Green
+    if (r == 255u && g == 140u && b == 0u) { return OPCODE_PARALLEL_SUB; }        // Dark Orange
+    if (r == 0u && g == 191u && b == 255u) { return OPCODE_PARALLEL_REDUCE_SUM; } // Deep Sky Blue
 
     return 1000u; // Unknown opcode
 }
@@ -83,18 +95,18 @@ fn load_pixel(x: u32, y: u32) -> vec3<u32> {
     return vec3<u32>(pixel.r, pixel.g, pixel.b);
 }
 
-fn fetch_operand(cpu_id: u32, pc: ptr<function, vec2<u32>>) -> vec2<u32> {
-    // Fetch operand from current PC and advance
-    let x = (*pc).x;
-    let y = (*pc).y;
+fn fetch_operand(cpu_id: u32) -> vec2<u32> {
+    // Fetch operand from current CPU's PC and advance PC
+    let x = cpus[cpu_id].pc.x;
+    let y = cpus[cpu_id].pc.y;
 
     let pixel = load_pixel(x, y);
     let r = pixel.r;
     let g = pixel.g;
     let b = pixel.b;
 
-    // Advance PC
-    (*pc).x = x + 1u;
+    // Advance PC (mutate storage buffer directly)
+    cpus[cpu_id].pc.x = x + 1u;
 
     // Check for immediate value (r=0, g=0, b>0)
     if (r == 0u && g == 0u && b > 0u) {
@@ -123,113 +135,175 @@ fn unpack_coord(packed: u32) -> vec2<u32> {
     return vec2<u32>(x, y);
 }
 
-@compute @workgroup_size(1)
-fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    let cpu_id = global_id.x;
+var<workgroup> shared_opcode: u32;
+var<workgroup> shared_op1: vec2<u32>;
+var<workgroup> shared_op2: vec2<u32>;
+var<workgroup> shared_op3: vec2<u32>;
+var<workgroup> shared_op4: vec2<u32>;
+var<workgroup> reduction_scratch: array<u32, 256>;
+
+@compute @workgroup_size(256)
+fn main(
+    @builtin(workgroup_id) workgroup_id: vec3<u32>,
+    @builtin(local_invocation_id) local_id: vec3<u32>
+) {
+    let cpu_id = workgroup_id.x;
+    let thread_id = local_id.x;
 
     if (cpu_id >= arrayLength(&cpus)) {
         return;
     }
 
-    var cpu = cpus[cpu_id];
-
-    if (cpu.running == 0u) {
+    if (cpus[cpu_id].running == 0u) {
         return;
     }
 
-    // Fetch opcode
-    let pixel = load_pixel(cpu.pc.x, cpu.pc.y);
-    let opcode = get_opcode_from_color(pixel.r, pixel.g, pixel.b);
+    // Decode phase: Only thread 0 reads the instruction and decodes it
+    if (thread_id == 0u) {
+        let pixel = load_pixel(cpus[cpu_id].pc.x, cpus[cpu_id].pc.y);
+        shared_opcode = get_opcode_from_color(pixel.r, pixel.g, pixel.b);
+        cpus[cpu_id].pc.x = cpus[cpu_id].pc.x + 1u; // Advance PC past opcode
 
-    // Advance PC past opcode
-    cpu.pc.x = cpu.pc.x + 1u;
-
-    // Decode and execute
-    if (opcode == OPCODE_LDI) {
-        let op1 = fetch_operand(cpu_id, &cpu.pc);
-        let op2 = fetch_operand(cpu_id, &cpu.pc);
-
-        if (op1.x == 2u) {
-            cpu.registers[op1.y] = op2.y;
+        // Pre-fetch operands based on opcode arity
+        if (shared_opcode == OPCODE_LDI || shared_opcode == OPCODE_ADD || shared_opcode == OPCODE_SUB || shared_opcode == OPCODE_MUL || shared_opcode == OPCODE_CMP || shared_opcode == OPCODE_MOV) {
+            shared_op1 = fetch_operand(cpu_id);
+            shared_op2 = fetch_operand(cpu_id);
+        } else if (shared_opcode == OPCODE_PARALLEL_LD || shared_opcode == OPCODE_PARALLEL_ST || shared_opcode == OPCODE_PARALLEL_REDUCE_SUM) {
+            shared_op1 = fetch_operand(cpu_id);
+            shared_op2 = fetch_operand(cpu_id);
+            shared_op3 = fetch_operand(cpu_id);
+        } else if (shared_opcode == OPCODE_PARALLEL_ADD || shared_opcode == OPCODE_PARALLEL_SUB) {
+            shared_op1 = fetch_operand(cpu_id);
+            shared_op2 = fetch_operand(cpu_id);
+            shared_op3 = fetch_operand(cpu_id);
+            shared_op4 = fetch_operand(cpu_id);
+        } else if (shared_opcode == OPCODE_JMP || shared_opcode == OPCODE_JZ || shared_opcode == OPCODE_PRT) {
+            shared_op1 = fetch_operand(cpu_id);
         }
-
-    } else if (opcode == OPCODE_ADD) {
-        let op1 = fetch_operand(cpu_id, &cpu.pc);
-        let op2 = fetch_operand(cpu_id, &cpu.pc);
-
-        if (op1.x == 2u && op2.x == 2u) {
-            cpu.registers[op1.y] = cpu.registers[op1.y] + cpu.registers[op2.y];
-        }
-
-    } else if (opcode == OPCODE_SUB) {
-        let op1 = fetch_operand(cpu_id, &cpu.pc);
-        let op2 = fetch_operand(cpu_id, &cpu.pc);
-
-        if (op1.x == 2u && op2.x == 2u) {
-            cpu.registers[op1.y] = cpu.registers[op1.y] - cpu.registers[op2.y];
-        }
-
-    } else if (opcode == OPCODE_MUL) {
-        let op1 = fetch_operand(cpu_id, &cpu.pc);
-        let op2 = fetch_operand(cpu_id, &cpu.pc);
-
-        if (op1.x == 2u && op2.x == 2u) {
-            cpu.registers[op1.y] = cpu.registers[op1.y] * cpu.registers[op2.y];
-        }
-
-    } else if (opcode == OPCODE_CMP) {
-        let op1 = fetch_operand(cpu_id, &cpu.pc);
-        let op2 = fetch_operand(cpu_id, &cpu.pc);
-
-        if (op1.x == 2u && op2.x == 2u) {
-            if (cpu.registers[op1.y] == cpu.registers[op2.y]) {
-                cpu.registers[0] = 1u;
-            } else {
-                cpu.registers[0] = 0u;
-            }
-        }
-
-    } else if (opcode == OPCODE_MOV) {
-        let op1 = fetch_operand(cpu_id, &cpu.pc);
-        let op2 = fetch_operand(cpu_id, &cpu.pc);
-
-        if (op1.x == 2u && op2.x == 2u) {
-            cpu.registers[op1.y] = cpu.registers[op2.y];
-        }
-
-    } else if (opcode == OPCODE_PRT) {
-        let op1 = fetch_operand(cpu_id, &cpu.pc);
-
-        if (op1.x == 2u) {
-            let output_idx = cpu.output_ptr;
-            if (output_idx < uniforms.output_buffer_size) {
-                output_buffer[cpu_id * uniforms.output_buffer_size + output_idx] = cpu.registers[op1.y];
-            }
-            cpu.output_ptr = cpu.output_ptr + 1u;
-        }
-
-    } else if (opcode == OPCODE_JMP) {
-        let op1 = fetch_operand(cpu_id, &cpu.pc);
-
-        if (op1.x == 1u) {
-            let coord = unpack_coord(op1.y);
-            cpu.pc = coord;
-        }
-
-    } else if (opcode == OPCODE_JZ) {
-        let op1 = fetch_operand(cpu_id, &cpu.pc);
-
-        if (op1.x == 1u && cpu.registers[0] == 0u) {
-            let coord = unpack_coord(op1.y);
-            cpu.pc = coord;
-        }
-
-    } else if (opcode == OPCODE_HALT) {
-        cpu.running = 0u;
     }
 
-    // Write back CPU state
-    cpus[cpu_id] = cpu;
+    // Synchronize all 256 threads so they see the decoded opcode and operands
+    workgroupBarrier();
+
+    let opcode = shared_opcode;
+
+    // Execute phase
+    if (opcode == OPCODE_LDI) {
+        if (thread_id == 0u && shared_op1.x == 2u) {
+            cpus[cpu_id].registers[shared_op1.y] = shared_op2.y;
+        }
+    } else if (opcode == OPCODE_ADD) {
+        if (thread_id == 0u && shared_op1.x == 2u && shared_op2.x == 2u) {
+            cpus[cpu_id].registers[shared_op1.y] = cpus[cpu_id].registers[shared_op1.y] + cpus[cpu_id].registers[shared_op2.y];
+        }
+    } else if (opcode == OPCODE_SUB) {
+        if (thread_id == 0u && shared_op1.x == 2u && shared_op2.x == 2u) {
+            cpus[cpu_id].registers[shared_op1.y] = cpus[cpu_id].registers[shared_op1.y] - cpus[cpu_id].registers[shared_op2.y];
+        }
+    } else if (opcode == OPCODE_MUL) {
+        if (thread_id == 0u && shared_op1.x == 2u && shared_op2.x == 2u) {
+            cpus[cpu_id].registers[shared_op1.y] = cpus[cpu_id].registers[shared_op1.y] * cpus[cpu_id].registers[shared_op2.y];
+        }
+    } else if (opcode == OPCODE_CMP) {
+        if (thread_id == 0u && shared_op1.x == 2u && shared_op2.x == 2u) {
+            if (cpus[cpu_id].registers[shared_op1.y] == cpus[cpu_id].registers[shared_op2.y]) {
+                cpus[cpu_id].registers[0] = 1u;
+            } else {
+                cpus[cpu_id].registers[0] = 0u;
+            }
+        }
+    } else if (opcode == OPCODE_MOV) {
+        if (thread_id == 0u && shared_op1.x == 2u && shared_op2.x == 2u) {
+            cpus[cpu_id].registers[shared_op1.y] = cpus[cpu_id].registers[shared_op2.y];
+        }
+    } else if (opcode == OPCODE_PRT) {
+        if (thread_id == 0u && shared_op1.x == 2u) {
+            let output_idx = cpus[cpu_id].output_ptr;
+            if (output_idx < uniforms.output_buffer_size) {
+                output_buffer[cpu_id * uniforms.output_buffer_size + output_idx] = cpus[cpu_id].registers[shared_op1.y];
+            }
+            cpus[cpu_id].output_ptr = cpus[cpu_id].output_ptr + 1u;
+        }
+    } else if (opcode == OPCODE_JMP) {
+        if (thread_id == 0u && shared_op1.x == 1u) {
+            cpus[cpu_id].pc = unpack_coord(shared_op1.y);
+        }
+    } else if (opcode == OPCODE_JZ) {
+        if (thread_id == 0u && shared_op1.x == 1u && cpus[cpu_id].registers[0] == 0u) {
+            cpus[cpu_id].pc = unpack_coord(shared_op1.y);
+        }
+    } else if (opcode == OPCODE_PARALLEL_LD) {
+        if (shared_op1.x == 2u && shared_op3.y > 0u) {
+            let base_addr = shared_op2.y;
+            let count = shared_op3.y;
+            // All 256 threads participate in loading
+            for (var i = thread_id; i < count; i = i + 256u) {
+                let mem_addr = base_addr + i;
+                let mem_idx = mem_addr % 256u;
+                cpus[cpu_id].registers[i + shared_op1.y] = cpus[cpu_id].memory[mem_idx];
+            }
+        }
+    } else if (opcode == OPCODE_PARALLEL_ST) {
+        if (shared_op2.x == 2u && shared_op3.y > 0u) {
+            let base_addr = shared_op1.y;
+            let rs_base = shared_op2.y;
+            let count = shared_op3.y;
+            // All 256 threads participate in storing
+            for (var i = thread_id; i < count; i = i + 256u) {
+                let mem_addr = base_addr + i;
+                let mem_idx = mem_addr % 256u;
+                cpus[cpu_id].memory[mem_idx] = cpus[cpu_id].registers[i + rs_base];
+            }
+        }
+    } else if (opcode == OPCODE_PARALLEL_ADD) {
+        if (shared_op1.x == 2u && shared_op2.x == 2u && shared_op3.x == 2u && shared_op4.y > 0u) {
+            let count = shared_op4.y;
+            // All 256 threads participate in addition
+            for (var i = thread_id; i < count; i = i + 256u) {
+                cpus[cpu_id].registers[i + shared_op1.y] = cpus[cpu_id].registers[i + shared_op2.y] + cpus[cpu_id].registers[i + shared_op3.y];
+            }
+        }
+    } else if (opcode == OPCODE_PARALLEL_SUB) {
+        if (shared_op1.x == 2u && shared_op2.x == 2u && shared_op3.x == 2u && shared_op4.y > 0u) {
+            let count = shared_op4.y;
+            // All 256 threads participate in subtraction
+            for (var i = thread_id; i < count; i = i + 256u) {
+                cpus[cpu_id].registers[i + shared_op1.y] = cpus[cpu_id].registers[i + shared_op2.y] - cpus[cpu_id].registers[i + shared_op3.y];
+            }
+        }
+    } else if (opcode == OPCODE_PARALLEL_REDUCE_SUM) {
+        if (shared_op1.x == 2u && shared_op3.y > 0u) {
+            let base_addr = shared_op2.y;
+            let count = shared_op3.y;
+            
+            // Phase 1: Local reduction per thread
+            var local_sum: u32 = 0u;
+            for (var i = thread_id; i < count; i = i + 256u) {
+                let mem_addr = base_addr + i;
+                let mem_idx = mem_addr % 256u;
+                local_sum = local_sum + cpus[cpu_id].memory[mem_idx];
+            }
+            reduction_scratch[thread_id] = local_sum;
+            
+            // Wait for all threads to finish local sum
+            workgroupBarrier();
+            
+            // Phase 2: Final sum by thread 0
+            if (thread_id == 0u) {
+                var final_sum: u32 = 0u;
+                // Sum up to min(count, 256u) because threads beyond count have local_sum = 0
+                let active_threads = select(256u, count, count < 256u);
+                for (var i = 0u; i < active_threads; i = i + 1u) {
+                    final_sum = final_sum + reduction_scratch[i];
+                }
+                cpus[cpu_id].registers[shared_op1.y] = final_sum;
+            }
+        }
+    } else if (opcode == OPCODE_HALT) {
+        if (thread_id == 0u) {
+            cpus[cpu_id].running = 0u;
+        }
+    }
 }
 """
 

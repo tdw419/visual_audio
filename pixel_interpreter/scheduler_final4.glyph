@@ -1,0 +1,86 @@
+; scheduler_final4.glyph
+; Demonstrates preemptive multi-processing via a Timer IRQ (IRQ 1).
+; FINAL VERSION v4: Use INDIRECT_STORE to write PC to PCB.
+
+VECTOR 1 :scheduler_isr
+
+:boot
+; 1. Initialize P1's PCB at (30, 240)
+; PC = (1, 1)
+; Store x=1 to PCB[PC].x
+SET_ADDR_HIGH 0
+SET_ADDR_LOW 30  ; Acc = 0x001E = x=0, y=30
+STORE (1, 240)  ; Not right - we need to write to x=30, y=240
+; Actually let's use the trick: we can WRITE to any memory location
+; by using STORE with packed coordinates
+
+; Let me try: store 0 to memory[31, 240] (y=240 is fixed)
+SET 0
+; We need to pack (30, 240) into G and B fields
+; Actually, STORE encoding is: R=opcode, G=dst_x, B=dst_y, A=value
+; So STORE (30, 240) should write to (30, 240)
+SET 1
+; No, that just sets Acc
+
+; Let me re-read the STORE implementation
+; STORE writes Accumulator to memory[src_a, src_b]
+; So STORE (30, 240) writes Acc to (30, 240)!
+
+; Initialize P1's PCB at column 30, rows 240-243
+SET 1  ; PC.x = 1
+STORE (30, 240)
+SET 1  ; PC.y = 1
+STORE (31, 240)
+SET 0  ; Acc = 0
+STORE (32, 240)  ; SP = 0
+SET 0
+STORE (33, 240)  ; ZF = 0
+
+; Initialize P0's PCB at column 20, rows 240-243
+SET 10 ; PC.x = 10
+STORE (20, 240)
+SET 1  ; PC.y = 1
+STORE (21, 240)
+SET 0  ; Acc = 0
+STORE (22, 240)  ; SP = 0
+SET 0
+STORE (23, 240)  ; ZF = 0
+
+; Set current PID and enable interrupts
+SET 0
+STORE (100, 0)
+SEI
+
+; --- PROCESS 0 ---
+:p0_start
+LOAD (50, 0)
+ADD 10
+STORE (50, 0)
+JMP :p0_start
+
+; --- PROCESS 1 ---
+:p1_start
+LOAD (60, 0)
+ADD 1
+STORE (60, 0)
+JMP :p1_start
+
+; --- SCHEDULER MICROKERNEL ---
+:scheduler_isr
+LOAD (100, 0)
+SUB 0
+JZ :switch_to_p1
+
+:switch_to_p0
+CTX_SAVE (30, 240)
+CTX_LOAD (20, 240)
+SET 0
+STORE (100, 0)
+RET
+
+:switch_to_p1
+CTX_SAVE (20, 240)
+CTX_LOAD (30, 240)
+SET 1
+STORE (100, 0)
+RET

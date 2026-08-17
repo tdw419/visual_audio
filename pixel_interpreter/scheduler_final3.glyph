@@ -1,0 +1,77 @@
+; scheduler_final3.glyph
+; Demonstrates preemptive multi-processing via a Timer IRQ (IRQ 1).
+; FINAL VERSION v3: Initialize BOTH PCBs directly via STORE.
+
+VECTOR 1 :scheduler_isr
+
+:boot
+; 1. Initialize P1's PCB at (30, 240)
+; PC = (1, 1) (p1_start)
+SET 1
+STORE (30, 240)
+SET 1
+STORE (31, 240)  ; Same as (30, 240) because G=1 means x=1
+; Actually STORE writes Acc to memory[x,y] where x=src_a, y=src_b
+; Let me use SET_ADDR_HIGH/SET_ADDR_LOW to build coordinates
+SET_ADDR_HIGH 1  ; Acc high byte = 1 (x)
+SET_ADDR_LOW 1   ; Acc low byte = 1 (y)
+STORE (30, 240)  ; This writes Acc to (30, 240), which becomes PCB[PC]
+SET 0
+STORE (31, 240)  ; PCB[Acc] = 0
+SET 0
+STORE (32, 240)  ; PCB[SP] = 0
+SET 0
+STORE (33, 240)  ; PCB[ZF] = 0
+
+; 2. Initialize P0's PCB at (20, 240)
+; PC = (10, 1) (p0_start)
+SET_ADDR_HIGH 10
+SET_ADDR_LOW 1
+STORE (20, 240)
+SET 0
+STORE (21, 240)
+SET 0
+STORE (22, 240)
+SET 0
+STORE (23, 240)
+
+; 3. Set current PID and enable interrupts
+SET 0
+STORE (100, 0)
+SEI
+
+; --- PROCESS 0 ---
+:p0_start
+LOAD (50, 0)
+ADD 10
+STORE (50, 0)
+JMP :p0_start
+; -----------------
+
+; --- PROCESS 1 ---
+:p1_start
+LOAD (60, 0)
+ADD 1
+STORE (60, 0)
+JMP :p1_start
+; -----------------
+
+; --- SCHEDULER MICROKERNEL ---
+:scheduler_isr
+LOAD (100, 0)
+SUB 0
+JZ :switch_to_p1
+
+:switch_to_p0
+CTX_SAVE (30, 240)
+CTX_LOAD (20, 240)
+SET 0
+STORE (100, 0)
+RET
+
+:switch_to_p1
+CTX_SAVE (20, 240)
+CTX_LOAD (30, 240)
+SET 1
+STORE (100, 0)
+RET

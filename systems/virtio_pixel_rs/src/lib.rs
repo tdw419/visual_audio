@@ -89,15 +89,79 @@ pub struct SpatialMkvExtractor {
     // project). Read-modify-write happens against the source frame data
     // plus any overlay sectors, so writes are session-local, not persisted.
     write_overlay: std::collections::HashMap<u64, [u8; 512]>,
+
+    // PXC1 mode (docs/PIXEL_CONTAINER_SPEC_V1.md): when mkv_path is a PXC1
+    // container directory (has header.json), every named section is
+    // decoded once at startup and concatenated in header order into this
+    // buffer, which becomes the guest-visible disk. This replaces the old
+    // ffmpeg/.nut path (per-frame Hilbert decode + BGR/rgb24 pixel-format
+    // ambiguity that caused real corruption) with a byte-perfect,
+    // hash-verified read at load time and a plain slice on every
+    // subsequent read - no per-request decode cost.
+    pxc1_buffer: Option<Vec<u8>>,
 }
 
 impl SpatialMkvExtractor {
     pub fn new<P: AsRef<Path>>(mkv_path: P, entry_name: &str) -> Result<Self> {
         let mkv_path = mkv_path.as_ref().to_path_buf();
 
-        // Try to read meta.json for actual disk size
+        // PXC1 mode: a container directory has header.json at its root.
+        // Load it fully here (once, at startup) instead of going through
+        // any frame-cache/Hilbert/ffmpeg path below.
+        if mkv_path.is_dir() && mkv_path.join("header.json").exists() {
+            let mut decoder = pxc1::Decoder::open(&mkv_path)
+                .map_err(|e| anyhow::anyhow!("PXC1 open failed: {e}"))?;
+            let header = decoder.header().clone();
+            let mut buffer = Vec::new();
+            for section in &header.sections {
+                let bytes = decoder
+                    .read_section(&section.name)
+                    .map_err(|e| anyhow::anyhow!("PXC1 read_section({}) failed: {e}", section.name))?;
+                info!(
+                    "PXC1: loaded section '{}' ({} bytes, sha256 verified)",
+                    section.name,
+                    bytes.len()
+                );
+                buffer.extend_from_slice(&bytes);
+            }
+            let remainder = buffer.len() % 512;
+            if remainder != 0 {
+                let padding = 512 - remainder;
+                buffer.extend(std::iter::repeat(0).take(padding));
+            }
+            let decoded_size = buffer.len() as u64;
+            info!(
+                "PXC1: {} ({} sections, {} bytes total disk)",
+                entry_name,
+                header.sections.len(),
+                decoded_size
+            );
+            return Ok(Self {
+                mkv_path,
+                entry_name: entry_name.to_string(),
+                decoded_size,
+                pixel_length: decoded_size,
+                frame_size: header.frame_size as u32,
+                frame_cache: std::collections::HashMap::new(),
+                cache_order: std::collections::VecDeque::new(),
+                hilbert_lut: Vec::new(),
+                write_overlay: std::collections::HashMap::new(),
+                pxc1_buffer: Some(buffer),
+            });
+        }
+
+        // Legacy ffmpeg/.nut path below. Try to read meta.json for actual disk size
         let mut decoded_size = 7u64 * 1024 * 1024 * 1024; // Default to 7 GB
-        let meta_path = mkv_path.with_extension("mkv.meta.json");
+        // encode_spatial_container.py writes "<full filename incl. .nut>.meta.json"
+        // (append, not replace) - Path::with_extension() REPLACES the extension,
+        // so e.g. "foo.nut".with_extension("meta.json") wrongly yields "foo.meta.json"
+        // (drops "nut") and never matches the real file on disk. Build the real
+        // filename by string-appending instead.
+        let meta_path = {
+            let mut s = mkv_path.as_os_str().to_os_string();
+            s.push(".meta.json");
+            std::path::PathBuf::from(s)
+        };
         if meta_path.exists() {
             if let Ok(meta_str) = std::fs::read_to_string(&meta_path) {
                 if let Ok(meta_json) = serde_json::from_str::<serde_json::Value>(&meta_str) {
@@ -106,7 +170,9 @@ impl SpatialMkvExtractor {
                         meta_json["frames"].as_u64().or_else(|| meta_json["num_frames"].as_u64()),
                         meta_json["bytes_per_frame"].as_u64().or_else(|| meta_json["frame_capacity_bytes"].as_u64())
                     ) {
-                        decoded_size = frames * bytes_per_frame;
+                        // The 'frames' count in meta.json includes the metadata frame 0.
+                        // So the number of actual payload data frames is frames - 1.
+                        decoded_size = frames.saturating_sub(1) * bytes_per_frame;
                     }
                     // Fallback: check for disk_size field (alpine_minimal.meta.json)
                     else if let Some(disk_size) = meta_json["disk_size"].as_u64() {
@@ -124,7 +190,9 @@ impl SpatialMkvExtractor {
                         meta_json["frames"].as_u64().or_else(|| meta_json["num_frames"].as_u64()),
                         meta_json["bytes_per_frame"].as_u64().or_else(|| meta_json["frame_capacity_bytes"].as_u64())
                     ) {
-                        decoded_size = frames * bytes_per_frame;
+                        // The 'frames' count in meta.json includes the metadata frame 0.
+                        // So the number of actual payload data frames is frames - 1.
+                        decoded_size = frames.saturating_sub(1) * bytes_per_frame;
                     }
                     // Fallback: check for disk_size field
                     else if let Some(disk_size) = meta_json["disk_size"].as_u64() {
@@ -166,6 +234,7 @@ impl SpatialMkvExtractor {
             cache_order: std::collections::VecDeque::new(),
             hilbert_lut,
             write_overlay: std::collections::HashMap::new(),
+            pxc1_buffer: None,
         })
     }
 
@@ -216,7 +285,16 @@ impl SpatialMkvExtractor {
             return Ok(vec![]);
         }
 
-        // Frame capacity: Ubuntu disk uses 1 byte per pixel (R channel only)
+        if let Some(buffer) = &self.pxc1_buffer {
+            let start = offset as usize;
+            let mut result = buffer[start..start + bytes_to_read].to_vec();
+            if !self.write_overlay.is_empty() {
+                Self::apply_write_overlay(&self.write_overlay, offset, &mut result);
+            }
+            return Ok(result);
+        }
+
+        // Frame capacity: BGR24 = 3 bytes per pixel
         let frame_capacity = (self.frame_size as u64) * (self.frame_size as u64);
 
         let mut result = Vec::with_capacity(bytes_to_read);
@@ -242,23 +320,34 @@ impl SpatialMkvExtractor {
 
         // Overlay any sectors that have been written since boot.
         if !self.write_overlay.is_empty() {
-            let first_sector = offset / 512;
-            let last_sector = (offset + result.len() as u64 - 1) / 512;
-            for sector in first_sector..=last_sector {
-                if let Some(sector_buf) = self.write_overlay.get(&sector) {
-                    let sector_start = sector * 512;
-                    let src_start = sector_start.saturating_sub(offset) as usize;
-                    let copy_start = offset.saturating_sub(sector_start) as usize;
-                    let copy_len = (512 - copy_start).min(result.len().saturating_sub(src_start));
-                    if copy_len > 0 {
-                        result[src_start..src_start + copy_len]
-                            .copy_from_slice(&sector_buf[copy_start..copy_start + copy_len]);
-                    }
-                }
-            }
+            Self::apply_write_overlay(&self.write_overlay, offset, &mut result);
         }
 
         Ok(result)
+    }
+
+    /// Apply any written-since-boot sectors on top of a freshly-read buffer.
+    /// Shared by both the PXC1 in-memory-buffer read path and the legacy
+    /// per-frame Hilbert decode path, so the overlay math exists once.
+    fn apply_write_overlay(
+        write_overlay: &std::collections::HashMap<u64, [u8; 512]>,
+        offset: u64,
+        result: &mut [u8],
+    ) {
+        let first_sector = offset / 512;
+        let last_sector = (offset + result.len() as u64 - 1) / 512;
+        for sector in first_sector..=last_sector {
+            if let Some(sector_buf) = write_overlay.get(&sector) {
+                let sector_start = sector * 512;
+                let src_start = sector_start.saturating_sub(offset) as usize;
+                let copy_start = offset.saturating_sub(sector_start) as usize;
+                let copy_len = (512 - copy_start).min(result.len().saturating_sub(src_start));
+                if copy_len > 0 {
+                    result[src_start..src_start + copy_len]
+                        .copy_from_slice(&sector_buf[copy_start..copy_start + copy_len]);
+                }
+            }
+        }
     }
 
     /// Extract bytes from spatial MKV with Hilbert decoding (usize version for VirtIO integration)
@@ -407,6 +496,60 @@ mod tests {
     fn test_spatial_extractor() {
         let extractor = SpatialMkvExtractor::new("test.mkv", "test.pixel").unwrap();
         assert_eq!(extractor.decoded_size, 7 * 1024 * 1024 * 1024);
+    }
+
+    #[test]
+    fn test_pxc1_extractor_reads_real_sections() {
+        let dir = tempfile::tempdir().unwrap();
+        let container_dir = dir.path().join("container");
+        std::fs::create_dir_all(&container_dir).unwrap();
+
+        let sec_a: Vec<u8> = (0..5000u32).map(|i| (i % 256) as u8).collect();
+        let sec_b: Vec<u8> = (0..70_000_000u32).map(|i| ((i * 7) % 256) as u8).collect();
+
+        use sha2::{Digest, Sha256};
+        let hash_of = |data: &[u8]| -> String {
+            let mut hasher = Sha256::new();
+            hasher.update(data);
+            hex::encode(hasher.finalize())
+        };
+
+        let a_frames = (sec_a.len() + pxc1::BYTES_PER_FRAME - 1) / pxc1::BYTES_PER_FRAME;
+        let sections = vec![
+            pxc1::Section {
+                name: "a".into(),
+                start_frame: 1, // frame 0 is reserved for the header
+                byte_length: sec_a.len(),
+                sha256: hash_of(&sec_a),
+            },
+            pxc1::Section {
+                name: "b".into(),
+                start_frame: 1 + a_frames,
+                byte_length: sec_b.len(),
+                sha256: hash_of(&sec_b),
+            },
+        ];
+
+        let encoder = pxc1::Encoder::new(&container_dir);
+        encoder.create(sections).unwrap();
+        encoder.write_section("a", &sec_a).unwrap();
+        encoder.write_section("b", &sec_b).unwrap();
+
+        let mut extractor = SpatialMkvExtractor::new(&container_dir, "test").unwrap();
+        assert_eq!(extractor.decoded_size, (sec_a.len() + sec_b.len()) as u64);
+
+        // Section 'a' occupies offset 0..sec_a.len(); confirm a read spanning
+        // most of it (and crossing into b, since sections are frame-aligned
+        // with padding between) comes back byte-identical.
+        let got = extractor.extract_bytes(0, sec_a.len()).unwrap();
+        assert_eq!(got, sec_a);
+
+        // Section 'b' starts at the next frame boundary (64 MiB) per spec
+        // §6, not immediately after 'a'. Confirm a read from partway into
+        // 'b' matches the source exactly.
+        let b_start = extractor.decoded_size as usize - sec_b.len();
+        let got_b = extractor.extract_bytes(b_start + 1000, 2000).unwrap();
+        assert_eq!(got_b, sec_b[1000..3000]);
     }
 
     #[test]

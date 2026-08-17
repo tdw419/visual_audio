@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Geometry OS - WebGPU Spatial CPU</title>
+    <style>
+        body {
+            background-color: #0d1117;
+            color: #c9d1d9;
+            font-family: monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 50px;
+        }
+        canvas {
+            border: 2px solid #30363d;
+            image-rendering: pixelated;
+            width: 512px;
+            height: 512px;
+        }
+        #controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            background: #238636;
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover { background: #2ea043; }
+        #log { margin-top: 20px; color: #8b949e; }
+    </style>
+</head>
+<body>
+    <h1>WebGPU Spatial CPU Execution</h1>
+    <canvas id="gpuCanvas" width="256" height="256"></canvas>
+    <div id="controls">
+        <input type="file" id="file-upload" accept="image/png" style="display: none;" />
+        <button id="btn-upload">Upload .PNG ROM</button>
+        <button id="btn-step">Step 1 Cycle</button>
+        <button id="btn-run">Run (60Hz)</button>
+        <button id="btn-load">Load Hardcoded Test</button>
+    </div>
+    <div id="log">Initializing WebGPU...</div>
+
+    <script type="module">
+        const canvas = document.getElementById('gpuCanvas');
+        const logEl = document.getElementById('log');
+        let device, pipeline, bindGroup, textureA, textureB, passEncoder;
+        let isRunning = false;
+        let toggle = false;
+
+        async function initWebGPU() {
+            if (!navigator.gpu) {
+                logEl.innerText = "WebGPU not supported on this browser.";
+                return false;
+            }
+            const adapter = await navigator.gpu.requestAdapter();
+            device = await adapter.requestDevice();
+
+            // Load WGSL
+            const wgslResponse = await fetch('spatial_cpu.wgsl');
+            const wgslCode = await wgslResponse.text();
+
+            const shaderModule = device.createShaderModule({ code: wgslCode });
+
+            pipeline = device.createComputePipeline({
+                layout: 'auto',
+                compute: {
+                    module: shaderModule,
+                    entryPoint: 'main',
+                },
+            });
+
+            // Create two storage textures for ping-pong
+            const textureDesc = {
+                size: [256, 256, 1],
+                format: 'rgba8unorm',
+                usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC
+            };
+            textureA = device.createTexture(textureDesc);
+            textureB = device.createTexture(textureDesc);
+
+            logEl.innerText = "WebGPU Initialized.";
+            return true;
+        }
+
+        async function loadROM() {
+            // Fill textureA with a minimal test ROM: SET 1, STORE (2, 2)
+            const buffer = new Uint8Array(256 * 256 * 4);
+            
+            // PC at (0,0): x=0, y=1, halt=0, dir=0
+            buffer[0] = 0; buffer[1] = 1; buffer[2] = 0; buffer[3] = 0;
+
+            // Opcode at (0, 1): SET 42
+            const idx1 = (1 * 256 + 0) * 4;
+            buffer[idx1] = 1; buffer[idx1+1] = 0; buffer[idx1+2] = 0; buffer[idx1+3] = 42;
+            
+            // Opcode at (1, 1): STORE to (5, 5)
+            const idx2 = (1 * 256 + 1) * 4;
+            buffer[idx2] = 5; buffer[idx2+1] = 5; buffer[idx2+2] = 5; buffer[idx2+3] = 0;
+
+            device.queue.writeTexture(
+                { texture: textureA },
+                buffer,
+                { bytesPerRow: 256 * 4 },
+                [256, 256, 1]
+            );
+
+            logEl.innerText = "Test ROM loaded.";
+            renderTexture(textureA);
+        }
+
+        async function loadPNG(file) {
+            const bitmap = await createImageBitmap(file);
+            
+            device.queue.copyExternalImageToTexture(
+                { source: bitmap },
+                { texture: textureA },
+                [256, 256]
+            );
+            
+            // Re-sync toggle
+            toggle = false;
+            
+            logEl.innerText = `ROM ${file.name} loaded.`;
+            renderTexture(textureA);
+        }
+
+        function dispatchCompute() {
+            const bindGroup = device.createBindGroup({
+                layout: pipeline.getBindGroupLayout(0),
+                entries: [
+                    { binding: 0, resource: (toggle ? textureB : textureA).createView() },
+                    { binding: 1, resource: (toggle ? textureA : textureB).createView() }
+                ]
+            });
+
+            const commandEncoder = device.createCommandEncoder();
+            const passEncoder = commandEncoder.beginComputePass();
+            passEncoder.setPipeline(pipeline);
+            passEncoder.setBindGroup(0, bindGroup);
+            passEncoder.dispatchWorkgroups(16, 16); // 16x16 * 16x16 = 256x256
+            passEncoder.end();
+
+            device.queue.submit([commandEncoder.finish()]);
+            toggle = !toggle;
+            
+            renderTexture(toggle ? textureB : textureA);
+        }
+
+        async function renderTexture(texture) {
+            // To render the storage texture, we'll read it back and draw to canvas (for now).
+            // A more efficient way is a render pass, but readback is easier for a quick test.
+            const commandEncoder = device.createCommandEncoder();
+            const readbackBuffer = device.createBuffer({
+                size: 256 * 256 * 4,
+                usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+            });
+            commandEncoder.copyTextureToBuffer(
+                { texture: texture },
+                { buffer: readbackBuffer, bytesPerRow: 256 * 4 },
+                [256, 256, 1]
+            );
+            device.queue.submit([commandEncoder.finish()]);
+
+            await readbackBuffer.mapAsync(GPUMapMode.READ);
+            const arrayBuffer = readbackBuffer.getMappedRange();
+            const pixels = new Uint8ClampedArray(arrayBuffer);
+            
+            const ctx = canvas.getContext('2d');
+            const imageData = new ImageData(pixels, 256, 256);
+            ctx.putImageData(imageData, 0, 0);
+            
+            readbackBuffer.unmap();
+            readbackBuffer.destroy();
+        }
+
+        document.getElementById('btn-load').onclick = loadROM;
+        document.getElementById('btn-upload').onclick = () => document.getElementById('file-upload').click();
+        document.getElementById('file-upload').onchange = (e) => {
+            if (e.target.files.length > 0) {
+                loadPNG(e.target.files[0]);
+            }
+        };
+        document.getElementById('btn-step').onclick = dispatchCompute;
+        document.getElementById('btn-run').onclick = () => {
+            isRunning = !isRunning;
+            document.getElementById('btn-run').innerText = isRunning ? "Stop" : "Run (60Hz)";
+            if(isRunning) {
+                function frame() {
+                    if(!isRunning) return;
+                    dispatchCompute();
+                    requestAnimationFrame(frame);
+                }
+                requestAnimationFrame(frame);
+            }
+        };
+
+        initWebGPU();
+    </script>
+</body>
+</html>

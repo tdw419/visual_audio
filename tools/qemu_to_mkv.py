@@ -296,8 +296,64 @@ async def capture_boot_trace(
     # Add disk
     if arch == "riscv64":
         cmd.extend(["-M", "virt"])
-        cmd.extend(["-drive", f"file={disk_path},format=qcow2,if=virtio"])
-        # Alpine RISC-V boots from disk, need OpenSBI firmware
+        
+        # Alpine RISC-V needs explicit kernel/initrd for proper boot
+        # -kernel: Linux kernel (vmlinuz)
+        # -initrd: initramfs image with Alpine userspace
+        # -drive: Optional disk image (rootfs)
+        # -bios: OpenSBI firmware (default works for RISC-V virt)
+        
+        disk_dir = os.path.dirname(disk_path)
+        disk_name = os.path.basename(disk_path)
+        
+        # Try multiple kernel/initrd naming conventions
+        kernel_candidates = [
+            disk_name.replace('.qcow2', '_vmlinuz'),
+            disk_name.replace('_riscv64.qcow2', '_vmlinuz'),
+            'alpine_vmlinuz',
+            'vmlinuz'
+        ]
+        initrd_candidates = [
+            disk_name.replace('.qcow2', '_initrd'),
+            disk_name.replace('_riscv64.qcow2', '_initrd'),
+            'alpine_initrd',
+            'initrd'
+        ]
+        
+        kernel_path = None
+        initrd_path = None
+        
+        for k in kernel_candidates:
+            test_path = os.path.join(disk_dir, k) if disk_dir else k
+            if os.path.exists(test_path):
+                kernel_path = test_path
+                break
+        
+        for i in initrd_candidates:
+            test_path = os.path.join(disk_dir, i) if disk_dir else i
+            if os.path.exists(test_path):
+                initrd_path = test_path
+                break
+        
+        if kernel_path and initrd_path:
+            cmd.extend(["-kernel", kernel_path])
+            # Only add initrd if different from kernel
+            if kernel_path != initrd_path:
+                cmd.extend(["-initrd", initrd_path])
+                # Append kernel cmdline for serial console and rootfs
+                cmd.extend(["-append", "console=ttyS0 earlycon=sbi"])
+            # Disk becomes rootfs (optional if initrd is self-contained)
+            # Only add disk if it's different from kernel/initrd
+            if os.path.exists(disk_path) and disk_path != kernel_path and disk_path != initrd_path:
+                cmd.extend(["-drive", f"file={disk_path},format=qcow2,if=virtio"])
+        elif os.path.exists(disk_path):
+            # No kernel/initrd found, try disk-only boot
+            print(f"  ⚠ Warning: kernel/initrd not found:")
+            print(f"    Tried: {kernel_candidates}")
+            print(f"    Tried: {initrd_candidates}")
+            print(f"  ⚠ Falling back to disk-only boot (may not boot)")
+            cmd.extend(["-drive", f"file={disk_path},format=qcow2,if=virtio"])
+        
         cmd.extend(["-bios", "default"])
     elif arch == "x86_64":
         cmd.extend(["-M", "pc"])
@@ -333,8 +389,22 @@ async def capture_boot_trace(
     # Connect to QMP
     print("[3] Connecting to QMP...")
     qmp = QMPClient(qmp_socket)
-    await qmp.connect()
-    print("  ✓ Connected")
+    
+    # Retry QMP connection with exponential backoff
+    for attempt in range(10):
+        try:
+            await qmp.connect()
+            print("  ✓ Connected")
+            break
+        except (ConnectionRefusedError, FileNotFoundError) as e:
+            if attempt == 9:
+                print(f"  ✗ QMP connection failed after 10 attempts: {e}")
+                await qemu_proc.wait()
+                raise RuntimeError(f"Could not connect to QMP socket: {e}")
+            wait_time = (2 ** attempt) * 0.1
+            print(f"  Attempt {attempt + 1}/10 failed ({e}), retrying in {wait_time:.1f}s...")
+            await asyncio.sleep(wait_time)
+    
     
     # Initial pause
     print("[4] Pausing VM for initial capture...")
@@ -417,12 +487,13 @@ async def capture_boot_trace(
             
             # Resume execution
             await qmp.cont()
-            
-            # Wait for instructions to execute
-            # This is a crude approximation - in practice we'd use
-            # QMP 'query-status' and instruction counters
-            await asyncio.sleep(0.1)
-            
+
+            # Wait for instructions to execute.
+            # No real instruction counter (would need QEMU icount/single-step);
+            # this is a wall-clock proxy scaled by `interval` so the flag
+            # actually changes capture spacing instead of being ignored.
+            await asyncio.sleep(interval * 1e-5)
+
             # Pause for next capture
             await qmp.pause()
         
@@ -574,7 +645,7 @@ Examples:
     parser.add_argument('--output', '-o', help='Output MKV file')
     parser.add_argument('--arch', default='riscv64', choices=['riscv64', 'x86_64'])
     parser.add_argument('--memory', default='512M', help='Memory size')
-    parser.add_argument('--interval', type=int, default=50000,
+    parser.add_argument('--interval', type=int, default=1000000,
                        help='Instructions between captures')
     parser.add_argument('--max-frames', type=int, default=500,
                        help='Maximum frames to capture')

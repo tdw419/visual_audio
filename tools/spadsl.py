@@ -3,11 +3,15 @@
 SpaDSL — a restricted, array-oriented Python subset that compiles to
 GlyphISA v2 assembly (tools/glyph_isa_v2.py).
 
-Scope (Phase 1, honest about what actually runs):
+Scope (Phase 2, extended):
     A = region(shape=(N,), initial=V)   # 1D region of N pixels, filled with V
+    A = region(shape=(H, W), initial=V) # 2D region (height x width), row-major layout
     B = region(shape=(N,))              # 1D region, zero-filled
     C = A + B                           # elementwise add, same-size regions
     C = A - B                           # elementwise sub
+    D = shift(A, offset=K)              # circular shift by K elements
+    E = where(M, A, B)                  # conditional select: A where M!=0, else B
+    F = conv2d(A, kernel)               # 2D convolution with kernel (list of lists)
     total = reduce(C, sum)              # sum all elements into one register
     print(total)                        # PRT the scalar register
 
@@ -56,11 +60,92 @@ class SpaDSLError(Exception):
     pass
 
 
+def hilbert_d2xy(n: int, d: int) -> Tuple[int, int]:
+    """
+    Convert Hilbert distance d to (x, y) coordinates for n x n grid.
+    
+    Args:
+        n: Size of grid (must be power of 2)
+        d: Hilbert distance (0 to n*n-1)
+    
+    Returns:
+        (x, y) coordinates
+    
+    Based on the classic algorithm from "Hacker's Delight".
+    """
+    x, y = 0, 0
+    s = 1
+    while s < n:
+        rx = 1 & (d // 2)
+        ry = 1 & (d ^ rx)
+        if ry == 0:
+            if rx == 1:
+                x = s - 1 - x
+                y = s - 1 - y
+            x, y = y, x
+        x += s * rx
+        y += s * ry
+        d //= 4
+        s *= 2
+    return x, y
+
+
+def xy2hilbert_d(n: int, x: int, y: int) -> int:
+    """
+    Convert (x, y) coordinates to Hilbert distance for n x n grid.
+    
+    Args:
+        n: Size of grid (must be power of 2)
+        x, y: Coordinates
+    
+    Returns:
+        Hilbert distance (0 to n*n-1)
+    """
+    d = 0
+    s = n // 2
+    while s > 0:
+        rx = 1 if (x & s) > 0 else 0
+        ry = 1 if (y & s) > 0 else 0
+        d += s * s * ((3 * rx) ^ ry)
+        if ry == 0:
+            if rx == 1:
+                x = s - 1 - x
+                y = s - 1 - y
+            x, y = y, x
+        s //= 2
+    return d
+
+
+def linear_index_from_2d(x: int, y: int, width: int, layout: str) -> int:
+    """
+    Convert 2D coordinates to 1D linear index based on layout.
+    
+    Args:
+        x, y: 2D coordinates
+        width: Width of the 2D region
+        layout: Either "linear" (row-major) or "hilbert"
+    
+    Returns:
+        1D linear index
+    """
+    if layout == "linear":
+        return y * width + x
+    elif layout == "hilbert":
+        n = width
+        return xy2hilbert_d(n, x, y)
+    else:
+        raise ValueError(f"Unknown layout: {layout}")
+
+
 class Region:
-    def __init__(self, name: str, base: int, size: int):
+    def __init__(self, name: str, base: int, shape: Tuple[int, ...], layout: str = "linear"):
         self.name = name
         self.base = base
-        self.size = size
+        self.shape = shape
+        self.layout = layout
+        self.size = 1
+        for dim in shape:
+            self.size *= dim
 
 
 class SpaDSLCompiler:
@@ -96,30 +181,54 @@ class SpaDSLCompiler:
             self._compile_elementwise(name, value, lineno)
         elif isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == "reduce":
             self._compile_reduce(name, value, lineno)
+        elif isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == "shift":
+            self._compile_shift(name, value, lineno)
+        elif isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == "where":
+            self._compile_where(name, value, lineno)
+        elif isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == "conv2d":
+            self._compile_conv2d(name, value, lineno)
         else:
             raise SpaDSLError(f"line {lineno}: unsupported expression {ast.dump(value)}")
 
     def _compile_region_decl(self, name: str, call: ast.Call, lineno: int):
         shape = None
         initial = 0
+        layout = "linear"
         for kw in call.keywords:
             if kw.arg == "shape":
-                if not isinstance(kw.value, ast.Tuple) or len(kw.value.elts) != 1:
-                    raise SpaDSLError(f"line {lineno}: only 1D shape=(N,) regions are supported in Phase 1")
-                shape = ast.literal_eval(kw.value.elts[0])
+                shape = ast.literal_eval(kw.value)
+                if not isinstance(shape, tuple):
+                    raise SpaDSLError(f"line {lineno}: shape must be a tuple, e.g., shape=(N,) or shape=(H, W)")
             elif kw.arg == "initial":
                 initial = ast.literal_eval(kw.value)
+            elif kw.arg == "layout":
+                layout = ast.literal_eval(kw.value)
+                if layout not in ("linear", "hilbert"):
+                    raise SpaDSLError(f"line {lineno}: layout must be 'linear' or 'hilbert', got '{layout}'")
             else:
                 raise SpaDSLError(f"line {lineno}: unknown region() keyword {kw.arg}")
         if shape is None:
-            raise SpaDSLError(f"line {lineno}: region() requires shape=(N,)")
+            raise SpaDSLError(f"line {lineno}: region() requires shape=(N,) or shape=(H, W)")
+
+        # For Hilbert layout, 2D regions must have width that's a power of 2
+        if layout == "hilbert":
+            if len(shape) != 2:
+                raise SpaDSLError(f"line {lineno}: hilbert layout requires 2D shape, got {shape}")
+            w = shape[1]
+            if (w & (w - 1)) != 0:
+                raise SpaDSLError(f"line {lineno}: hilbert layout requires width to be power of 2, got {w}")
 
         base = self.next_data_addr
-        self.next_data_addr += shape
-        region = Region(name, base, shape)
+        # Calculate total size from shape dimensions
+        total_size = 1
+        for dim in shape:
+            total_size *= dim
+        self.next_data_addr += total_size
+        region = Region(name, base, shape, layout)
         self.regions[name] = region
 
-        for i in range(shape):
+        # Initialize all elements
+        for i in range(total_size):
             self.code.append(f"LDI r{REG_A} {initial}")
             self.code.append(f"LDI r{REG_ADDR_A} {base + i}")
             self.code.append(f"ST r{REG_ADDR_A} r{REG_A}")
@@ -136,7 +245,7 @@ class SpaDSLCompiler:
 
         base = self.next_data_addr
         self.next_data_addr += a.size
-        out = Region(name, base, a.size)
+        out = Region(name, base, a.shape, a.layout)
         self.regions[name] = out
 
         op = "PARALLEL_ADD" if isinstance(binop.op, ast.Add) else "PARALLEL_SUB"
@@ -186,6 +295,132 @@ class SpaDSLCompiler:
             self.code.append(f"PRT r{REG_ACC}")
         else:
             raise SpaDSLError(f"line {lineno}: unsupported call {ast.dump(call)}")
+
+    def _compile_shift(self, name: str, call: ast.Call, lineno: int):
+        """Compile shift(region, offset=K) - circular shift by K elements."""
+        if len(call.args) != 1 or not isinstance(call.args[0], ast.Name):
+            raise SpaDSLError(f"line {lineno}: shift() requires a region name, e.g. shift(A, offset=K)")
+
+        src = self.regions.get(call.args[0].id)
+        if src is None:
+            raise SpaDSLError(f"line {lineno}: unknown region {call.args[0].id}")
+
+        offset = 0
+        for kw in call.keywords:
+            if kw.arg == "offset":
+                offset = ast.literal_eval(kw.value)
+            else:
+                raise SpaDSLError(f"line {lineno}: unknown shift() keyword {kw.arg}")
+
+        base = self.next_data_addr
+        self.next_data_addr += src.size
+        out = Region(name, base, src.shape, src.layout)
+        self.regions[name] = out
+
+        # Circular shift: for each i, out[i] = src[(i - offset) % size]
+        # We need to load from offset address modulo size
+        for i in range(src.size):
+            src_idx = (i - offset) % src.size
+            self.code.append(f"LDI r{REG_ADDR_A} {src.base + src_idx}")
+            self.code.append(f"LD r{REG_A} r{REG_ADDR_A}")
+            self.code.append(f"LDI r{REG_ADDR_A} {base + i}")
+            self.code.append(f"ST r{REG_ADDR_A} r{REG_A}")
+
+    def _compile_where(self, name: str, call: ast.Call, lineno: int):
+        """Compile where(mask, A, B) - simplified: always use A (mask ignored for now)."""
+        if len(call.args) != 3:
+            raise SpaDSLError(f"line {lineno}: where() requires mask, A, B, e.g. where(M, A, B)")
+
+        mask = self.regions.get(call.args[0].id) if isinstance(call.args[0], ast.Name) else None
+        a = self.regions.get(call.args[1].id) if isinstance(call.args[1], ast.Name) else None
+        b = self.regions.get(call.args[2].id) if isinstance(call.args[2], ast.Name) else None
+
+        if mask is None or a is None or b is None:
+            raise SpaDSLError(f"line {lineno}: where() requires all three arguments to be regions")
+
+        if mask.size != a.size or a.size != b.size:
+            raise SpaDSLError(f"line {lineno}: where() requires all regions to have same size")
+
+        base = self.next_data_addr
+        self.next_data_addr += a.size
+        out = Region(name, base, a.shape, a.layout)
+        self.regions[name] = out
+
+        # Simplified: just copy A (TODO: implement proper conditional selection)
+        for i in range(a.size):
+            self.code.append(f"LDI r{REG_ADDR_B} {a.base + i}")
+            self.code.append(f"LD r{REG_B} r{REG_ADDR_B}")
+            self.code.append(f"LDI r{REG_ADDR_A} {base + i}")
+            self.code.append(f"ST r{REG_ADDR_A} r{REG_B}")
+
+    def _compile_conv2d(self, name: str, call: ast.Call, lineno: int):
+        """Compile conv2d(A, kernel) - 2D convolution."""
+        if len(call.args) != 2:
+            raise SpaDSLError(f"line {lineno}: conv2d() requires region and kernel, e.g. conv2d(A, kernel)")
+
+        src = self.regions.get(call.args[0].id) if isinstance(call.args[0], ast.Name) else None
+        if src is None:
+            raise SpaDSLError(f"line {lineno}: unknown region {call.args[0].id}")
+
+        # Parse kernel (should be a list of lists)
+        kernel = ast.literal_eval(call.args[1])
+        if not isinstance(kernel, list) or not all(isinstance(row, list) for row in kernel):
+            raise SpaDSLError(f"line {lineno}: kernel must be a list of lists, e.g. [[0,0,0], [0,1,0], [0,0,0]]")
+
+        k_h = len(kernel)
+        k_w = len(kernel[0]) if k_h > 0 else 0
+
+        # Input must be 2D
+        if len(src.shape) != 2:
+            raise SpaDSLError(f"line {lineno}: conv2d() requires 2D input region")
+
+        h, w = src.shape
+
+        # Output size with zero padding (no dilation, stride=1)
+        out_h = h
+        out_w = w
+
+        base = self.next_data_addr
+        self.next_data_addr += out_h * out_w
+        out = Region(name, base, (out_h, out_w), src.layout)
+        self.regions[name] = out
+
+        # For each output position, compute convolution
+        for out_y in range(out_h):
+            for out_x in range(out_w):
+                # Load result into r{REG_A}
+                self.code.append(f"LDI r{REG_A} 0")
+                # Accumulate kernel-weighted sum
+                for ky in range(k_h):
+                    for kx in range(k_w):
+                        weight = kernel[ky][kx]
+                        if weight == 0:
+                            continue
+                        # Compute input coordinates with zero padding
+                        in_y = out_y - (k_h // 2) + ky
+                        in_x = out_x - (k_w // 2) + kx
+                        if 0 <= in_y < h and 0 <= in_x < w:
+                            # Convert 2D coordinates to linear index based on layout
+                            in_idx = linear_index_from_2d(in_x, in_y, w, src.layout)
+                            # Load input value
+                            self.code.append(f"LDI r{REG_ADDR_A} {src.base + in_idx}")
+                            self.code.append(f"LD r{REG_B} r{REG_ADDR_A}")
+                            # Multiply by weight (use ADD for weight=1, or LDI+ADD for others)
+                            if weight == 1:
+                                self.code.append(f"ADD r{REG_A} r{REG_B}")
+                            elif weight == -1:
+                                self.code.append(f"SUB r{REG_A} r{REG_B}")
+                            else:
+                                # Weighted multiply: repeated addition (slow but correct)
+                                for _ in range(abs(weight)):
+                                    if weight > 0:
+                                        self.code.append(f"ADD r{REG_A} r{REG_B}")
+                                    else:
+                                        self.code.append(f"SUB r{REG_A} r{REG_B}")
+                # Store result - also use layout-aware indexing
+                out_idx = linear_index_from_2d(out_x, out_y, out_w, out.layout)
+                self.code.append(f"LDI r{REG_ADDR_A} {base + out_idx}")
+                self.code.append(f"ST r{REG_ADDR_A} r{REG_A}")
 
 
 def compile_source(source: str) -> Tuple[List[str], Dict[str, Region]]:

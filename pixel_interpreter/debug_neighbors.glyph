@@ -1,0 +1,31 @@
+; Simple test: Count neighbors of cell (1, 151)
+; Should have 1 neighbor (cell below at 1, 152)
+
+; Initialize pattern: vertical line of 2 cells
+SET 255
+STORE (1, 151)
+STORE (1, 152)
+
+; Set up base coordinate (1, 151)
+SET_ADDR_HIGH 1
+SET_ADDR_LOW 151
+; Now Acc = (1, 151)
+
+; Check neighbor: (1, 152) - bottom
+ADD_COORD 1  ; Now Acc = (1, 152)
+INDIRECT_LOAD
+
+; Should get 255
+SUB 255
+JZ :found_neighbor
+
+; If we get here, neighbor wasn't alive
+SET 0
+STORE (250, 0)
+HALT
+
+:found_neighbor
+SET 1
+STORE (250, 0)  ; Marker that we found neighbor
+
+HALT

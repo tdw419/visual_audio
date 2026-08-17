@@ -49,6 +49,11 @@ bytemuck = { version = "1.14", features = ["derive"] }
 # Temporary file handling for MKV frame extraction
 tempfile = "3.8"
 
+# PXC1 container format (docs/PIXEL_CONTAINER_SPEC_V1.md) - replaces the
+# ffmpeg/.nut path, which had a real pixel-format mismatch bug (BGR write
+# order vs declared rgb24 stream) that silently corrupted containers.
+pxc1 = { path = "../../tools/pxc1" }
+
 # FFmpeg for hardware video decoding (Phase 5)
 ffmpeg-sys-next = "7.0"
 
@@ -61,3 +66,5 @@ serde_json = "1.0.151"
 
 [dev-dependencies]
 tempfile = "3.8"
+sha2 = "0.10"
+hex = "0.4"

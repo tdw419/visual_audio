@@ -5,8 +5,15 @@ ShaderOS Installation Verification Script
 This script verifies that your ShaderOS installation is working correctly.
 """
 
+import os
 import sys
 from pathlib import Path
+
+# Dual-GPU (Intel + NVIDIA) sandboxes: Vulkan mesa device-select can pick the
+# NVIDIA render node and spin forever waiting on a fence that never signals.
+# Forcing GL + the Intel iris driver avoids that hang.
+os.environ.setdefault("WGPU_BACKEND", "gl")
+os.environ.setdefault("MESA_LOADER_DRIVER_OVERRIDE", "iris")
 
 
 def check_python_version():

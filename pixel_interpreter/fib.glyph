@@ -1,0 +1,147 @@
+; fib.glyph -- hand transpile of:
+;   (func $fib (param $n i32) (result i32)
+;     (if (result i32) (i32.lt_s (local.get $n) (i32.const 2))
+;       (then (local.get $n))
+;       (else (i32.add (call $fib (i32.sub (local.get $n) (i32.const 1)))
+;                       (call $fib (i32.sub (local.get $n) (i32.const 2)))))))
+;
+; wasm2glyph Tier-1 spike: nails the calling convention before any
+; generalized WASM parser gets written. Recursive, so it genuinely
+; exercises parameter passing + return values through nested CALL/RET.
+;
+; ABI (data stack, separate from the row-255 return-address stack):
+;   - Args/locals live on a second stack at row 253, indexed by a global
+;     "dsp" scratch cell (220,0).
+;   - CALLER pushes the argument (dsp += 1), then CALL.
+;   - CALLEE finds its argument at data_stack[dsp-1] on entry. It may
+;     push more locals above that (dsp keeps growing) for its own use.
+;   - CALLEE is responsible for restoring dsp to (entry_dsp - 1) before
+;     RET -- i.e. it pops its own arg AND any locals it pushed. This
+;     means dsp is always back to its pre-call value immediately after
+;     any CALL returns, so a caller can safely re-derive "my own slot"
+;     as (dsp - k) for a compile-time-known constant k, even across
+;     nested recursive calls -- no per-frame base pointer is ever
+;     stored; it's cheaply recomputed from dsp each time it's needed.
+;   - Return value comes back in the accumulator.
+;   - Only static-address ALU ops (ADD_MEM) exist, so combining two
+;     runtime stack values requires staging one through a static
+;     scratch cell first -- INDIRECT_LOAD to fetch the other from its
+;     runtime slot, then ADD_MEM against the scratch.
+
+; --- scratch cells (row 0) ---
+; (220,0) dsp             (221,0) const 253 (data stack row)
+; (222,0) addr_x scratch  (223,0) n (short-lived, never held across a CALL)
+; (224,0) temp value scratch (short-lived, never held across a CALL)
+; (230,0) final result, for verification
+
+:main
+SET 0
+STORE (220, 0)      ; dsp = 0
+SET 253
+STORE (221, 0)       ; const data-stack row
+
+; push initial argument n=10 (fib(10) = 55)
+LOAD (220, 0)
+STORE (222, 0)
+LOAD_COORD (222, 221)
+INDIRECT_STORE 10
+LOAD (220, 0)
+ADD 1
+STORE (220, 0)        ; dsp += 1
+
+CALL :fib
+STORE (230, 0)         ; save fib(10) result
+HALT
+
+:fib
+; addr_n = dsp - 1  (n's slot: entry dsp is B+1, n lives at B)
+LOAD (220, 0)
+SUB 1
+STORE (222, 0)
+LOAD_COORD (222, 221)
+INDIRECT_LOAD
+STORE (223, 0)          ; n
+
+; base case: n == 0 -> return 0
+LOAD (223, 0)
+SUB 0
+JZ :fib_ret0
+
+; base case: n == 1 -> return 1
+LOAD (223, 0)
+SUB 1
+JZ :fib_ret1
+
+; --- recursive case: n >= 2 ---
+; push (n - 1) as the argument for the first recursive call
+LOAD (223, 0)
+SUB 1
+STORE (224, 0)          ; temp = n - 1
+LOAD (220, 0)             ; addr_x = dsp  (= B+1, first free slot)
+STORE (222, 0)
+LOAD_COORD (222, 221)
+INDIRECT_STORE_MEM (224, 0)   ; data_stack[dsp] = n - 1
+LOAD (220, 0)
+ADD 1
+STORE (220, 0)            ; dsp += 1  (now B+2)
+CALL :fib
+; ACC = fib(n-1). dsp was restored by the callee back to B+1.
+; Push it as our own local at slot B+1 so it survives the 2nd call.
+STORE (224, 0)
+LOAD (220, 0)
+STORE (222, 0)
+LOAD_COORD (222, 221)
+INDIRECT_STORE_MEM (224, 0)   ; data_stack[B+1] = fib(n-1)
+LOAD (220, 0)
+ADD 1
+STORE (220, 0)             ; dsp += 1  (now B+2: n@B, fib(n-1)@B+1)
+
+; push (n - 2) as the argument for the second recursive call.
+; n is at slot dsp-2 (= B) right now.
+LOAD (220, 0)
+SUB 2
+STORE (222, 0)
+LOAD_COORD (222, 221)
+INDIRECT_LOAD              ; ACC = n (reloaded from the stack)
+SUB 2
+STORE (224, 0)              ; temp = n - 2
+LOAD (220, 0)                ; addr_x = dsp (= B+2, next free slot)
+STORE (222, 0)
+LOAD_COORD (222, 221)
+INDIRECT_STORE_MEM (224, 0)   ; data_stack[B+2] = n - 2
+LOAD (220, 0)
+ADD 1
+STORE (220, 0)                 ; dsp += 1  (now B+3)
+CALL :fib
+; ACC = fib(n-2). dsp was restored by the callee back to B+2.
+STORE (224, 0)                  ; temp = fib(n-2)  (static scratch)
+; fib(n-1) is at slot dsp-1 (= B+1) right now.
+LOAD (220, 0)
+SUB 1
+STORE (222, 0)
+LOAD_COORD (222, 221)
+INDIRECT_LOAD                    ; ACC = fib(n-1)
+ADD_MEM (224, 0)                  ; ACC = fib(n-1) + fib(n-2)
+STORE (224, 0)                     ; stash result -- about to clobber ACC below
+
+; pop our whole frame (n + fib(n-1) local): dsp = B = entry_dsp - 1
+LOAD (220, 0)
+SUB 2
+STORE (220, 0)
+
+LOAD (224, 0)                       ; restore result into ACC before RET
+RET
+
+:fib_ret0
+LOAD (220, 0)
+SUB 1
+STORE (220, 0)
+SET 0
+RET
+
+:fib_ret1
+LOAD (220, 0)
+SUB 1
+STORE (220, 0)
+SET 1
+RET

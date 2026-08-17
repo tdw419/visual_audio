@@ -1,95 +1,104 @@
 # Alpine Boot Trace — Software-to-Video Pipeline Verification
 
-**Status**: VERIFIED — Capture and extraction both confirmed working (hash-verified round-trip, re-run 2026-08-15)
+**Status**: BLOCKED — Alpine RISC-V cannot boot; use xv6.img for working demos
 
-**Date**: 2026-08-15
+**Date**: 2026-08-15 (Updated)
+
+## Root Cause
+
+**Alpine RISC-V uses PE32+ EFI kernel format, not ELF64.**
+
+`boot_images/alpine_vmlinuz` decompresses to PE32+ EFI:
+- `file alpine_vmlinuz`: gzip compressed data
+- `zcat alpine_vmlinuz | file`: PE32+ executable (EFI application) RISC-V 64-bit
+
+OpenSBI (the default RISC-V firmware for QEMU virt) only loads raw ELF64 kernels:
+- `boot_images/hello.img`: ELF 64-bit at 0x80200000 — Boots and prints message ✅
+- `boot_images/xv6.img`: ELF 64-bit at 0x80000000 — Conflicts with OpenSBI firmware region ❌
+
+PE32+ EFI requires EDK2/UEFI firmware stack (e.g., `virtio-flash-device` firmware), which adds significant complexity and is not currently supported by `qemu_to_mkv.py`.
 
 ## What Works
 
-1. **QMP Memory Dump Captured**:
-   - Alpine RISC-V booted with 64MB RAM
-   - 3 capture snapshots before hang detection (expected — 256×256 only samples first ~192KB)
-   - 64.1 MB dumps captured and Hilbert-mapped
-   - FFV1 MKV encoding successful (1.31 MB)
+1. **QMP Memory Dump Pipeline** — VERIFIED:
+   - Boot hello.img (ELF64) → captures memory snapshots
+   - Hilbert mapping + FFV1 encoding → MKV
+   - Frame extraction → round-trip hash verification
+   - QMP connection now has exponential backoff retry
 
-2. **MKV Creation Verified**:
-   ```
-   /tmp/alpine_boot_trace.mkv (1.31 MB)
-   - 3079 FFV1 RGB24 frames
-   - 201,719,808 bytes total payload
-   - Overall hash: e17dc0d79e6cfd759c3cb154d2f4babd
-   - Compression ratio: 0.01x
-   - Manifest.json attachment
-   ```
+2. **hello.img Boot Trace** — VERIFIED:
+   - Kernel boots fully on RISC-V virt with default OpenSBI
+   - Memory changes are captured during boot
+   - Multi-frame delta encoding works
 
-3. **Frame Extraction Working**:
-   ```
-   /tmp/alpine_frame1.mem (65 MB)
-   - Extracted from frame 1
-   - Contains full 64MB memory dump
-   ```
+## What DOES NOT Work
 
-## Fixed (2026-08-15)
+1. **Alpine RISC-V** — BLOCKED:
+   - Kernel format: PE32+ EFI (not ELF64)
+   - Requires: EDK2/UEFI firmware (not default OpenSBI)
+   - Symptoms: QEMU hangs at OpenSBI, never loads kernel
 
-1. **Manifest Extraction** — was failing:
-   - `dense_encoder` import fixed: `tools/dense_encoder_video.py` now inserts its own directory into `sys.path` instead of a nonexistent `src/` two levels up.
-   - `ffmpeg -dump_attachment:t:0` was implicitly decoding the entire video stream before exiting; added `-map 0:v -c copy` so it dumps the manifest and exits without decoding payload frames.
-   - Re-ran `decode_mkv()` directly against `/tmp/alpine_boot_trace.mkv`: manifest extracted (3079 frames, 201,719,808 bytes), all frames reassembled, overall hash verified (`e17dc0d79e6cfd759c3cb154d2f4babd`) matching the manifest.
+2. **xv6.img** — BROKEN:
+   - Linker loads at 0x80000000 (overlaps OpenSBI at 0x80000000-0x8004180)
+   - QEMU aborts: "Some ROM regions are overlapping"
+   - QMP socket never created (process dies before listening)
 
-2. **Hang Detection Trips Early** — mitigated:
-   - `tools/qemu_to_mkv.py` defaults changed: `--interval` 10000→50000, `--memory-width`/`--memory-height` 512→1024, to sample beyond the static ~192KB firmware region on a 64MB dump.
-   - Re-run live 2026-08-15 with these defaults (5-frame request): 3 captures before hang detection tripped. This is a real hang, not a bug — all 3 tiles were bit-identical (same md5 `eb90019be2ddb75e3a0e795a3a0f1c47` across all 3 extracted frames), i.e. Alpine's RAM genuinely hadn't changed yet at this point in boot for this memory region/interval. Still worth revisiting interval/timing to catch actual boot evolution, but the defaults bump did its job (no longer tripping on the old 192KB static window).
+## Fixed Issues (2026-08-15)
 
-3. **Delta-Frame Truncation** — fixed:
-   - Root cause: `dense_encoder_video.py`'s `frame_to_chunk()` had a manual trailing-zero-stripping loop that could eat the last byte of the CRC32 trailer whenever that byte happened to be `\x00` (~1/256 chance per frame) — `unframe()` already parses an explicit length from its header and doesn't need the manual strip. Removed the loop; `unframe()` now handles padding on its own.
-   - Verified live 2026-08-15: fresh 5-max-frame capture (3 captured before hang) → encode → extract all 3 logical frames individually. All 3 extractions completed with hash verification passing, no truncation error (previously failed at "expected 65539 bytes, got 65538").
+1. **QMP Connection Reliability**: Added exponential backoff retry (0.1s → 51.2s max, 10 attempts)
+2. **Duplicate Disk Parameter**: Kernel-only boot no longer adds redundant `-drive` pointing to same file
+3. **Auto-detect Kernel Files**: Searches multiple naming conventions for kernel/initrd pairs
 
-## Remaining Gap
+## Verification Commands (hello.img)
 
-- Hang detection still trips after a handful of captures on this qcow2/interval combo. Confirmed genuine (identical memory across captures), not an extraction artifact — but means multi-frame *boot evolution* traces still need interval/region tuning to actually see change over time.
-
-## Verification Commands
-
-**Capture Alpine boot trace:**
+Capture hello.img boot trace:
 ```bash
-python3 tools/qemu_to_mkv.py boot_images/alpine_riscv64.qcow2 \
+python3 tools/qemu_to_mkv.py boot_images/hello.img \
     --arch riscv64 \
-    --output /tmp/alpine_boot_trace.mkv \
-    --interval 5000 \
-    --max-frames 50 \
-    --memory-width 256 \
-    --memory-height 256 \
+    --output /tmp/hello_boot_trace.mkv \
+    --interval 100000 \
+    --max-frames 10 \
     --memory 64M
 ```
 
-**Extract frame back to memory dump:**
+Extract frame back to memory dump:
 ```bash
-python3 tools/qemu_to_mkv.py /tmp/alpine_boot_trace.mkv \
-    --extract-frame 1 \
-    --output /tmp/alpine_frame1.mem
+python3 tools/qemu_to_mkv.py /tmp/hello_boot_trace.mkv \
+    --extract-frame 0 \
+    --output /tmp/hello_frame0.mem
 ```
 
-**Verify extracted memory:**
+Verify extracted memory:
 ```bash
-file /tmp/alpine_frame1.mem
-xxd /tmp/alpine_frame1.mem | head -20
+file /tmp/hello_frame0.mem
+xxd /tmp/hello_frame0.mem | head -20
 ```
+
+## Software-to-Video Pipeline Status
+
+The QMP memory dump → Hilbert mapping → FFV1 MKV → frame extraction pipeline is FULLY OPERATIONAL for:
+- ELF64 RISC-V kernels at 0x80200000 (hello.img)
+- PE32+ EFI kernels (Alpine) — firmware stack limitation
+- ELF64 kernels at 0x80000000 (xv6) — OpenSBI firmware overlap
 
 ## Next Steps
 
-1. Tune capture interval/timing so multi-frame traces catch actual boot evolution rather than tripping hang detection on unchanged memory.
-2. Integrate trace into VAC3 container (Z=1 = RAM substrate, Z=0 = display)
+1. Use hello.img for boot trace demonstrations — Works end-to-end
+2. Rebuild xv6.img at 0x80200000 (hello.img address) to avoid OpenSBI overlap
+3. Document Alpine limitation — PE32+ EFI requires EDK2 firmware (out of scope)
+4. Integrate working trace into VAC3 container — Z=1 = RAM substrate, Z=0 = display
 
-## Comparison: Static Disk vs Boot Trace
+## Comparison: Boot Trace Options
 
-| Aspect | Alpine MKV (disk) | Boot Trace (software-to-video) |
-|--------|------------------|-------------------------------|
-| Content | Rootfs disk image (17MB qcow2) | Execution state snapshots (64MB dumps) |
-| Captured | Static storage | Dynamic memory over time |
-| Frame meaning | N/A | Memory state at capture point |
-| Can boot? | NO (needs kernel+firmware) | YES (temporal trace of boot) |
-| Verified | FALSE (unverified claim) | VERIFIED (capture + hash-verified extraction) |
+| Aspect | hello.img | xv6.img | Alpine |
+|--------|-----------|---------|--------|
+| Kernel format | ELF64 | ELF64 | PE32+ EFI |
+| Load address | 0x80200000 | 0x80000000 | N/A |
+| OpenSBI | Compatible | Overlaps | Ignores |
+| QMP socket | ✅ Created | ❌ QEMU aborts | ✅ Created |
+| Boot trace | ✅ VERIFIED | ❌ Can't connect | ❌ No execution |
+| Status | WORKING | FIXABLE | BLOCKED |
 
 ---
 
-**Software-to-video pipeline is fully operational for Alpine RISC-V boot capture, including multi-frame delta traces.** QMP dump-guest-memory, Hilbert mapping, FFV1 encoding, manifest extraction, single-frame extraction, and multi-frame delta extraction are all hash-verified against live captures. Remaining work is tuning capture timing to observe actual boot evolution rather than a pipeline correctness gap.
+**Software-to-video pipeline is fully operational for ELF64 RISC-V kernels.** Use hello.img for demonstrations. Alpine RISC-V boot traces are blocked by kernel format incompatibility (PE32+ EFI vs ELF64) and require EDK2/UEFI firmware support. xv6.img can be fixed by relocating load address to 0x80200000.

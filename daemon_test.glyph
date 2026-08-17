@@ -1,0 +1,39 @@
+# Spatial OS Daemon Test
+# This program demonstrates the Interaction Stratum by:
+# 1. Writing a request to the reserved region at 8192
+# 2. Triggering the daemon to execute an `ls` command
+# 3. Reading the result from RESULT_BASE
+
+# IMPORTANT: The image width must be large enough so RESULT_BASE
+# doesn't wrap around into program code. For a 33-instruction program,
+# we need at least width_instrs=16 (which gives 64 pixels) and
+# RESULT_BASE should be at pixel position 64 or higher.
+
+# With width_instrs=16, the image is 1x64 (64 pixels total).
+# To avoid wrap-around, RESULT_BASE must be >= 64.
+# But we also need space for the result, so let's use a larger width.
+
+# Load magic values
+LDI r0 0xADBEEF  # MAGIC_1
+LDI r1 0xFEBABE  # MAGIC_2
+LDI r2 0x4C53    # CMD_LS ("LS" in ASCII)
+LDI r3 2000      # TARGET_ADDR (>1000 maps to "tools" directory)
+LDI r4 256       # RESULT_BASE (beyond program at 132, with space for 4235 bytes)
+
+# Write to reserved region (8192-8196)
+LDI r5 8192
+ST r5 r0         # MAGIC_1
+
+LDI r5 8193
+ST r5 r1         # MAGIC_2
+
+LDI r5 8194
+ST r5 r2         # CMD_LS
+
+LDI r5 8195
+ST r5 r3         # TARGET_ADDR
+
+LDI r5 8196
+ST r5 r4         # RESULT_BASE
+
+HALT

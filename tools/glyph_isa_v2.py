@@ -56,6 +56,12 @@ class OpcodeMapV2:
         'CALL': 'call',
         'RET': 'return',
         'SYSCALL': 'system_call',
+        # GPU-native parallel opcodes for spatial execution
+        'PARALLEL_LD': 'parallel_load',
+        'PARALLEL_ST': 'parallel_store',
+        'PARALLEL_ADD': 'parallel_add',
+        'PARALLEL_SUB': 'parallel_sub',
+        'PARALLEL_REDUCE_SUM': 'parallel_reduce_sum',
     }
 
     # Fixed literal colors for the opcodes added in the Turing-complete
@@ -75,6 +81,12 @@ class OpcodeMapV2:
         'CALL': (75, 0, 130),
         'RET':  (255, 215, 0),
         'SYSCALL': (255, 69, 0),
+        # GPU-native parallel opcodes - distinctive colors for spatial ops
+        'PARALLEL_LD': (147, 51, 234),     # Purple
+        'PARALLEL_ST': (255, 20, 147),    # Deep Pink
+        'PARALLEL_ADD': (0, 255, 127),    # Spring Green
+        'PARALLEL_SUB': (255, 140, 0),    # Dark Orange
+        'PARALLEL_REDUCE_SUM': (0, 191, 255),  # Deep Sky Blue
     }
 
     def __init__(self, wordbase_path: Optional[Path] = None):
@@ -208,6 +220,83 @@ class GlyphAssemblerV2:
                 imm = (int(y) << 16) | int(x)  # pack coord into imm
             elif opcode in ('HALT', 'RET'):
                 pass
+            elif opcode == 'PARALLEL_LD':
+                # PARALLEL_LD rd addr count - load count values starting at addr into rd
+                rd = int(args[0][1:])
+                imm_str = args[1]
+                if imm_str.startswith('0x') or imm_str.startswith('0X'):
+                    addr = int(imm_str, 16)
+                else:
+                    addr = int(imm_str)
+                # count can be immediate or register
+                if len(args) > 2:
+                    if args[2].startswith('r'):
+                        rs2 = int(args[2][1:])
+                        imm = addr  # Just addr in imm, count in rs2
+                    else:
+                        # Immediate count: pack both addr and count into imm
+                        count = int(args[2])
+                        imm = (count << 24) | addr  # Pack count in high bits, addr in low bits
+                        rs2 = 0  # Clear rs2 since count is in imm
+            elif opcode == 'PARALLEL_ST':
+                # PARALLEL_ST addr_reg rs count - store count values from rs starting at address in addr_reg
+                if args[0].startswith('r'):
+                    # Address is in a register
+                    addr_reg = int(args[0][1:])
+                    rs = int(args[1][1:])
+                    if len(args) > 2:
+                        if args[2].startswith('r'):
+                            rs2 = int(args[2][1:])  # count in register
+                            imm = 0  # dummy
+                        else:
+                            # Immediate count
+                            count = int(args[2])
+                            imm = count
+                            rs2 = 0
+                    # Store addr_reg in rs1 temporarily for the CPU to resolve
+                    rs1 = addr_reg
+                    # Make rd = rs (source register)
+                    rd = rs
+                else:
+                    # Immediate address (fallback)
+                    imm_str = args[0]
+                    if imm_str.startswith('0x') or imm_str.startswith('0X'):
+                        imm = int(imm_str, 16)
+                    else:
+                        imm = int(imm_str)
+                    rs2 = int(args[1][1:])
+                    rd = int(args[2][1:])
+            elif opcode in ('PARALLEL_ADD', 'PARALLEL_SUB'):
+                # PARALLEL_ADD rd rs1 rs2 count - elementwise add/sub of count values
+                rd = int(args[0][1:])
+                rs1 = int(args[1][1:])
+                rs2 = int(args[2][1:])
+                # count is in immediate
+                if len(args) > 3:
+                    imm_str = args[3]
+                    if imm_str.startswith('0x') or imm_str.startswith('0X'):
+                        imm = int(imm_str, 16)
+                    else:
+                        imm = int(imm_str)
+            elif opcode == 'PARALLEL_REDUCE_SUM':
+                # PARALLEL_REDUCE_SUM rd addr count - sum count values starting at addr into rd
+                rd = int(args[0][1:])
+                imm_str = args[1]
+                if imm_str.startswith('0x') or imm_str.startswith('0X'):
+                    imm = int(imm_str, 16)
+                else:
+                    imm = int(imm_str)
+                # count can be immediate or register
+                if len(args) > 2:
+                    if args[2].startswith('r'):
+                        rs2 = int(args[2][1:])
+                    else:
+                        # Immediate count: store count in imm, CPU handles it
+                        count = int(args[2])
+                        # Pack both addr and count into imm: low 24 bits = addr, high 24 bits = count
+                        # But for simplicity, we'll use a different encoding
+                        imm = (count << 24) | imm  # Pack count in high bits
+                        rs2 = 0
 
             image[row, base_x + 1] = (rs1, rs2, rd)
             low_px, high_px = _pack_immediate(imm)
@@ -354,6 +443,50 @@ class GlyphCPUv2:
                 target_x = tx * INSTR_WIDTH
                 self._check_alignment(target_x)
                 next_pc = (target_x, ty)
+        elif opcode == 'PARALLEL_LD':
+            # PARALLEL_LD rd addr count - load count values starting at addr into rd
+            addr = imm & 0xFFFFFF  # low 24 bits = base address
+            count = rs2 if rs2 > 0 else (imm >> 24)  # count in rs2 or high bits of imm
+            for i in range(count):
+                val = self._mem_read(image, addr + i)
+                # Store in consecutive registers starting at rd
+                if rd + i < 32:  # Register bounds check
+                    self.registers[rd + i] = val
+        elif opcode == 'PARALLEL_ST':
+            # PARALLEL_ST addr_reg rs count - store count values from rs starting at address in addr_reg
+            # rs1 contains the address register, rd contains the source register, imm contains count
+            addr = self.registers[rs1]  # Get address from register
+            count = imm if imm > 0 else rs2  # count in immediate or rs2
+            rs_base = rd  # Source register base
+            for i in range(count):
+                if rs_base + i < 32:  # Register bounds check
+                    val = self.registers[rs_base + i]
+                    self._mem_write(image, addr + i, val)
+        elif opcode == 'PARALLEL_ADD':
+            # PARALLEL_ADD rd rs1 rs2 count - elementwise add of count values
+            # r[rd + i] = r[rs1 + i] + r[rs2 + i] for i in 0..count-1
+            count = imm if imm > 0 else 1  # count in immediate
+            for i in range(count):
+                src1_idx = rs1 + i
+                src2_idx = rs2 + i
+                dst_idx = rd + i
+                if dst_idx < 32 and src1_idx < 32 and src2_idx < 32:  # Register bounds check
+                    self.registers[dst_idx] = self.registers[src1_idx] + self.registers[src2_idx]
+        elif opcode == 'PARALLEL_SUB':
+            # PARALLEL_SUB rd rs1 rs2 count - elementwise sub of count values  
+            count = imm if imm > 0 else 1  # count in immediate
+            for i in range(count):
+                if rd + i < 32 and rs1 + i < 32 and rs2 + i < 32:  # Register bounds check
+                    self.registers[rd + i] = self.registers[rs1 + i] - self.registers[rs2 + i]
+        elif opcode == 'PARALLEL_REDUCE_SUM':
+            # PARALLEL_REDUCE_SUM rd addr count - sum count values starting at addr into rd
+            addr = imm & 0xFFFFFF  # low 24 bits = base address
+            count = rs2 if rs2 > 0 else (imm >> 24)  # count in rs2 or high bits of imm
+            total = 0
+            for i in range(count):
+                val = self._mem_read(image, addr + i)
+                total += val
+            self.registers[rd] = total
         elif opcode == 'HALT':
             self.running = False
             return False

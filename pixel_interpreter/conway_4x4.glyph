@@ -1,0 +1,156 @@
+; Conway's Game of Life - 4x4 grid (minimal working example)
+; Memory layout:
+; y=0: CPU state
+; y=1-100: Code
+; y=101-104: Current grid (4x4)
+; y=105-108: Next grid (4x4)
+
+; Initialize with blinker: (1,101), (1,102), (1,103)
+SET 255
+STORE (1, 101)
+STORE (1, 102)
+STORE (1, 103)
+
+; Process cell (0, 101)
+SET_ADDR_HIGH 0
+SET_ADDR_LOW 101
+STORE (200, 0)  ; base_coord for (0, 101)
+
+; Check neighbors of (0, 101)
+; Right neighbor: (1, 101)
+SET_ADDR_HIGH 1
+SET_ADDR_LOW 101
+INDIRECT_LOAD
+SUB 255
+JZ :neighbor_0_alive
+
+SET_ADDR_HIGH 0
+SET_ADDR_LOW 101
+INDIRECT_LOAD
+; Should be dead (0)
+SUB 0
+JZ :next_cell_0
+HALT
+
+:neighbor_0_alive
+; (0, 101) should stay dead in next generation
+SET 0
+STORE (0, 105)
+JMP :next_cell_0
+
+:next_cell_0
+; Process cell (1, 101)
+SET_ADDR_HIGH 1
+SET_ADDR_LOW 101
+STORE (201, 0)
+
+; Count neighbors
+SET 0
+STORE (210, 0)
+
+; Left neighbor: (0, 101)
+SET_ADDR_HIGH 0
+SET_ADDR_LOW 101
+INDIRECT_LOAD
+SUB 255
+JZ :n1_alive
+JMP :check_n2
+
+:n1_alive
+LOAD (210, 0)
+ADD 1
+STORE (210, 0)
+
+:check_n2
+; Right neighbor: (2, 101)
+SET_ADDR_HIGH 2
+SET_ADDR_LOW 101
+INDIRECT_LOAD
+SUB 255
+JZ :n2_alive
+JMP :check_n3
+
+:n2_alive
+LOAD (210, 0)
+ADD 1
+STORE (210, 0)
+
+:check_n3
+; Top neighbor: (1, 100) - out of bounds, dead
+; Bottom neighbor: (1, 102)
+SET_ADDR_HIGH 1
+SET_ADDR_LOW 102
+INDIRECT_LOAD
+SUB 255
+JZ :n3_alive
+JMP :apply_1_rules
+
+:n3_alive
+LOAD (210, 0)
+ADD 1
+STORE (210, 0)
+
+:apply_1_rules
+; Cell (1, 101) is alive, needs 2 or 3 neighbors
+LOAD (210, 0)
+SUB 2
+JZ :stay_alive_1
+SUB 1
+JZ :stay_alive_1
+; Die
+SET 0
+STORE (1, 105)
+JMP :done_1
+
+:stay_alive_1
+SET 255
+STORE (1, 105)
+
+:done_1
+; Process cell (2, 101)
+SET_ADDR_HIGH 2
+SET_ADDR_LOW 101
+INDIRECT_LOAD
+SUB 255
+JZ :cell_2_alive
+
+; Cell (2, 101) is dead
+SET 0
+STORE (2, 105)
+JMP :cell_3
+
+:cell_2_alive
+; Count neighbors
+SET 0
+STORE (211, 0)
+
+; Left: (1, 101) - alive
+LOAD (211, 0)
+ADD 1
+STORE (211, 0)
+
+; Right: (3, 101) - dead
+; Bottom: (1, 102)
+SET_ADDR_HIGH 1
+SET_ADDR_LOW 102
+INDIRECT_LOAD
+SUB 255
+JZ :n2_bottom_alive
+JMP :apply_2_rules
+
+:n2_bottom_alive
+LOAD (211, 0)
+ADD 1
+STORE (211, 0)
+
+:apply_2_rules
+; Cell (2, 101) alive with 2 neighbors -> stays alive
+SET 255
+STORE (2, 105)
+
+:cell_3
+; Process cell (3, 101) - edge, dead
+SET 0
+STORE (3, 105)
+
+HALT

@@ -1,0 +1,75 @@
+; scheduler_final8.glyph
+; FINAL VERSION v8: Use two separate STOREs for x and y.
+
+VECTOR 1 :scheduler_isr
+
+:boot
+; 1. Initialize P1's PCB at column 30, rows 240-243
+; Store PC.x = 1 at (30, 240)
+SET 1
+STORE (30, 240)
+; Store PC.y = 1 at (31, 240)
+SET 1
+STORE (31, 240)
+; Acc = 0 at (32, 240)
+SET 0
+STORE (32, 240)
+; SP = 0 at (33, 240)
+SET 0
+STORE (33, 240)
+; ZF = 0 at (34, 240)
+SET 0
+STORE (34, 240)
+
+; 2. Initialize P0's PCB at column 20, rows 240-243
+; Store PC.x = 10 at (20, 240)
+SET 10
+STORE (20, 240)
+; Store PC.y = 1 at (21, 240)
+SET 1
+STORE (21, 240)
+SET 0
+STORE (22, 240)
+SET 0
+STORE (23, 240)
+SET 0
+STORE (24, 240)
+
+; 3. Set current PID and enable interrupts
+SET 0
+STORE (100, 0)
+SEI
+
+; --- PROCESS 0 ---
+:p0_start
+LOAD (50, 0)
+ADD 10
+STORE (50, 0)
+JMP :p0_start
+
+; --- PROCESS 1 ---
+:p1_start
+LOAD (60, 0)
+ADD 1
+STORE (60, 0)
+JMP :p1_start
+
+; --- SCHEDULER MICROKERNEL ---
+:scheduler_isr
+LOAD (100, 0)
+SUB 0
+JZ :switch_to_p1
+
+:switch_to_p0
+CTX_SAVE (30, 240)
+CTX_LOAD (20, 240)
+SET 0
+STORE (100, 0)
+RET
+
+:switch_to_p1
+CTX_SAVE (20, 240)
+CTX_LOAD (30, 240)
+SET 1
+STORE (100, 0)
+RET

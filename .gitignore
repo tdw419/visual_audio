@@ -121,3 +121,14 @@ autonomous_repo_orchestrator/
 systems/*.mkv
 sync/node_modules/
 initramfs-cognitive/output/
+
+# Rust build artifacts
+target/
+
+# Large cognitive-container encode artifacts / kernel binaries
+ubuntu_cognitive_pxc1_v1/
+tools/pxc1/
+ubuntu_vmlinuz
+*.nut.meta.json
+initramfs-cognitive/modules/
+initramfs-cognitive/virtio_blk.ko
