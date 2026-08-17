@@ -46,6 +46,10 @@ class OpcodeMapV2:
         'PRT': 'print',
         'LD': 'load',
         'ST': 'store',
+        'LD': 'load',
+        'ST': 'store',
+        'LD': 'load',
+        'ST': 'store',
         'AND': 'intersect',
         'OR': 'union',
         'XOR': 'exclusive',
@@ -55,6 +59,8 @@ class OpcodeMapV2:
         'POP': 'pop',
         'CALL': 'call',
         'RET': 'return',
+        'JMPR': 'jump_register',
+        'CALLR': 'call_register',
         'SYSCALL': 'system_call',
         # GPU-native parallel opcodes for spatial execution
         'PARALLEL_LD': 'parallel_load',
@@ -80,6 +86,8 @@ class OpcodeMapV2:
         'POP':  (139, 69, 19),
         'CALL': (75, 0, 130),
         'RET':  (255, 215, 0),
+        'JMPR': (60, 179, 113),
+        'CALLR': (205, 92, 92),
         'SYSCALL': (255, 69, 0),
         # GPU-native parallel opcodes - distinctive colors for spatial ops
         'PARALLEL_LD': (147, 51, 234),     # Purple
@@ -203,9 +211,25 @@ class GlyphAssemblerV2:
                     imm = int(imm_str, 16)
                 else:
                     imm = int(imm_str)
-            elif opcode in ('ADD', 'SUB', 'CMP', 'LD', 'ST', 'AND', 'OR', 'XOR', 'SHL', 'SHR'):
+            elif opcode in ('ADD', 'SUB', 'CMP', 'LD', 'AND', 'OR', 'XOR', 'SHL', 'SHR'):
                 rd = int(args[0][1:])
                 rs2 = int(args[1][1:])
+            elif opcode == 'ST':
+                # ST <addr_reg> <value_reg> -> memory[addr_reg] = value_reg.
+                # Encoded as rs1/rs2 (not rd/rs2) to match the live CPU
+                # dispatch branch, which reads the address from rs1. Prior
+                # encoding put the address in rd, which the CPU never read,
+                # so ST always crashed with UNUSED_REGISTER (0xFF) as rs1.
+                rs1 = int(args[0][1:])
+                rs2 = int(args[1][1:])
+            elif opcode in ('JMPR', 'CALLR'):
+                # Single operand: the register holding the packed
+                # (row<<16)|col jump/call target — the same packing JMP's
+                # immediate uses, just read from a register instead of
+                # baked in at assemble time. This is what makes dispatch
+                # dynamic: the target can be data (e.g. a WCB's stored
+                # entry point) rather than a fixed label.
+                rd = int(args[0][1:])
             elif opcode in ('PRT', 'PUSH', 'POP', 'SYSCALL'):
                 rd = int(args[0][1:])
                 # Parse immediate for SYSCALL
@@ -313,6 +337,8 @@ class GlyphCPUv2:
         self.opcode_map = opcode_map
         self.cols_instrs = cols_instrs
         self.registers = [0] * 32
+        self.memory = [0] * 1024
+        self.memory = [0] * 1024
         self.pc = (0, 0)
         self.running = False
         self.output = []
@@ -391,6 +417,22 @@ class GlyphCPUv2:
             self.registers[0] = 1 if self.registers[rd] == self.registers[rs2] else 0
         elif opcode == 'LD':
             addr = self.registers[rs2]
+            if 0 <= addr < len(self.memory):
+                self.registers[rd] = self.memory[addr]
+        elif opcode == 'ST':
+            addr = self.registers[rs1]
+            if 0 <= addr < len(self.memory):
+                self.memory[addr] = self.registers[rs2]
+        elif opcode == 'LD':
+            addr = self.registers[rs2]
+            if 0 <= addr < len(self.memory):
+                self.registers[rd] = self.memory[addr]
+        elif opcode == 'ST':
+            addr = self.registers[rs1]
+            if 0 <= addr < len(self.memory):
+                self.memory[addr] = self.registers[rs2]
+        elif opcode == 'LD':
+            addr = self.registers[rs2]
             self.registers[rd] = self._mem_read(image, addr)
         elif opcode == 'ST':
             # ST rd rs2 -> store rs2 into the pixel at address rd
@@ -443,6 +485,21 @@ class GlyphCPUv2:
                 target_x = tx * INSTR_WIDTH
                 self._check_alignment(target_x)
                 next_pc = (target_x, ty)
+        elif opcode == 'JMPR':
+            packed = self.registers[rd]
+            tx, ty = packed & 0xFFFF, (packed >> 16) & 0xFFFF
+            target_x = tx * INSTR_WIDTH
+            self._check_alignment(target_x)
+            next_pc = (target_x, ty)
+        elif opcode == 'CALLR':
+            self.registers[31] -= 1
+            packed_pc = (next_pc[1] << 16) | (next_pc[0] & 0xFFFF)
+            self._mem_write(image, self.registers[31], packed_pc)
+            packed = self.registers[rd]
+            tx, ty = packed & 0xFFFF, (packed >> 16) & 0xFFFF
+            target_x = tx * INSTR_WIDTH
+            self._check_alignment(target_x)
+            next_pc = (target_x, ty)
         elif opcode == 'PARALLEL_LD':
             # PARALLEL_LD rd addr count - load count values starting at addr into rd
             addr = imm & 0xFFFFFF  # low 24 bits = base address
