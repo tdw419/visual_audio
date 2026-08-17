@@ -127,7 +127,10 @@ target/
 
 # Large cognitive-container encode artifacts / kernel binaries
 ubuntu_cognitive_pxc1_v1/
-tools/pxc1/
+ubuntu_cognitive_pxc1_v2/
+ubuntu_desktop_pxc1_v1/
+ubuntu_desktop_pxc1_v1_snapshot/
+tools/pxc1/target/
 ubuntu_vmlinuz
 *.nut.meta.json
 initramfs-cognitive/modules/

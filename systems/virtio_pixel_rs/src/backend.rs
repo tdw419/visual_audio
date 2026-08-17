@@ -537,10 +537,12 @@ impl VirtioPixelServer {
             18 => (self.handle_set_vring_enable(&payload)?, vec![]),
             24 => {
                 let capacity = { self.extractor.lock().unwrap().decoded_size / 512 };
-                let config_space = capacity.to_le_bytes(); // 8 bytes
+                let config_space = capacity.to_le_bytes(); // 8 bytes (le64 capacity)
 
                 let config_offset = u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]) as usize;
                 let config_size = u32::from_le_bytes([payload[4], payload[5], payload[6], payload[7]]) as usize;
+
+                info!("GET_CONFIG: offset={} size={} capacity_sectors={}", config_offset, config_size, capacity);
 
                 // QEMU expects the reply payload to exactly match the request payload size
                 let mut reply = payload.to_vec();
@@ -551,6 +553,9 @@ impl VirtioPixelServer {
                     let src_idx = config_offset + i;
                     if src_idx < config_space.len() && (12 + i) < reply.len() {
                         reply[12 + i] = config_space[src_idx];
+                    } else if (12 + i) < reply.len() {
+                        // Pad with zeros for unimplemented config fields (size_max, seg_max, blk_size, etc.)
+                        reply[12 + i] = 0;
                     }
                 }
                 (reply, vec![])
@@ -617,15 +622,23 @@ impl VirtioPixelServer {
         // to be set, otherwise it never calls GET_PROTOCOL_FEATURES and
         // the negotiation stalls before SET_MEM_TABLE and GET_CONFIG.
         //
-        // Response format: 0x4000000410000000
+        // VirtIO Block features (bits 32+):
+        //   - Bit 32: VIRTIO_F_VERSION_1
+        //   - Bit  6: VIRTIO_BLK_F_BLK_SIZE (block size is configurable)
+        //   - Bit 11: VIRTIO_BLK_F_RO (read-only, disabled for RW mount)
+        //   - Bit 32 is actually VIRTIO_F_VERSION_1 in VirtIO 1.0 spec
+        //
+        // Response format: 0x0000000140000040
         // - Upper bits (32+): VirtIO device features
         //   - Bit 32: VIRTIO_F_VERSION_1
+        //   - Bit 38 (6 in device features): VIRTIO_BLK_F_BLK_SIZE
         // - Lower bits (0-31): vhost features
         //   - Bit 26: VHOST_F_LOG_ALL (migration support)
         //   - Bit 30: VHOST_USER_F_PROTOCOL_FEATURES (required by QEMU 8.2.2)
-        let features = (1u64 << 26) | (1u64 << 30) | (1u64 << 32);
+        let features = (1u64 << 26) | (1u64 << 30) | (1u64 << 32) | (1u64 << 38);
         info!("GET_FEATURES returning: 0x{:016x}", features);
         info!("  - VIRTIO_F_VERSION_1 (bit 32) enabled");
+        info!("  - VIRTIO_BLK_F_BLK_SIZE (bit 38/6) enabled");
         info!("  - VHOST_F_LOG_ALL (bit 26) for migration support");
         info!("  - VHOST_USER_F_PROTOCOL_FEATURES (bit 30) - REQUIRED for QEMU 8.2.2");
         Ok(features.to_le_bytes().to_vec())

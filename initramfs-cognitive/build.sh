@@ -112,10 +112,10 @@ if python3 -c "import llama_cpp" 2>/dev/null; then
     for pkg in diskcache numpy jinja2 markupsafe; do
         PKG_PATH=$(python3 -c "import ${pkg}; import os; print(os.path.dirname(${pkg}.__file__))" 2>/dev/null)
         if [ -n "$PKG_PATH" ]; then
-            cp -r "${PKG_PATH}" usr/local/lib/
-            PKG_LIBS_PATH="$(dirname "${PKG_PATH}")/${pkg}.libs"
-            if [ -d "${PKG_LIBS_PATH}" ]; then
-                cp -r "${PKG_LIBS_PATH}" usr/local/lib/
+            cp -r "$PKG_PATH" usr/local/lib/
+            PKG_LIBS_PATH="$(dirname "$PKG_PATH")/${pkg}.libs"
+            if [ -d "$PKG_LIBS_PATH" ]; then
+                cp -r "$PKG_LIBS_PATH" usr/local/lib/
             fi
             echo "  ✓ Copied ${pkg}"
         fi
@@ -142,7 +142,7 @@ fi
 # points at) - re-extract from a matching Alpine modloop-virt if the boot
 # kernel changes, or insmod will silently fail on a vermagic mismatch.
 mkdir -p lib/modules
-for mod in virtio_blk mbcache jbd2 crc16 ext4; do
+for mod in virtio_blk mbcache jbd2 crc16 ext4 overlay; do
     if [ -f "${SCRIPT_DIR}/modules/${mod}.ko" ]; then
         cp "${SCRIPT_DIR}/modules/${mod}.ko" lib/modules/
     else
