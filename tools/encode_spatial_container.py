@@ -94,11 +94,11 @@ def encode_bytes_to_frame_stream(data, frame_size=4096, frame_fp=None):
     # 2. Add SPECIAL_OFFSET (16)
     id_vals = padded.astype(np.uint32) + 16
 
-    # 3. Create flat pixel array (BGR)
+    # 3. Create flat pixel array (RGB)
     pixels = np.zeros((capacity, 3), dtype=np.uint8)
-    pixels[:, 0] = id_vals & 0xFF           # Blue
+    pixels[:, 0] = (id_vals >> 16) & 0xFF   # Red
     pixels[:, 1] = (id_vals >> 8) & 0xFF    # Green
-    pixels[:, 2] = (id_vals >> 16) & 0xFF   # Red
+    pixels[:, 2] = id_vals & 0xFF           # Blue
 
     # 4. Map to spatial pixels using Hilbert LUT
     spatial_pixels = np.zeros_like(pixels)
@@ -125,7 +125,7 @@ def write_cognitive_metadata(payload_start, payload_size, initramfs_size, gguf_s
             },
             "gguf": {
                 "size": gguf_size,
-                "format": "GGUF Q4_K_M"
+                "format": "gguf_v3 Q4_K_M"
             }
         }
     }

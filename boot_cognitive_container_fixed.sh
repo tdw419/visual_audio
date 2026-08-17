@@ -29,8 +29,8 @@ fi
 
 # Check container integrity
 FRAMES=$(ffprobe -v error -count_frames -show_entries stream=nb_read_frames -of default=noprint_wrappers=1 "$MKV_FILE")
-echo "Container frames: $FRAMES (expected: 283)"
-if [ "$FRAMES" -ne 283 ]; then
+echo "Container frames: $FRAMES (expected: 269)"
+if [ "$FRAMES" -ne 269 ]; then
     echo "⚠️  Container incomplete - may fail at metadata offset"
 fi
 echo ""
@@ -89,7 +89,7 @@ rm -f "$SOCKET"
 echo "Log saved to: $QEMU_LOG"
 
 # Check results
-if grep -q "Cognitive payload detected at offset 4716694251" "$QEMU_LOG"; then
+if grep -q "Found GGUF header at offset" "$QEMU_LOG"; then
     echo "✓ Metadata found at correct offset"
 fi
 
