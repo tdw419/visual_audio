@@ -446,6 +446,7 @@ impl VirtioPixelServer {
                                     error!("Queue {} poll error: {}", i, err);
                                 }
                             }
+                            std::thread::sleep(std::time::Duration::from_millis(1));
                             continue;
                         }
                     }
@@ -460,6 +461,7 @@ impl VirtioPixelServer {
                                     error!("Queue {} poll error: {}", i, err);
                                 }
                             }
+                            std::thread::sleep(std::time::Duration::from_millis(1));
                             continue;
                         }
                     }
