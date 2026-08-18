@@ -127,6 +127,36 @@ async fn main() -> Result<()> {
                         
                         use tokio::io::AsyncWriteExt;
                         let _ = stream.write_all(response.as_bytes()).await;
+                    } else if request.starts_with("POST /writeback") {
+                        let body = {
+                            let mut ext = vcc_extractor.lock().unwrap();
+                            ext.writeback()
+                        };
+                        let (status, json) = match body {
+                            Ok(sections) => (
+                                "200 OK",
+                                format!(
+                                    "{{\"ok\":true,\"sections_updated\":[{}]}}",
+                                    sections
+                                        .iter()
+                                        .map(|s| format!("\"{}\"", s))
+                                        .collect::<Vec<_>>()
+                                        .join(",")
+                                ),
+                            ),
+                            Err(e) => (
+                                "500 Internal Server Error",
+                                format!("{{\"ok\":false,\"error\":\"{}\"}}", e.to_string().replace('"', "'")),
+                            ),
+                        };
+                        let response = format!(
+                            "HTTP/1.1 {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                            status,
+                            json.len(),
+                            json
+                        );
+                        use tokio::io::AsyncWriteExt;
+                        let _ = stream.write_all(response.as_bytes()).await;
                     }
                 }
             }

@@ -99,6 +99,11 @@ pub struct SpatialMkvExtractor {
     // hash-verified read at load time and a plain slice on every
     // subsequent read - no per-request decode cost.
     pxc1_buffer: Option<Vec<u8>>,
+
+    // PXC1 section metadata (name/start_frame/byte_length), kept around
+    // (PXC1 mode only) so writeback() can map a write_overlay sector back
+    // to the PXC1 frame it belongs to, without re-reading header.json.
+    pxc1_sections: Vec<pxc1::Section>,
 }
 
 impl SpatialMkvExtractor {
@@ -147,6 +152,7 @@ impl SpatialMkvExtractor {
                 hilbert_lut: Vec::new(),
                 write_overlay: std::collections::HashMap::new(),
                 pxc1_buffer: Some(buffer),
+                pxc1_sections: header.sections.clone(),
             });
         }
 
@@ -235,6 +241,7 @@ impl SpatialMkvExtractor {
             hilbert_lut,
             write_overlay: std::collections::HashMap::new(),
             pxc1_buffer: None,
+            pxc1_sections: Vec::new(),
         })
     }
 
@@ -348,6 +355,103 @@ impl SpatialMkvExtractor {
                 }
             }
         }
+    }
+
+    /// Patch every dirty write_overlay sector back into the PXC1 container
+    /// on disk, touching only the frames that actually changed (not a full
+    /// container re-encode), then clear the overlay. PXC1 mode only.
+    ///
+    /// Sections are concatenated byte-exact (no inter-section padding) in
+    /// pxc1_buffer, in the same order as pxc1_sections, so a buffer offset
+    /// maps to a section by simple cumulative byte_length ranges; within a
+    /// section, frame_index = section.start_frame + offset_in_section /
+    /// BYTES_PER_FRAME, matching how the encoder laid frames out on disk.
+    ///
+    /// Returns the names of sections that had at least one frame patched.
+    pub fn writeback(&mut self) -> Result<Vec<String>> {
+        if self.write_overlay.is_empty() {
+            return Ok(vec![]);
+        }
+        let buffer = self
+            .pxc1_buffer
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("writeback() only supported for PXC1 containers"))?;
+
+        // (name, buffer_start, buffer_end) per section, in concatenation order.
+        let mut section_ranges: Vec<(String, usize, usize)> = Vec::new();
+        let mut cursor = 0usize;
+        for s in &self.pxc1_sections {
+            section_ranges.push((s.name.clone(), cursor, cursor + s.byte_length));
+            cursor += s.byte_length;
+        }
+
+        // Group dirty sectors by (section, frame_index); BTreeSet for
+        // deterministic, sorted patch order (easier to read in logs).
+        let mut dirty_frames: std::collections::BTreeSet<(String, usize)> = Default::default();
+        for &sector in self.write_overlay.keys() {
+            let buf_offset = (sector * 512) as usize;
+            let Some((name, buf_start, _)) = section_ranges
+                .iter()
+                .find(|(_, s, e)| buf_offset >= *s && buf_offset < *e)
+            else {
+                warn!("writeback: dirty sector {} outside any known section, skipping", sector);
+                continue;
+            };
+            let section = self.pxc1_sections.iter().find(|s| &s.name == name).unwrap();
+            let offset_in_section = buf_offset - buf_start;
+            let frame_idx = section.start_frame + offset_in_section / pxc1::BYTES_PER_FRAME;
+            dirty_frames.insert((name.clone(), frame_idx));
+        }
+
+        let encoder = pxc1::Encoder::new(&self.mkv_path);
+        let mut touched_sections: std::collections::BTreeSet<String> = Default::default();
+
+        for (section_name, frame_idx) in &dirty_frames {
+            let (_, buf_start, buf_end) = section_ranges
+                .iter()
+                .find(|(n, _, _)| n == section_name)
+                .unwrap();
+            let section = self.pxc1_sections.iter().find(|s| &s.name == section_name).unwrap();
+            let frame_offset_in_section = (frame_idx - section.start_frame) * pxc1::BYTES_PER_FRAME;
+            let frame_buf_start = buf_start + frame_offset_in_section;
+            let frame_buf_end = (frame_buf_start + pxc1::BYTES_PER_FRAME).min(*buf_end);
+
+            let mut frame_data = vec![0u8; pxc1::BYTES_PER_FRAME];
+            let n = frame_buf_end.saturating_sub(frame_buf_start);
+            frame_data[..n].copy_from_slice(&buffer[frame_buf_start..frame_buf_end]);
+            Self::apply_write_overlay(&self.write_overlay, frame_buf_start as u64, &mut frame_data);
+
+            encoder
+                .write_frame(*frame_idx, &frame_data)
+                .map_err(|e| anyhow::anyhow!("writeback: write_frame({}) failed: {e}", frame_idx))?;
+            info!("writeback: patched frame {} (section '{}')", frame_idx, section_name);
+            touched_sections.insert(section_name.clone());
+        }
+
+        for name in &touched_sections {
+            let new_hash = encoder
+                .refresh_section_hash(name)
+                .map_err(|e| anyhow::anyhow!("writeback: refresh_section_hash('{}') failed: {e}", name))?;
+            info!("writeback: section '{}' sha256 updated to {}", name, new_hash);
+        }
+
+        // Commit the overlay into the in-memory buffer that read() serves from.
+        // Without this, reads immediately after writeback (no reboot needed)
+        // would fall through to the stale pre-write bytes once write_overlay
+        // is cleared below, even though the correct data is now on disk.
+        if let Some(buffer) = self.pxc1_buffer.as_mut() {
+            for (&sector, sector_buf) in &self.write_overlay {
+                let start = (sector * 512) as usize;
+                let end = (start + 512).min(buffer.len());
+                let n = end.saturating_sub(start);
+                if n > 0 {
+                    buffer[start..end].copy_from_slice(&sector_buf[..n]);
+                }
+            }
+        }
+
+        self.write_overlay.clear();
+        Ok(touched_sections.into_iter().collect())
     }
 
     /// Extract bytes from spatial MKV with Hilbert decoding (usize version for VirtIO integration)

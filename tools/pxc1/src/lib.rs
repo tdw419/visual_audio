@@ -283,7 +283,11 @@ impl Encoder {
         self.dir.join(format!("frame_{:05}.png", index))
     }
 
-    fn write_frame(&self, index: usize, data: &[u8]) -> Result<(), Pxc1Error> {
+    /// Write (or overwrite) a single frame's PNG. Used both by the normal
+    /// section-encoding path and by write-back patching, where only a
+    /// handful of frames actually changed and re-encoding the whole
+    /// container would be wasteful.
+    pub fn write_frame(&self, index: usize, data: &[u8]) -> Result<(), Pxc1Error> {
         assert_eq!(data.len(), BYTES_PER_FRAME);
 
         // Convert bytes to RgbaImage
@@ -295,6 +299,43 @@ impl Encoder {
         image.save(&path)?;
 
         Ok(())
+    }
+
+    /// Re-read a section's frames straight from disk (no hash check against
+    /// the current, possibly-stale header.json) and update header.json's
+    /// sha256 for just that section. Call this after write_frame()'ing any
+    /// of a section's frames via write-back patching, so the container's
+    /// recorded hash matches what's now actually on disk.
+    pub fn refresh_section_hash(&self, name: &str) -> Result<String, Pxc1Error> {
+        let header_json = fs::read_to_string(self.dir.join("header.json"))?;
+        let mut header: Header = serde_json::from_str(&header_json)?;
+        let section = header.get_section(name)?;
+
+        let mut data = vec![0u8; section.byte_length];
+        let mut offset = 0;
+        let mut frame_idx = section.start_frame;
+        while offset < section.byte_length {
+            let frame_data = read_frame_data(&self.frame_path(frame_idx))?;
+            let n = BYTES_PER_FRAME.min(section.byte_length - offset);
+            data[offset..offset + n].copy_from_slice(&frame_data[..n]);
+            offset += n;
+            frame_idx += 1;
+        }
+
+        let mut hasher = Sha256::new();
+        hasher.update(&data);
+        let new_hash = hex::encode(hasher.finalize());
+
+        for s in header.sections.iter_mut() {
+            if s.name == name {
+                s.sha256 = new_hash.clone();
+            }
+        }
+        let header_json = serde_json::to_string_pretty(&header)?;
+        fs::write(self.dir.join("header.json"), &header_json)?;
+        self.write_frame_0(&header)?;
+
+        Ok(new_hash)
     }
 }
 
@@ -326,25 +367,47 @@ impl Decoder {
         &self.header
     }
 
+    /// Reads a section's data, decoding its frames in parallel (each frame's
+    /// PNG file is independent, so this scales with available cores instead
+    /// of paying ~O(num_frames) sequential PNG-decode latency - the
+    /// dominant cost of starting the vhost-user backend on a large
+    /// container). A section always starts at frame_offset 0 in its
+    /// start_frame (the encoder never leaves a partial frame between
+    /// sections), so frames can be decoded independently and concatenated
+    /// in order afterward.
     pub fn read_section(&mut self, name: &str) -> Result<Vec<u8>, Pxc1Error> {
+        use rayon::prelude::*;
+        use std::sync::Mutex;
+
         let section = self.header.get_section(name)?;
-
         let mut data = vec![0u8; section.byte_length];
-        let mut offset = 0;
-        let mut frame_idx = section.start_frame;
-        let mut frame_offset = 0;
+        let start_frame = section.start_frame;
+        let dir = self.dir.clone();
 
-        while offset < section.byte_length {
-            let bytes_from_frame =
-                (BYTES_PER_FRAME - frame_offset).min(section.byte_length - offset);
-
-            let frame_data = self.get_frame(frame_idx)?;
-            data[offset..offset + bytes_from_frame]
-                .copy_from_slice(&frame_data[frame_offset..frame_offset + bytes_from_frame]);
-
-            offset += bytes_from_frame;
-            frame_offset = 0;
-            frame_idx += 1;
+        // Decode straight into this frame's slice of the final buffer, in
+        // parallel across frames - NOT into an intermediate Vec<Vec<u8>>
+        // first. Holding every frame's decoded bytes alongside the final
+        // buffer at once would roughly double peak memory (a real OOM risk
+        // for multi-GB sections); each thread only ever holds one frame's
+        // worth of scratch space at a time this way, same as the old
+        // sequential version's footprint, just parallelized.
+        let first_err: Mutex<Option<Pxc1Error>> = Mutex::new(None);
+        data.par_chunks_mut(BYTES_PER_FRAME)
+            .enumerate()
+            .for_each(|(i, chunk)| {
+                let frame_path = dir.join(format!("frame_{:05}.png", start_frame + i));
+                match read_frame_data(&frame_path) {
+                    Ok(frame_data) => chunk.copy_from_slice(&frame_data[..chunk.len()]),
+                    Err(e) => {
+                        let mut slot = first_err.lock().unwrap();
+                        if slot.is_none() {
+                            *slot = Some(e);
+                        }
+                    }
+                }
+            });
+        if let Some(e) = first_err.into_inner().unwrap() {
+            return Err(e);
         }
 
         // Verify SHA-256
