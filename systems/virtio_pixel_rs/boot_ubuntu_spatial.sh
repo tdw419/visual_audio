@@ -66,6 +66,7 @@ qemu-system-x86_64 \
     -chardev socket,id=blk0,path=$SOCKET_PATH \
     -device vhost-user-blk-pci,chardev=blk0,bootindex=0 \
     -m 2G -smp 2 \
+    -virtfs local,path=/home/jericho/zion,mount_tag=host_zion,security_model=mapped \
     -display none -serial mon:stdio \
     -no-reboot 2>&1 &
 QEMU_PID=$!

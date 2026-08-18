@@ -223,7 +223,17 @@ These cognitive boot components are PROTECTED and must NOT be modified without e
 - `CONTAINER_BOOT_RECEIPT.md` — Container boot implementation
 - `COGNITIVE_CONTAINER_DEMO.md` — Technical demo documentation
 
+## Running Inside a Pixel-Booted Guest VM
+
+If you are reading this from inside a pixel-booted Ubuntu guest (`ubuntu_desktop_pxc1_v1` or similar, served via `virtio_pixel_backend`/`vhost-user-blk`) rather than the host — check `hostname` and whether `/host_zion` is mounted if unsure — the following applies:
+
+- **Persistence model**: writes to the guest's local disk (anywhere outside `/host_zion`) are NOT automatically durable. They live in the backend's frame cache until a writeback happens. Writeback is triggered by `curl -X POST http://<host-ip>:8769/writeback` (from the host) or on a timer/clean shutdown depending on how the session was launched (`interactive_ubuntu_pixel.sh` writes back every 300s and on exit). If you make guest-local changes you care about, assume they need an explicit writeback to survive a crash or `kill -9` of the VM.
+- **`/host_zion`** is a 9p passthrough mount to the host filesystem (`/home/jericho/zion` → this repo). Anything written there is immediately durable on the host, no writeback needed, and is what both host-side Claude Code and guest-side Hermes see as the same shared working tree. **Prefer working directly under `/host_zion/projects/visual_audio/...` for anything that matters** rather than the guest's local disk.
+- `/host_zion` does not auto-mount on boot — it must be mounted each fresh guest boot: `sudo mount -t 9p -o trans=virtio,version=9p2000.L host_zion /host_zion`.
+- This guest is reachable from the host via `ssh -p 2222 jericho@127.0.0.1` (password: `israel`; port may differ for multi-instance boots via `pixel_boot.sh`, spaced 2 apart starting at 2224).
+- If working as one leg of a host+guest agent collaboration, check for `/host_zion/projects/visual_audio/.hermes_guest_context/` — a file-based command/response bridge (`guest_bridge.py` on the host, `guest_context_daemon.py` in the guest) for delegating tasks between the two sides.
+
 ---
 
-**Last Updated**: 2026-08-12 (Cognitive Boot Protocol added)
+**Last Updated**: 2026-08-18 (Pixel-booted guest VM environment notes added)
 **Status**: Active — All agents must obey these rules
