@@ -1,0 +1,27 @@
+# memcpy: copy r3 words from address r1 (src) to address r2 (dst).
+# Native Glyph primitive intended to replace libc memcpy as one of the
+# first Linux-equivalent building blocks ported into the spatial domain.
+#
+# Registers (set by caller before jumping to :memcpy):
+#   r1 = src base address
+#   r2 = dst base address
+#   r3 = word count
+# Scratch: r4 (loop value), r30 (const 1), r31 (const 0)
+# Clobbers r1, r2, r3 (both pointers are advanced in place).
+
+:memcpy
+LDI r31 0
+LDI r30 1
+
+:copy_loop
+CMP r3 r31             ; count == 0 ?
+JZ :copy_done
+LD r4 r1                ; r4 = mem[r1]
+ST r2 r4                ; mem[r2] = r4
+ADD r1 r30               ; src++
+ADD r2 r30               ; dst++
+SUB r3 r30               ; count--
+JMP :copy_loop
+
+:copy_done
+HALT
