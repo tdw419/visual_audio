@@ -7,8 +7,8 @@
 #
 # Examples:
 #   ./pixel_boot.sh ubuntu_desktop_pxc1_v1 rootfs
-#   ./pixel_boot.sh ubuntu_desktop_pxc1_v1 rootfs 1  # Instance 1 (port 2222)
-#   ./pixel_boot.sh ubuntu_desktop_pxc1_v1 rootfs 2  # Instance 2 (port 2223)
+#   ./pixel_boot.sh ubuntu_desktop_pxc1_v1 rootfs 1  # Instance 1 (port 2224)
+#   ./pixel_boot.sh ubuntu_desktop_pxc1_v1 rootfs 2  # Instance 2 (port 2226)
 #
 
 set -eo pipefail
@@ -17,12 +17,15 @@ CONTAINER_DIR="${1:-ubuntu_desktop_pxc1_v1}"
 SECTION="${2:-rootfs}"
 INSTANCE_ID="${3:-0}"
 
-# Configuration. Each instance forwards two host ports (SSH, HTTP writeback
-# daemon), so instances must be spaced 2 apart or instance N's second port
+# Configuration - use project directory for storage, not /tmp (avoids space issues)
+# Each instance forwards two host ports (SSH + HTTP writeback daemon),
+# so instances must be spaced 2 apart or instance N's second port
 # collides with instance N+1's first port.
-BASE_PORT=$((2222 + INSTANCE_ID * 2))
-SOCK_PREFIX="/tmp/pixel_boot_${INSTANCE_ID}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INSTANCE_DIR="${SCRIPT_DIR}/.pixel_instances/${INSTANCE_ID}"
+SOCK_PREFIX="${INSTANCE_DIR}"
 RAW_PATH="${SOCK_PREFIX}/${SECTION}.raw"
+BASE_PORT=$((2222 + INSTANCE_ID * 2))
 
 # Delay option for staggered startup (useful for multi-instance boot)
 DELAY_SECONDS=0

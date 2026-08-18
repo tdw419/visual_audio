@@ -135,3 +135,6 @@ ubuntu_vmlinuz
 *.nut.meta.json
 initramfs-cognitive/modules/
 initramfs-cognitive/virtio_blk.ko
+
+# Pixel boot instance storage (large raw/qcow2 images)
+.pixel_instances/
