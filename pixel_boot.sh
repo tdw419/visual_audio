@@ -48,10 +48,37 @@ echo
 # Create instance directory
 mkdir -p "${SOCK_PREFIX}"
 
-# Export to raw if not already done
+# Auto-detect a pixel_layer.py stack for this container (.pixel_layers/ next to
+# this script). If its base_container matches, layer edits get baked into the
+# raw export below — no separate `flatten` step needed for them to boot live.
+LAYERS_DIR=""
+STACK_FILE="${SCRIPT_DIR}/.pixel_layers/layer_stack.json"
+if [ -f "${STACK_FILE}" ]; then
+    STACK_BASE="$(python3 -c "import json; print(json.load(open('${STACK_FILE}')).get('base_container',''))" 2>/dev/null)"
+    RESOLVED_CONTAINER="$(cd "${CONTAINER_DIR}" 2>/dev/null && pwd)"
+    if [ -n "${STACK_BASE}" ] && [ "${STACK_BASE}" = "${RESOLVED_CONTAINER}" ]; then
+        LAYERS_DIR="${SCRIPT_DIR}/.pixel_layers"
+        echo "Layer stack detected: ${LAYERS_DIR}"
+    fi
+fi
+
+# Export to raw if not already done, or if the container or the layer stack
+# changed since the last export.
+NEED_EXPORT=0
 if [ ! -f "${RAW_PATH}" ] || [ "${CONTAINER_DIR}" -nt "${RAW_PATH}" ]; then
+    NEED_EXPORT=1
+fi
+if [ -n "${LAYERS_DIR}" ] && [ -n "$(find "${LAYERS_DIR}" -newer "${RAW_PATH}" 2>/dev/null)" ]; then
+    NEED_EXPORT=1
+fi
+
+if [ "${NEED_EXPORT}" -eq 1 ]; then
     echo "Exporting ${SECTION} to raw image..."
-    python3 tools/pxc1_raw_export.py "${CONTAINER_DIR}" "${SECTION}" "${RAW_PATH}"
+    if [ -n "${LAYERS_DIR}" ]; then
+        python3 tools/pxc1_raw_export.py "${CONTAINER_DIR}" "${SECTION}" "${RAW_PATH}" --layers "${LAYERS_DIR}"
+    else
+        python3 tools/pxc1_raw_export.py "${CONTAINER_DIR}" "${SECTION}" "${RAW_PATH}"
+    fi
     echo
 fi
 

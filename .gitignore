@@ -138,3 +138,6 @@ initramfs-cognitive/virtio_blk.ko
 
 # Pixel boot instance storage (large raw/qcow2 images)
 .pixel_instances/
+
+# Local pixel_layer.py overlay stacks (per-user working state, not source)
+.pixel_layers/
