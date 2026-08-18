@@ -61,28 +61,25 @@ if [ ! -f "${RAW_PATH}" ]; then
     exit 1
 fi
 
-# For multi-instance, create COW snapshot to avoid write lock contention
-if [ "${INSTANCE_ID}" != "0" ]; then
-    COW_PATH="${SOCK_PREFIX}/${SECTION}.qcow2"
-    
-    if [ ! -f "${COW_PATH}" ] || [ "${RAW_PATH}" -nt "${COW_PATH}" ]; then
-        echo "Creating copy-on-write snapshot..."
-        qemu-img create -f qcow2 -F raw -b "${RAW_PATH}" "${COW_PATH}" 2>&1 | (grep -v "^Formatting" || true)
-        if [ "${PIPESTATUS[0]}" -ne 0 ]; then
-            echo "Error: qemu-img create failed"
-            exit 1
-        fi
-        echo
+# Every instance, including 0, boots from its own COW snapshot layered on
+# the shared raw export. RAW_PATH must stay a read-only backing file: any
+# instance booting it directly (format=raw) would mutate it in place and
+# silently corrupt every other instance's COW snapshot, which assumes that
+# file never changes underneath them (this happened in practice).
+COW_PATH="${SOCK_PREFIX}/${SECTION}.qcow2"
+
+if [ ! -f "${COW_PATH}" ] || [ "${RAW_PATH}" -nt "${COW_PATH}" ]; then
+    echo "Creating copy-on-write snapshot..."
+    qemu-img create -f qcow2 -F raw -b "${RAW_PATH}" "${COW_PATH}" 2>&1 | (grep -v "^Formatting" || true)
+    if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+        echo "Error: qemu-img create failed"
+        exit 1
     fi
-    
-    # Use COW snapshot for instance
-    DRIVE_IMAGE="${COW_PATH}"
-    DRIVE_FORMAT="qcow2"
-else
-    # Instance 0 uses raw directly (master)
-    DRIVE_IMAGE="${RAW_PATH}"
-    DRIVE_FORMAT="raw"
+    echo
 fi
+
+DRIVE_IMAGE="${COW_PATH}"
+DRIVE_FORMAT="qcow2"
 
 # Get image size
 IMAGE_SIZE=$(stat -f%z "${DRIVE_IMAGE}" 2>/dev/null || stat -c%s "${DRIVE_IMAGE}" 2>/dev/null)
@@ -114,5 +111,6 @@ qemu-system-x86_64 \
     -serial "mon:stdio" \
     -net nic,model=virtio \
     -net "user,hostfwd=tcp::${BASE_PORT}-:22,hostfwd=tcp::$((BASE_PORT + 1))-:8769" \
+    -virtfs local,path=/home/jericho/zion,security_model=mapped,mount_tag=host_zion \
     -pidfile "${SOCK_PREFIX}/qemu.pid" \
     -name "pixel_linux_${INSTANCE_ID}"
