@@ -7,6 +7,7 @@ pub mod wgpu_texture_loader;
 pub mod hilbert_compute;
 pub mod hw_decoder;
 pub mod cache_manager;
+pub mod cow_journal; // PXC1 COW journal for instant writes
 pub use backend::VirtioPixelServer;
 
 /// Special offset used in pixel encoding (matching Python pixel_build.py)
