@@ -47,7 +47,7 @@ DISPLAY_ARGS="-vnc :1"
 DISPLAY_MSG="Serial console prints here; connect a VNC viewer to 127.0.0.1:5901"
 if { [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ]; } && \
    qemu-system-x86_64 -display help 2>/dev/null | grep -q "^gtk"; then
-    # DISPLAY_ARGS="-display gtk"
+    DISPLAY_ARGS="-display gtk"
     DISPLAY_MSG="Serial console prints here; a QEMU window will open automatically."
 fi
 
@@ -177,7 +177,7 @@ qemu-system-x86_64 \
     -smp 4 \
     -cpu host \
     -enable-kvm \
-    -vga virtio \
+    -vga std \
     -usb -device usb-tablet \
     $DISPLAY_ARGS \
     -netdev user,id=net0,hostfwd=tcp::2222-:22 \
