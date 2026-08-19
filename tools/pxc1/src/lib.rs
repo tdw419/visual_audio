@@ -8,13 +8,12 @@
 //! - Frame 0 = JSON header with named sections + SHA-256
 //! - One PNG per frame (no ffmpeg, no multi-file containers)
 
-use image::{ImageBuffer, ImageError, Rgba, RgbaImage};
+use image::{ImageBuffer, ImageError, RgbaImage};
 use lru::LruCache;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::fs::{self, File};
-use std::io::BufWriter;
+use std::fs::{self};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -115,17 +114,7 @@ impl Header {
         Ok(())
     }
 
-    /// Calculate which frame a byte offset falls into (0-indexed)
-    fn frame_for_offset(&self, start_frame: usize, byte_offset: usize) -> Result<usize, Pxc1Error> {
-        let bytes_from_start = start_frame * self.bytes_per_frame + byte_offset;
-        if bytes_from_start == 0 {
-            return Ok(0);
-        }
-        // Frame 0 is metadata, so byte 0 of payload is at frame 1, offset 0
-        let payload_bytes = bytes_from_start.saturating_sub(self.bytes_per_frame);
-        let frame = 1 + (payload_bytes / self.bytes_per_frame);
-        Ok(frame)
-    }
+
 
     pub fn get_section(&self, name: &str) -> Result<Section, Pxc1Error> {
         self.sections
@@ -378,6 +367,8 @@ pub struct Decoder {
     /// not a copy of up to 64MB). Capacity is fixed at open() time - see
     /// `DEFAULT_CACHE_FRAMES` / `open_with_cache_frames()`.
     frame_cache: LruCache<usize, Arc<Vec<u8>>>,
+    pub hits: usize,
+    pub misses: usize,
 }
 
 impl Decoder {
@@ -399,6 +390,8 @@ impl Decoder {
             dir: dir.to_path_buf(),
             header,
             frame_cache: LruCache::new(NonZeroUsize::new(cache_frames).unwrap()),
+            hits: 0,
+            misses: 0,
         })
     }
 
@@ -414,8 +407,10 @@ impl Decoder {
             return Err(Pxc1Error::FrameNotFound(index));
         }
         if let Some(cached) = self.frame_cache.get(&index) {
+            self.hits += 1;
             return Ok(Arc::clone(cached));
         }
+        self.misses += 1;
         let data = Arc::new(read_frame_data(&self.frame_path(index))?);
         self.frame_cache.put(index, Arc::clone(&data));
         Ok(data)

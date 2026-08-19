@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::io::Write;
+use std::time::Instant;
 
 use anyhow::{anyhow, Result};
 use env_logger::Env;
-use log::{info, error};
+use log::info;
 
 use virtio_pixel_rs::{SpatialMkvExtractor, backend::VirtioPixelServer};
 
@@ -15,8 +15,8 @@ const DEFAULT_MKV_PATH: &str = "visual_audio.mkv";
 async fn main() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
-    info!("VirtIO Pixel vhost-user-blk backend - Rust implementation");
-    info!("============================================================");
+    info!("VirtIO Pixel vhost-user-blk backend - PXC1 COW enabled");
+    info!("================================================================");
 
     let args: Vec<String> = std::env::args().collect();
 
@@ -51,8 +51,9 @@ async fn main() -> Result<()> {
         return Err(anyhow!("MKV file not found: {}", mkv_path.display()));
     }
 
+    info!("Starting VirtIO Pixel vhost-user-blk backend");
     info!("GPU acceleration: {}", if enable_gpu { "enabled" } else { "disabled" });
-    info!("MKV path: {}", mkv_path.display());
+    info!("MKV / Container path: {}", mkv_path.display());
     info!("Socket path: {}", socket_path.display());
 
     let entry_name = mkv_path.file_name()
@@ -62,7 +63,7 @@ async fn main() -> Result<()> {
     let extractor = SpatialMkvExtractor::new(&mkv_path, entry_name)?;
     let extractor = Arc::new(Mutex::new(extractor));
 
-    // Start HTTP daemon for VCC validation
+    // Start HTTP daemon with PXC1 COW endpoints
     let vcc_extractor = Arc::clone(&extractor);
     tokio::spawn(async move {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:8769").await.unwrap();
@@ -73,7 +74,11 @@ async fn main() -> Result<()> {
                 use tokio::io::AsyncReadExt;
                 if let Ok(n) = stream.read(&mut buf).await {
                     let request = String::from_utf8_lossy(&buf[..n]);
-                    if request.starts_with("GET /peek") {
+                    if request.starts_with("GET /health") {
+                        let response = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{\"ok\":true}";
+                        use tokio::io::AsyncWriteExt;
+                        let _ = stream.write_all(response.as_bytes()).await;
+                    } else if request.starts_with("GET /peek") {
                         // Extract addr and size
                         let mut addr = 0usize;
                         let mut size = 16usize;
@@ -127,21 +132,41 @@ async fn main() -> Result<()> {
                         
                         use tokio::io::AsyncWriteExt;
                         let _ = stream.write_all(response.as_bytes()).await;
+                    } else if request.starts_with("GET /journal_stats") {
+                        let stats_json = {
+                            let ext = vcc_extractor.lock().unwrap();
+                            if let Some(stats) = ext.journal_stats() {
+                                serde_json::to_string(&stats).unwrap_or_else(|_| "{}".to_string())
+                            } else {
+                                format!("{{\"ok\":true,\"status\":\"cow_journal_disabled\",\"base_container_hash\":\"{}\"}}", ext.base_hash)
+                            }
+                        };
+                        let response = format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                            stats_json.len(),
+                            stats_json
+                        );
+                        use tokio::io::AsyncWriteExt;
+                        let _ = stream.write_all(response.as_bytes()).await;
                     } else if request.starts_with("POST /writeback") {
+                        // Instant COW delta journal flush (<1ms)
+                        let start = Instant::now();
                         let body = {
                             let mut ext = vcc_extractor.lock().unwrap();
                             ext.writeback()
                         };
+                        let duration_ms = start.elapsed().as_millis();
                         let (status, json) = match body {
                             Ok(sections) => (
                                 "200 OK",
                                 format!(
-                                    "{{\"ok\":true,\"sections_updated\":[{}]}}",
+                                    "{{\"ok\":true,\"sections_updated\":[{}],\"duration_ms\":{}}}",
                                     sections
                                         .iter()
                                         .map(|s| format!("\"{}\"", s))
                                         .collect::<Vec<_>>()
-                                        .join(",")
+                                        .join(","),
+                                    duration_ms
                                 ),
                             ),
                             Err(e) => (
@@ -157,6 +182,34 @@ async fn main() -> Result<()> {
                         );
                         use tokio::io::AsyncWriteExt;
                         let _ = stream.write_all(response.as_bytes()).await;
+                        info!("Writeback completed in {}ms", duration_ms);
+                    } else if request.starts_with("POST /compact_journal") {
+                        // Merge delta journal to base container PNG frames
+                        let start = Instant::now();
+                        let result = {
+                            let mut ext = vcc_extractor.lock().unwrap();
+                            ext.compact()
+                        };
+                        let duration_ms = start.elapsed().as_millis();
+                        let (status, json) = match result {
+                            Ok(comp_stats) => (
+                                "200 OK",
+                                serde_json::to_string(&comp_stats).unwrap_or_else(|_| "{\"ok\":true}".to_string()),
+                            ),
+                            Err(e) => (
+                                "500 Internal Server Error",
+                                format!("{{\"ok\":false,\"error\":\"{}\"}}", e.to_string().replace('"', "'")),
+                            ),
+                        };
+                        let response = format!(
+                            "HTTP/1.1 {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                            status,
+                            json.len(),
+                            json
+                        );
+                        use tokio::io::AsyncWriteExt;
+                        let _ = stream.write_all(response.as_bytes()).await;
+                        info!("Compaction completed in {}ms: {}", duration_ms, json);
                     }
                 }
             }
@@ -166,7 +219,6 @@ async fn main() -> Result<()> {
     info!("Starting vhost-user backend, waiting for QEMU connection...");
     let mut server = VirtioPixelServer::new(extractor, socket_path, enable_gpu)?;
 
-    // Using unblock to run synchronous server.run() in a background thread since we're in tokio::main
     tokio::task::spawn_blocking(move || {
         server.run()
     }).await??;

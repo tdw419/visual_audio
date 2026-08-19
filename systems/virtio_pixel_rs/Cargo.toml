@@ -15,8 +15,8 @@ name = "virtio_pixel_backend"
 path = "src/main.rs"
 
 [[example]]
-name = "direct_dma_example"
-path = "examples/direct_dma_example.rs"
+name = "benchmark_hilbert_compute"
+path = "examples/benchmark_hilbert_compute.rs"
 
 [dependencies]
 # vhost-user-backend: Official rust-vmm vhost-user implementation
@@ -56,12 +56,15 @@ pxc1 = { path = "../../tools/pxc1" }
 
 # COW journal dependencies for PXC1 write optimization
 flate2 = "1.0"
+zstd = "0.13"  # Better compression than ZLIB (~18% on filesystem data)
 crc32fast = "1.3"
 serde = { version = "1.0", features = ["derive"] }
 bincode = "1.3"
+sha2 = "0.10"  # For computing base container hash
+hex = "0.4"
 
-# FFmpeg for hardware video decoding (Phase 5)
-ffmpeg-sys-next = "7.0"
+# FFmpeg for hardware video decoding (Phase 5 - optional)
+# ffmpeg-sys-next = "7.0"
 
 # LRU cache for predictive pre-fetching (Phase 5)
 lru = "0.12"

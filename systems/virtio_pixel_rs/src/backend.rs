@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::io;
 use std::os::unix::io::FromRawFd;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -7,7 +6,6 @@ use std::os::fd::OwnedFd;
 
 use anyhow::Result;
 use log::{error, info, warn};
-use nix::sys::socket::{recvmsg, ControlMessageOwned, MsgFlags};
 use nix::unistd::{dup, write};
 
 use super::SpatialMkvExtractor;
@@ -519,7 +517,7 @@ impl VirtioPixelServer {
 
         log::info!("VhostUser request={} flags=0x{:x} size={}", request, flags, size);
 
-        let (mut reply_payload, fds_to_send) = match request {
+        let (reply_payload, fds_to_send) = match request {
             1 => (self.handle_get_features(&payload)?, vec![]),
             2 => (self.handle_set_features(&payload)?, vec![]),
             3 => (self.handle_set_owner(&payload)?, vec![]),
@@ -722,7 +720,7 @@ impl VirtioPixelServer {
             payload[30],
             payload[31],
         ]);
-        let log_addr = u64::from_le_bytes([
+        let _log_addr = u64::from_le_bytes([
             payload[32],
             payload[33],
             payload[34],

@@ -12,6 +12,7 @@ thiserror = "1.0"
 hex = "0.4"
 tempfile = "3"
 rayon = "1"
+lru = "0.12"
 
 [lib]
 name = "pxc1"

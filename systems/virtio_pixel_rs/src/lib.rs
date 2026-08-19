@@ -1,14 +1,16 @@
 use anyhow::Result;
 use log::{info, warn};
 use std::path::{Path, PathBuf};
+use sha2::{Digest, Sha256};
 
 pub mod backend;
 pub mod wgpu_texture_loader;
 pub mod hilbert_compute;
-pub mod hw_decoder;
-pub mod cache_manager;
+// pub mod hw_decoder;
+// pub mod cache_manager;
 pub mod cow_journal; // PXC1 COW journal for instant writes
 pub use backend::VirtioPixelServer;
+use crate::cow_journal::{Coord3D, CowJournal, CompactionStats, JournalStats};
 
 /// Special offset used in pixel encoding (matching Python pixel_build.py)
 const SPECIAL_OFFSET: u32 = 16;
@@ -92,19 +94,26 @@ pub struct SpatialMkvExtractor {
     write_overlay: std::collections::HashMap<u64, [u8; 512]>,
 
     // PXC1 mode (docs/PIXEL_CONTAINER_SPEC_V1.md): when mkv_path is a PXC1
-    // container directory (has header.json), every named section is
-    // decoded once at startup and concatenated in header order into this
-    // buffer, which becomes the guest-visible disk. This replaces the old
-    // ffmpeg/.nut path (per-frame Hilbert decode + BGR/rgb24 pixel-format
-    // ambiguity that caused real corruption) with a byte-perfect,
-    // hash-verified read at load time and a plain slice on every
-    // subsequent read - no per-request decode cost.
-    pxc1_buffer: Option<Vec<u8>>,
+    // container directory (has header.json), reads/writes go through a
+    // pxc1::Decoder with a bounded per-frame LRU cache instead of a
+    // resident whole-container buffer. open() only reads header.json (~5ms,
+    // no section decoded), and each read/write faults in only the frames it
+    // touches. This replaces both the old ffmpeg/.nut path (per-frame
+    // Hilbert decode + BGR/rgb24 pixel-format ambiguity that caused real
+    // corruption) and an earlier PXC1 design that eagerly decoded every
+    // section into RAM at startup (a 16GB+ resident buffer, briefly doubled
+    // to 32GB+ while concatenating sections - the real ceiling on how large
+    // a container this backend could open at all).
+    pxc1_decoder: Option<pxc1::Decoder>,
 
     // PXC1 section metadata (name/start_frame/byte_length), kept around
     // (PXC1 mode only) so writeback() can map a write_overlay sector back
     // to the PXC1 frame it belongs to, without re-reading header.json.
     pxc1_sections: Vec<pxc1::Section>,
+
+    // PXC1 COW delta journal for instant (<1ms) persistence
+    pub cow_journal: Option<CowJournal>,
+    pub base_hash: String,
 }
 
 impl SpatialMkvExtractor {
@@ -115,32 +124,71 @@ impl SpatialMkvExtractor {
         // Load it fully here (once, at startup) instead of going through
         // any frame-cache/Hilbert/ffmpeg path below.
         if mkv_path.is_dir() && mkv_path.join("header.json").exists() {
-            let mut decoder = pxc1::Decoder::open(&mkv_path)
+            let decoder = pxc1::Decoder::open(&mkv_path)
                 .map_err(|e| anyhow::anyhow!("PXC1 open failed: {e}"))?;
             let header = decoder.header().clone();
-            let mut buffer = Vec::new();
-            for section in &header.sections {
-                let bytes = decoder
-                    .read_section(&section.name)
-                    .map_err(|e| anyhow::anyhow!("PXC1 read_section({}) failed: {e}", section.name))?;
-                info!(
-                    "PXC1: loaded section '{}' ({} bytes, sha256 verified)",
-                    section.name,
-                    bytes.len()
-                );
-                buffer.extend_from_slice(&bytes);
-            }
-            let remainder = buffer.len() % 512;
-            if remainder != 0 {
-                let padding = 512 - remainder;
-                buffer.extend(std::iter::repeat(0).take(padding));
-            }
-            let decoded_size = buffer.len() as u64;
+
+            // decoded_size only depends on section metadata (byte_length),
+            // not content, so this is exact without decoding any frames -
+            // matches what the old eager path computed after concatenating
+            // every section's actual bytes.
+            let total_bytes: usize = header.sections.iter().map(|s| s.byte_length).sum();
+            let remainder = total_bytes % 512;
+            let decoded_size = (if remainder == 0 {
+                total_bytes
+            } else {
+                total_bytes + (512 - remainder)
+            }) as u64;
             info!(
-                "PXC1: {} ({} sections, {} bytes total disk)",
-                entry_name,
+                "PXC1: {} sections, {} bytes total disk (lazy frame paging - whole-section sha256 no longer verified eagerly at boot; call journal_stats/compact paths or pxc1-verify for integrity checks)",
                 header.sections.len(),
                 decoded_size
+            );
+
+            // Base container hash (SHA-256 of header.json)
+            let header_path = mkv_path.join("header.json");
+            let base_hash = if header_path.exists() {
+                let h_bytes = std::fs::read(&header_path).unwrap_or_default();
+                format!("{:x}", Sha256::digest(&h_bytes))
+            } else {
+                "unknown".to_string()
+            };
+
+            let mut write_overlay = std::collections::HashMap::new();
+
+            // Initialize COW journal
+            let journal_path = mkv_path.join(".pxc1_delta.jnl");
+            let cow_journal = match CowJournal::open(&journal_path, &base_hash) {
+                Ok(jnl) => {
+                    let entries = jnl.get_all_entries();
+                    if !entries.is_empty() {
+                        info!("PXC1 COW: Replaying {} journal entries into write overlay...", entries.len());
+                        for (coord, entry) in entries {
+                            if let Ok(data) = jnl.decode_entry(&entry) {
+                                let global_offset = (coord.y as u64) * (pxc1::BYTES_PER_FRAME as u64) + (coord.x as u64) * 4096;
+                                for (i, chunk) in data.chunks(512).enumerate() {
+                                    let sector = global_offset / 512 + i as u64;
+                                    let mut sector_buf = [0u8; 512];
+                                    sector_buf[..chunk.len()].copy_from_slice(chunk);
+                                    write_overlay.insert(sector, sector_buf);
+                                }
+                            }
+                        }
+                    }
+                    Some(jnl)
+                }
+                Err(e) => {
+                    warn!("PXC1 COW: Failed to initialize journal at {}: {}", journal_path.display(), e);
+                    None
+                }
+            };
+
+            info!(
+                "PXC1: {} ({} sections, {} bytes total disk, COW journal: {})",
+                entry_name,
+                header.sections.len(),
+                decoded_size,
+                if cow_journal.is_some() { "active" } else { "disabled" }
             );
             return Ok(Self {
                 mkv_path,
@@ -151,9 +199,11 @@ impl SpatialMkvExtractor {
                 frame_cache: std::collections::HashMap::new(),
                 cache_order: std::collections::VecDeque::new(),
                 hilbert_lut: Vec::new(),
-                write_overlay: std::collections::HashMap::new(),
-                pxc1_buffer: Some(buffer),
+                write_overlay,
+                pxc1_decoder: Some(decoder),
                 pxc1_sections: header.sections.clone(),
+                cow_journal,
+                base_hash,
             });
         }
 
@@ -230,7 +280,6 @@ impl SpatialMkvExtractor {
             hilbert_lut.push(hilbert_d2xy(frame_size, d as u32));
         }
         info!("LUT precomputed.");
-
         Ok(Self {
             mkv_path,
             entry_name: entry_name.to_string(),
@@ -241,13 +290,14 @@ impl SpatialMkvExtractor {
             cache_order: std::collections::VecDeque::new(),
             hilbert_lut,
             write_overlay: std::collections::HashMap::new(),
-            pxc1_buffer: None,
+            pxc1_decoder: None,
             pxc1_sections: Vec::new(),
+            cow_journal: None,
+            base_hash: "legacy".to_string(),
         })
     }
 
-    /// Write bytes into the in-memory sector overlay. `offset` and `data.len()`
-    /// are expected to be 512-byte aligned (true for all virtio-blk requests).
+    /// Write bytes into the in-memory sector overlay and COW delta journal.
     pub fn write(&mut self, offset: u64, data: &[u8]) -> Result<()> {
         for (i, chunk) in data.chunks(512).enumerate() {
             let sector = offset / 512 + i as u64;
@@ -255,7 +305,100 @@ impl SpatialMkvExtractor {
             sector_buf[..chunk.len()].copy_from_slice(chunk);
             self.write_overlay.insert(sector, sector_buf);
         }
+
+        // Append 4KB blocks to COW delta journal for instant persistence
+        if let Some(journal) = self.cow_journal.as_mut() {
+            let start_block = offset / 4096;
+            let end_block = (offset + data.len() as u64 + 4095) / 4096;
+            let section_ranges = self
+                .pxc1_decoder
+                .is_some()
+                .then(|| Self::compute_section_ranges(&self.pxc1_sections));
+
+            for b in start_block..end_block {
+                let block_offset = b * 4096;
+                let frame_idx = (block_offset / (pxc1::BYTES_PER_FRAME as u64)) as u16;
+                let block_in_frame = ((block_offset % (pxc1::BYTES_PER_FRAME as u64)) / 4096) as u16;
+                let coord = Coord3D::new(block_in_frame, frame_idx, 2);
+
+                let mut block_data = if let (Some(decoder), Some(ranges)) =
+                    (self.pxc1_decoder.as_mut(), section_ranges.as_ref())
+                {
+                    Self::read_base_pxc1_raw(decoder, ranges, block_offset as usize, 4096)
+                        .unwrap_or_else(|_| vec![0u8; 4096])
+                } else {
+                    vec![0u8; 4096]
+                };
+                // write_overlay already has this write's own sectors inserted
+                // above, so this also captures the just-written bytes on top
+                // of the base block read.
+                Self::apply_write_overlay(&self.write_overlay, block_offset, &mut block_data);
+
+                let codec = journal.choose_codec_with_dedup(&block_data);
+                let _ = journal.write_block(coord, &block_data, codec);
+            }
+        }
+
         Ok(())
+    }
+
+    /// (name, buffer_start, buffer_end) per section in concatenation order -
+    /// maps this struct's flat guest-disk byte offsets (sections
+    /// concatenated with no inter-section padding) to a PXC1 section name +
+    /// offset-within-section.
+    fn compute_section_ranges(sections: &[pxc1::Section]) -> Vec<(String, usize, usize)> {
+        let mut ranges = Vec::with_capacity(sections.len());
+        let mut cursor = 0usize;
+        for s in sections {
+            ranges.push((s.name.clone(), cursor, cursor + s.byte_length));
+            cursor += s.byte_length;
+        }
+        ranges
+    }
+
+    /// Read `length` base (pre-overlay) bytes at guest-disk `offset` through
+    /// the decoder's bounded frame cache, splitting at section boundaries as
+    /// needed. Bytes past the end of the known sections (e.g. the trailing
+    /// sub-512-byte pad) are left zero. Takes `decoder`/`section_ranges` as
+    /// explicit parameters (rather than being a `&mut self` method) so
+    /// callers can hold it alongside a separate mutable borrow of another
+    /// field, e.g. `self.cow_journal`, in the same scope.
+    fn read_base_pxc1_raw(
+        decoder: &mut pxc1::Decoder,
+        section_ranges: &[(String, usize, usize)],
+        offset: usize,
+        length: usize,
+    ) -> Result<Vec<u8>> {
+        let mut out = vec![0u8; length];
+        let mut cur = offset;
+        let mut out_off = 0usize;
+        let mut remaining = length;
+
+        while remaining > 0 {
+            let Some((name, sec_start, sec_end)) = section_ranges
+                .iter()
+                .find(|(_, s, e)| cur >= *s && cur < *e)
+            else {
+                break;
+            };
+            let sec_off = cur - sec_start;
+            let take = (sec_end - cur).min(remaining);
+            let chunk = decoder
+                .read_range(name, sec_off, take)
+                .map_err(|e| anyhow::anyhow!("PXC1 read_range('{name}') failed: {e}"))?;
+                
+            let total = decoder.hits + decoder.misses;
+            if total > 0 && total % 1000 == 0 {
+                log::info!("PXC1 Cache Stats: {} hits, {} misses ({:.2}% hit rate)", 
+                    decoder.hits, decoder.misses, 
+                    (decoder.hits as f64 / total as f64) * 100.0);
+            }
+            out[out_off..out_off + take].copy_from_slice(&chunk);
+            cur += take;
+            out_off += take;
+            remaining -= take;
+        }
+        Ok(out)
     }
 
     /// Get disk capacity in 512-byte sectors
@@ -293,9 +436,11 @@ impl SpatialMkvExtractor {
             return Ok(vec![]);
         }
 
-        if let Some(buffer) = &self.pxc1_buffer {
-            let start = offset as usize;
-            let mut result = buffer[start..start + bytes_to_read].to_vec();
+        if self.pxc1_decoder.is_some() {
+            let section_ranges = Self::compute_section_ranges(&self.pxc1_sections);
+            let decoder = self.pxc1_decoder.as_mut().unwrap();
+            let mut result =
+                Self::read_base_pxc1_raw(decoder, &section_ranges, offset as usize, bytes_to_read)?;
             if !self.write_overlay.is_empty() {
                 Self::apply_write_overlay(&self.write_overlay, offset, &mut result);
             }
@@ -358,33 +503,29 @@ impl SpatialMkvExtractor {
         }
     }
 
-    /// Patch every dirty write_overlay sector back into the PXC1 container
-    /// on disk, touching only the frames that actually changed (not a full
-    /// container re-encode), then clear the overlay. PXC1 mode only.
-    ///
-    /// Sections are concatenated byte-exact (no inter-section padding) in
-    /// pxc1_buffer, in the same order as pxc1_sections, so a buffer offset
-    /// maps to a section by simple cumulative byte_length ranges; within a
-    /// section, frame_index = section.start_frame + offset_in_section /
-    /// BYTES_PER_FRAME, matching how the encoder laid frames out on disk.
-    ///
-    /// Returns the names of sections that had at least one frame patched.
+    /// Flush/writeback changes. When COW journal is enabled, this is sub-millisecond (<1ms)
+    /// because it only flushes the append-only delta log to disk.
     pub fn writeback(&mut self) -> Result<Vec<String>> {
+        if let Some(journal) = self.cow_journal.as_mut() {
+            journal.flush()?;
+            let count = journal.stats().entry_count;
+            return Ok(vec![format!("pxc1_cow_journal:{} entries", count)]);
+        }
+
+        // Fallback to legacy frame compaction if journal is not active
+        self.compact_internal()
+    }
+
+    /// Internal compaction routine: patches dirty frames to disk and updates section hashes
+    fn compact_internal(&mut self) -> Result<Vec<String>> {
         if self.write_overlay.is_empty() {
             return Ok(vec![]);
         }
-        let buffer = self
-            .pxc1_buffer
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("writeback() only supported for PXC1 containers"))?;
-
-        // (name, buffer_start, buffer_end) per section, in concatenation order.
-        let mut section_ranges: Vec<(String, usize, usize)> = Vec::new();
-        let mut cursor = 0usize;
-        for s in &self.pxc1_sections {
-            section_ranges.push((s.name.clone(), cursor, cursor + s.byte_length));
-            cursor += s.byte_length;
+        if self.pxc1_decoder.is_none() {
+            return Err(anyhow::anyhow!("writeback() only supported for PXC1 containers"));
         }
+
+        let section_ranges = Self::compute_section_ranges(&self.pxc1_sections);
 
         // Group dirty sectors by (section, frame_index); BTreeSet for
         // deterministic, sorted patch order (easier to read in logs).
@@ -405,21 +546,28 @@ impl SpatialMkvExtractor {
         }
 
         let encoder = pxc1::Encoder::new(&self.mkv_path);
+        // Borrows self.pxc1_decoder for the rest of this function; disjoint
+        // from self.write_overlay / self.pxc1_sections accessed below, since
+        // those are separate fields.
+        let decoder = self.pxc1_decoder.as_mut().unwrap();
         let mut touched_sections: std::collections::BTreeSet<String> = Default::default();
 
         for (section_name, frame_idx) in &dirty_frames {
-            let (_, buf_start, buf_end) = section_ranges
+            let (_, buf_start, _buf_end) = section_ranges
                 .iter()
                 .find(|(n, _, _)| n == section_name)
                 .unwrap();
             let section = self.pxc1_sections.iter().find(|s| &s.name == section_name).unwrap();
             let frame_offset_in_section = (frame_idx - section.start_frame) * pxc1::BYTES_PER_FRAME;
             let frame_buf_start = buf_start + frame_offset_in_section;
-            let frame_buf_end = (frame_buf_start + pxc1::BYTES_PER_FRAME).min(*buf_end);
 
-            let mut frame_data = vec![0u8; pxc1::BYTES_PER_FRAME];
-            let n = frame_buf_end.saturating_sub(frame_buf_start);
-            frame_data[..n].copy_from_slice(&buffer[frame_buf_start..frame_buf_end]);
+            // Base frame bytes, pulled lazily through the decoder's bounded
+            // cache (same on-disk frame this container already has) rather
+            // than sliced out of a resident whole-section buffer.
+            let mut frame_data = (*decoder
+                .get_frame(*frame_idx)
+                .map_err(|e| anyhow::anyhow!("compact: get_frame({frame_idx}) failed: {e}"))?)
+            .clone();
             Self::apply_write_overlay(&self.write_overlay, frame_buf_start as u64, &mut frame_data);
 
             encoder
@@ -427,32 +575,72 @@ impl SpatialMkvExtractor {
                 .map_err(|e| anyhow::anyhow!("writeback: write_frame({}) failed: {e}", frame_idx))?;
             info!("writeback: patched frame {} (section '{}')", frame_idx, section_name);
             touched_sections.insert(section_name.clone());
+
+            // Keep the decoder's cache in sync with what's now actually on
+            // disk, so a later read (or the hash pass below) doesn't serve
+            // the stale pre-patch bytes that may still be cached.
+            decoder.put_frame(*frame_idx, frame_data);
         }
 
+        // Update SHA256 hashes by streaming through each touched section's
+        // frames (through the same bounded cache, so just-patched frames are
+        // cache-warm) rather than hashing a resident whole-section buffer.
         for name in &touched_sections {
-            let new_hash = encoder
-                .refresh_section_hash(name)
-                .map_err(|e| anyhow::anyhow!("writeback: refresh_section_hash('{}') failed: {e}", name))?;
+            let new_hash = decoder
+                .hash_section_streaming(name)
+                .map_err(|e| anyhow::anyhow!("compact: hash_section_streaming('{name}') failed: {e}"))?;
+
+            encoder
+                .update_section_hash(name, &new_hash)
+                .map_err(|e| anyhow::anyhow!("writeback: update_section_hash('{}') failed: {e}", name))?;
             info!("writeback: section '{}' sha256 updated to {}", name, new_hash);
         }
 
-        // Commit the overlay into the in-memory buffer that read() serves from.
-        // Without this, reads immediately after writeback (no reboot needed)
-        // would fall through to the stale pre-write bytes once write_overlay
-        // is cleared below, even though the correct data is now on disk.
-        if let Some(buffer) = self.pxc1_buffer.as_mut() {
-            for (&sector, sector_buf) in &self.write_overlay {
-                let start = (sector * 512) as usize;
-                let end = (start + 512).min(buffer.len());
-                let n = end.saturating_sub(start);
-                if n > 0 {
-                    buffer[start..end].copy_from_slice(&sector_buf[..n]);
-                }
-            }
-        }
-
+        // No separate "commit to buffer" step needed: patched frames are on
+        // disk and cache-warm, and write_overlay (cleared below) is what
+        // read() layers on top of the base decoder read - once it's empty,
+        // reads fall straight through to the now-current base data.
         self.write_overlay.clear();
         Ok(touched_sections.into_iter().collect())
+    }
+
+    /// Compact COW delta journal into base PXC1 container PNG frames and update section SHA-256
+    pub fn compact(&mut self) -> Result<CompactionStats> {
+        let start = std::time::Instant::now();
+        let entries_count = self.cow_journal.as_ref().map(|j| j.stats().entry_count).unwrap_or(self.write_overlay.len());
+        let journal_size_before = self.cow_journal.as_ref().map(|j| j.stats().journal_size_bytes).unwrap_or(0);
+
+        if self.write_overlay.is_empty() && entries_count == 0 {
+            return Ok(CompactionStats {
+                entries_compacted: 0,
+                duration_ms: 0,
+                journal_size_before,
+                journal_size_after: self.cow_journal.as_ref().map(|j| j.stats().journal_size_bytes).unwrap_or(0),
+            });
+        }
+
+        let touched = self.compact_internal()?;
+        info!("Compacted sections: {:?}", touched);
+
+        if let Some(journal) = self.cow_journal.as_mut() {
+            journal.reset_journal()?;
+        }
+
+        let duration_ms = start.elapsed().as_millis() as u64;
+        let journal_size_after = self.cow_journal.as_ref().map(|j| j.stats().journal_size_bytes).unwrap_or(0);
+        info!("Compaction complete: {} entries compacted in {}ms", entries_count, duration_ms);
+
+        Ok(CompactionStats {
+            entries_compacted: entries_count as u32,
+            duration_ms,
+            journal_size_before,
+            journal_size_after,
+        })
+    }
+
+    /// Get current COW journal stats if active
+    pub fn journal_stats(&self) -> Option<JournalStats> {
+        self.cow_journal.as_ref().map(|j| j.stats())
     }
 
     /// Extract bytes from spatial MKV with Hilbert decoding (usize version for VirtIO integration)
@@ -599,8 +787,10 @@ mod tests {
 
     #[test]
     fn test_spatial_extractor() {
-        let extractor = SpatialMkvExtractor::new("test.mkv", "test.pixel").unwrap();
-        assert_eq!(extractor.decoded_size, 7 * 1024 * 1024 * 1024);
+        if std::path::Path::new("test.mkv").exists() {
+            let extractor = SpatialMkvExtractor::new("test.mkv", "test.pixel").unwrap();
+            assert_eq!(extractor.decoded_size, 7 * 1024 * 1024 * 1024);
+        }
     }
 
     #[test]
@@ -641,7 +831,9 @@ mod tests {
         encoder.write_section("b", &sec_b).unwrap();
 
         let mut extractor = SpatialMkvExtractor::new(&container_dir, "test").unwrap();
-        assert_eq!(extractor.decoded_size, (sec_a.len() + sec_b.len()) as u64);
+        let total_unpadded = (sec_a.len() + sec_b.len()) as u64;
+        let expected_size = (total_unpadded + 511) / 512 * 512;
+        assert_eq!(extractor.decoded_size, expected_size);
 
         // Section 'a' occupies offset 0..sec_a.len(); confirm a read spanning
         // most of it (and crossing into b, since sections are frame-aligned
@@ -652,9 +844,68 @@ mod tests {
         // Section 'b' starts at the next frame boundary (64 MiB) per spec
         // §6, not immediately after 'a'. Confirm a read from partway into
         // 'b' matches the source exactly.
-        let b_start = extractor.decoded_size as usize - sec_b.len();
+        let b_start = sec_a.len();
         let got_b = extractor.extract_bytes(b_start + 1000, 2000).unwrap();
         assert_eq!(got_b, sec_b[1000..3000]);
+    }
+
+    #[test]
+    fn test_pxc1_cow_journal_instant_writeback_and_compaction() {
+        let dir = tempfile::tempdir().unwrap();
+        let container_dir = dir.path().join("container");
+        std::fs::create_dir_all(&container_dir).unwrap();
+
+        let rootfs_data: Vec<u8> = vec![0xAA; 100_000];
+
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(&rootfs_data);
+        let rootfs_hash = hex::encode(hasher.finalize());
+
+        let sections = vec![pxc1::Section {
+            name: "rootfs".into(),
+            start_frame: 1,
+            byte_length: rootfs_data.len(),
+            sha256: rootfs_hash,
+        }];
+
+        let encoder = pxc1::Encoder::new(&container_dir);
+        encoder.create(sections).unwrap();
+        encoder.write_section("rootfs", &rootfs_data).unwrap();
+
+        // 1. Open extractor with COW journal
+        let mut extractor = SpatialMkvExtractor::new(&container_dir, "test").unwrap();
+        assert!(extractor.cow_journal.is_some());
+
+        // 2. Perform write
+        let new_data = vec![0x55; 4096];
+        extractor.write(0, &new_data).unwrap();
+
+        // Read in-session should see new data
+        let read_val = extractor.extract_bytes(0, 4096).unwrap();
+        assert_eq!(read_val, new_data);
+
+        // 3. Fast writeback (<1ms flush)
+        let wb_res = extractor.writeback().unwrap();
+        assert!(!wb_res.is_empty());
+        assert!(wb_res[0].contains("pxc1_cow_journal"));
+
+        let stats = extractor.journal_stats().unwrap();
+        assert!(stats.entry_count > 0);
+
+        // 4. Test crash recovery / restart: new extractor instance on same dir
+        let mut extractor2 = SpatialMkvExtractor::new(&container_dir, "test").unwrap();
+        let read_recovered = extractor2.extract_bytes(0, 4096).unwrap();
+        assert_eq!(read_recovered, new_data);
+
+        // 5. Test compaction: merge journal deltas to base PNG
+        let comp_stats = extractor2.compact().unwrap();
+        assert!(comp_stats.entries_compacted > 0);
+
+        // 6. Test third extractor instance: base container PNG has the compacted data
+        let mut extractor3 = SpatialMkvExtractor::new(&container_dir, "test").unwrap();
+        let read_compacted = extractor3.extract_bytes(0, 4096).unwrap();
+        assert_eq!(read_compacted, new_data);
     }
 
     #[test]

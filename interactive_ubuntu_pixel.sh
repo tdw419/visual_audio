@@ -6,6 +6,8 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONTAINER_DIR="$PROJECT_ROOT/ubuntu_desktop_pxc1_v1"
 BACKEND="$PROJECT_ROOT/systems/virtio_pixel_rs/target/release/virtio_pixel_backend"
 SOCKET="/tmp/virtio-pixel-interactive.sock"
+LOG_DIR="$PROJECT_ROOT/logs"
+mkdir -p "$LOG_DIR"
 NATIVE_BOOT_DIR="/home/jericho/scratch/ubuntu_boot_native"
 KERNEL="$NATIVE_BOOT_DIR/vmlinuz-6.8.0-136-generic"
 INITRD="$NATIVE_BOOT_DIR/initrd.img-6.8.0-136-generic"
@@ -38,7 +40,8 @@ mkdir -p /home/jericho/scratch/qemu_shm
 
 # Start backend
 echo "Starting pixel block device backend..."
-$BACKEND "$CONTAINER_DIR" "$SOCKET" > /tmp/virtio_interactive_backend.log 2>&1 &
+chmod +x "$BACKEND"
+$BACKEND "$CONTAINER_DIR" "$SOCKET" > "$LOG_DIR/virtio_interactive_backend.log" 2>&1 &
 BACKEND_PID=$!
 
 # Wait for socket

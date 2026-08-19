@@ -141,3 +141,6 @@ initramfs-cognitive/virtio_blk.ko
 
 # Local pixel_layer.py overlay stacks (per-user working state, not source)
 .pixel_layers/
+
+# Backend run logs (can grow unbounded across long-running VM sessions)
+logs/
