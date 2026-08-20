@@ -74,6 +74,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             start_frame: next_frame,
             byte_length,
             sha256,
+            ..Default::default()
         });
 
         // Calculate how many frames this section needs

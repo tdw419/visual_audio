@@ -1,0 +1,227 @@
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
+
+use anyhow::{anyhow, Result};
+use env_logger::Env;
+use log::info;
+
+use virtio_pixel_rs_v2::{SpatialMkvExtractor, backend::VirtioPixelServer};
+
+const DEFAULT_SOCKET_PATH: &str = "/tmp/virtio-pixel-rs-v2.sock";
+const DEFAULT_MKV_PATH: &str = "visual_audio.mkv";
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+
+    info!("VirtIO Pixel vhost-user-blk backend - PXC1 COW enabled");
+    info!("================================================================");
+
+    let args: Vec<String> = std::env::args().collect();
+
+    let mut enable_gpu = false;
+    let mut arg_idx = 1;
+
+    // Parse flags
+    while arg_idx < args.len() {
+        match args[arg_idx].as_str() {
+            "--gpu" => {
+                enable_gpu = true;
+                arg_idx += 1;
+            }
+            _ => break,
+        }
+    }
+
+    let mkv_path = if arg_idx < args.len() {
+        PathBuf::from(&args[arg_idx])
+    } else {
+        PathBuf::from(DEFAULT_MKV_PATH)
+    };
+
+    let socket_path = if arg_idx + 1 < args.len() {
+        PathBuf::from(&args[arg_idx + 1])
+    } else {
+        PathBuf::from(DEFAULT_SOCKET_PATH)
+    };
+
+    if !mkv_path.exists() {
+        eprintln!("ERROR: MKV not found: {}", mkv_path.display());
+        return Err(anyhow!("MKV file not found: {}", mkv_path.display()));
+    }
+
+    info!("Starting VirtIO Pixel vhost-user-blk backend");
+    info!("GPU acceleration: {}", if enable_gpu { "enabled" } else { "disabled" });
+    info!("MKV / Container path: {}", mkv_path.display());
+    info!("Socket path: {}", socket_path.display());
+
+    let entry_name = mkv_path.file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("disk.pixel");
+
+    let extractor = SpatialMkvExtractor::new(&mkv_path, entry_name)?;
+    let extractor = Arc::new(Mutex::new(extractor));
+
+    // Start HTTP daemon with PXC1 COW endpoints
+    let vcc_extractor = Arc::clone(&extractor);
+    tokio::spawn(async move {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:8769").await.unwrap();
+        info!("VCC HTTP Daemon listening on 127.0.0.1:8769");
+        loop {
+            if let Ok((mut stream, _)) = listener.accept().await {
+                let mut buf = [0; 1024];
+                use tokio::io::AsyncReadExt;
+                if let Ok(n) = stream.read(&mut buf).await {
+                    let request = String::from_utf8_lossy(&buf[..n]);
+                    if request.starts_with("GET /health") {
+                        let response = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{\"ok\":true}";
+                        use tokio::io::AsyncWriteExt;
+                        let _ = stream.write_all(response.as_bytes()).await;
+                    } else if request.starts_with("GET /peek") {
+                        // Extract addr and size
+                        let mut addr = 0usize;
+                        let mut size = 16usize;
+                        
+                        if let Some(query) = request.split(' ').nth(1) {
+                            if let Some(idx) = query.find('?') {
+                                let qs = &query[idx+1..];
+                                for pair in qs.split('&') {
+                                    let mut kv = pair.split('=');
+                                    if let (Some(k), Some(v)) = (kv.next(), kv.next()) {
+                                        if k == "addr" {
+                                            if v.starts_with("0x") {
+                                                addr = usize::from_str_radix(&v[2..], 16).unwrap_or(0);
+                                            } else {
+                                                addr = v.parse().unwrap_or(0);
+                                            }
+                                        } else if k == "size" {
+                                            size = v.parse().unwrap_or(16);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        let bytes_to_read = size * 4;
+                        let mut result_bytes = Vec::new();
+                        
+                        {
+                            let mut ext = vcc_extractor.lock().unwrap();
+                            if let Ok(data) = ext.extract_bytes(addr, bytes_to_read) {
+                                result_bytes = data;
+                            }
+                        }
+                        
+                        // Pad if necessary
+                        result_bytes.resize(bytes_to_read, 0);
+                        
+                        let mut hex_resp = String::new();
+                        for chunk in result_bytes.chunks(4) {
+                            let mut w = [0u8; 4];
+                            w[..chunk.len()].copy_from_slice(chunk);
+                            let val = u32::from_le_bytes(w);
+                            hex_resp.push_str(&format!("{:08X} ", val));
+                        }
+                        
+                        let response = format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+                            hex_resp.len(),
+                            hex_resp
+                        );
+                        
+                        use tokio::io::AsyncWriteExt;
+                        let _ = stream.write_all(response.as_bytes()).await;
+                    } else if request.starts_with("GET /journal_stats") {
+                        let stats_json = {
+                            let ext = vcc_extractor.lock().unwrap();
+                            if let Some(stats) = ext.journal_stats() {
+                                serde_json::to_string(&stats).unwrap_or_else(|_| "{}".to_string())
+                            } else {
+                                format!("{{\"ok\":true,\"status\":\"cow_journal_disabled\",\"base_container_hash\":\"{}\"}}", ext.base_hash)
+                            }
+                        };
+                        let response = format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                            stats_json.len(),
+                            stats_json
+                        );
+                        use tokio::io::AsyncWriteExt;
+                        let _ = stream.write_all(response.as_bytes()).await;
+                    } else if request.starts_with("POST /writeback") {
+                        // Instant COW delta journal flush (<1ms)
+                        let start = Instant::now();
+                        let body = {
+                            let mut ext = vcc_extractor.lock().unwrap();
+                            ext.writeback()
+                        };
+                        let duration_ms = start.elapsed().as_millis();
+                        let (status, json) = match body {
+                            Ok(sections) => (
+                                "200 OK",
+                                format!(
+                                    "{{\"ok\":true,\"sections_updated\":[{}],\"duration_ms\":{}}}",
+                                    sections
+                                        .iter()
+                                        .map(|s| format!("\"{}\"", s))
+                                        .collect::<Vec<_>>()
+                                        .join(","),
+                                    duration_ms
+                                ),
+                            ),
+                            Err(e) => (
+                                "500 Internal Server Error",
+                                format!("{{\"ok\":false,\"error\":\"{}\"}}", e.to_string().replace('"', "'")),
+                            ),
+                        };
+                        let response = format!(
+                            "HTTP/1.1 {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                            status,
+                            json.len(),
+                            json
+                        );
+                        use tokio::io::AsyncWriteExt;
+                        let _ = stream.write_all(response.as_bytes()).await;
+                        info!("Writeback completed in {}ms", duration_ms);
+                    } else if request.starts_with("POST /compact_journal") {
+                        // Merge delta journal to base container PNG frames
+                        let start = Instant::now();
+                        let result = {
+                            let mut ext = vcc_extractor.lock().unwrap();
+                            ext.compact()
+                        };
+                        let duration_ms = start.elapsed().as_millis();
+                        let (status, json) = match result {
+                            Ok(comp_stats) => (
+                                "200 OK",
+                                serde_json::to_string(&comp_stats).unwrap_or_else(|_| "{\"ok\":true}".to_string()),
+                            ),
+                            Err(e) => (
+                                "500 Internal Server Error",
+                                format!("{{\"ok\":false,\"error\":\"{}\"}}", e.to_string().replace('"', "'")),
+                            ),
+                        };
+                        let response = format!(
+                            "HTTP/1.1 {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                            status,
+                            json.len(),
+                            json
+                        );
+                        use tokio::io::AsyncWriteExt;
+                        let _ = stream.write_all(response.as_bytes()).await;
+                        info!("Compaction completed in {}ms: {}", duration_ms, json);
+                    }
+                }
+            }
+        }
+    });
+
+    info!("Starting vhost-user backend, waiting for QEMU connection...");
+    let mut server = VirtioPixelServer::new(extractor, socket_path, enable_gpu)?;
+
+    tokio::task::spawn_blocking(move || {
+        server.run()
+    }).await??;
+    
+    Ok(())
+}

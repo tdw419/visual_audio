@@ -54,12 +54,20 @@ pub enum Pxc1Error {
 }
 
 /// Section metadata from the header
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Section {
     pub name: String,
     pub start_frame: usize,
     pub byte_length: usize,
     pub sha256: String,
+    /// Optional per-frame SHA-256 hashes - see spec §6a. Empty/absent means
+    /// "not accelerated": readers/writers fall back to whole-section
+    /// `sha256` exactly as before. When populated, `frame_hashes[i]` is the
+    /// hash of frame `start_frame + i`'s payload and lets a single patched
+    /// frame be re-verified/re-hashed in O(1) instead of re-hashing the
+    /// entire section.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub frame_hashes: Vec<String>,
 }
 
 /// PXC1 header (frame 0 JSON)
@@ -206,14 +214,20 @@ impl Encoder {
             )));
         }
 
-        // Write data to frames
+        // Write data to frames, hashing each frame's contribution as we go
+        // (spec §6a) so this section comes out fully accelerated for free.
         let mut offset = 0;
         let mut frame_idx = section.start_frame;
         let mut frame_offset = 0;
+        let mut frame_hashes = Vec::new();
 
         while offset < data.len() {
             let bytes_in_frame = (BYTES_PER_FRAME - frame_offset).min(data.len() - offset);
             let chunk = &data[offset..offset + bytes_in_frame];
+
+            let mut frame_hasher = Sha256::new();
+            frame_hasher.update(chunk);
+            frame_hashes.push(hex::encode(frame_hasher.finalize()));
 
             // Read existing frame (or create new)
             let frame_path = self.frame_path(frame_idx);
@@ -232,6 +246,7 @@ impl Encoder {
             frame_idx += 1;
         }
 
+        self.set_frame_hashes(name, frame_hashes)?;
         Ok(())
     }
 
@@ -246,22 +261,26 @@ impl Encoder {
 
         let mut frame_idx = section.start_frame;
         let mut buffer = vec![0u8; BYTES_PER_FRAME];
+        let mut frame_hashes = Vec::new();
 
         while total_bytes < section.byte_length {
             let bytes_to_read = (section.byte_length - total_bytes).min(BYTES_PER_FRAME);
             let chunk = &mut buffer[0..bytes_to_read];
-            
+
             reader.read_exact(chunk).map_err(|e| Pxc1Error::Io(e))?;
-            
+
             hasher.update(&chunk);
-            
+            let mut frame_hasher = Sha256::new();
+            frame_hasher.update(&chunk);
+            frame_hashes.push(hex::encode(frame_hasher.finalize()));
+
             // Zero pad the rest of the frame if it's the last one
             for i in bytes_to_read..BYTES_PER_FRAME {
                 buffer[i] = 0;
             }
 
             self.write_frame(frame_idx, &buffer)?;
-            
+
             total_bytes += bytes_to_read;
             frame_idx += 1;
         }
@@ -274,6 +293,7 @@ impl Encoder {
             )));
         }
 
+        self.set_frame_hashes(name, frame_hashes)?;
         Ok(())
     }
 
@@ -285,15 +305,32 @@ impl Encoder {
     /// section-encoding path and by write-back patching, where only a
     /// handful of frames actually changed and re-encoding the whole
     /// container would be wasteful.
+    ///
+    /// Copy-on-write: a frame file may be a symlink into another
+    /// container's frames (e.g. a zero-copy container fork sharing
+    /// unmodified frames with its base to avoid duplicating multi-GB
+    /// PNGs). `image.save()` opens the destination path directly, which
+    /// follows a symlink and truncates the *target* in place - writing
+    /// through such a symlink would silently corrupt the shared base (and
+    /// every other fork pointing at the same frame). So: if this frame
+    /// path is currently a symlink, unlink just the link (not its target)
+    /// before writing, so the new PNG lands as a private, independent
+    /// file at this path and the shared frame elsewhere is untouched.
     pub fn write_frame(&self, index: usize, data: &[u8]) -> Result<(), Pxc1Error> {
         assert_eq!(data.len(), BYTES_PER_FRAME);
+
+        let path = self.frame_path(index);
+        if let Ok(meta) = fs::symlink_metadata(&path) {
+            if meta.file_type().is_symlink() {
+                fs::remove_file(&path)?;
+            }
+        }
 
         // Convert bytes to RgbaImage
         let image: RgbaImage = ImageBuffer::from_raw(FRAME_SIZE as u32, FRAME_SIZE as u32, data.to_vec())
             .ok_or_else(|| Pxc1Error::InvalidHeader("Failed to create image buffer".to_string()))?;
 
         // Save as PNG
-        let path = self.frame_path(index);
         image.save(&path)?;
 
         Ok(())
@@ -304,18 +341,30 @@ impl Encoder {
     /// sha256 for just that section. Call this after write_frame()'ing any
     /// of a section's frames via write-back patching, so the container's
     /// recorded hash matches what's now actually on disk.
+    /// Also backfills `frame_hashes` (spec §6a) as a side effect - this
+    /// already reads every frame of the section to compute the whole-section
+    /// hash, so per-frame hashes are free to collect along the way. This is
+    /// the migration path for accelerating a container written before §6a
+    /// existed (see `pxc1-verify --backfill-frame-hashes`): a one-time full
+    /// read, after which future single-frame patches no longer need one.
     pub fn refresh_section_hash(&self, name: &str) -> Result<String, Pxc1Error> {
         let header_json = fs::read_to_string(self.dir.join("header.json"))?;
         let mut header: Header = serde_json::from_str(&header_json)?;
         let section = header.get_section(name)?;
 
         let mut data = vec![0u8; section.byte_length];
+        let mut frame_hashes = Vec::new();
         let mut offset = 0;
         let mut frame_idx = section.start_frame;
         while offset < section.byte_length {
             let frame_data = read_frame_data(&self.frame_path(frame_idx))?;
             let n = BYTES_PER_FRAME.min(section.byte_length - offset);
             data[offset..offset + n].copy_from_slice(&frame_data[..n]);
+
+            let mut frame_hasher = Sha256::new();
+            frame_hasher.update(&frame_data[..n]);
+            frame_hashes.push(hex::encode(frame_hasher.finalize()));
+
             offset += n;
             frame_idx += 1;
         }
@@ -327,6 +376,7 @@ impl Encoder {
         for s in header.sections.iter_mut() {
             if s.name == name {
                 s.sha256 = new_hash.clone();
+                s.frame_hashes = frame_hashes.clone();
             }
         }
         let header_json = serde_json::to_string_pretty(&header)?;
@@ -334,6 +384,65 @@ impl Encoder {
         self.write_frame_0(&header)?;
 
         Ok(new_hash)
+    }
+
+    /// Bulk-set a section's `frame_hashes` (spec §6a). Used right after
+    /// initially encoding a section, when every frame's hash is already
+    /// known from the write loop - no extra disk read needed.
+    pub fn set_frame_hashes(&self, name: &str, frame_hashes: Vec<String>) -> Result<(), Pxc1Error> {
+        let header_json = fs::read_to_string(self.dir.join("header.json"))?;
+        let mut header: Header = serde_json::from_str(&header_json)?;
+        let mut found = false;
+        for s in header.sections.iter_mut() {
+            if s.name == name {
+                s.frame_hashes = frame_hashes.clone();
+                found = true;
+            }
+        }
+        if !found {
+            return Err(Pxc1Error::SectionNotFound(name.to_string()));
+        }
+        let header_json = serde_json::to_string_pretty(&header)?;
+        fs::write(self.dir.join("header.json"), &header_json)?;
+        self.write_frame_0(&header)?;
+        Ok(())
+    }
+
+    /// Update exactly one frame's hash within an already-accelerated
+    /// section (spec §6a) - O(1) read-modify-write of header.json, no
+    /// section-wide re-read or rehash. Errors if the section has no
+    /// `frame_hashes` yet (not accelerated) or the index is out of range;
+    /// callers should check `section.frame_hashes.is_empty()` first and
+    /// fall back to `refresh_section_hash` for unaccelerated sections,
+    /// exactly as documented in §6a's migration note.
+    pub fn update_single_frame_hash(
+        &self,
+        name: &str,
+        frame_offset_in_section: usize,
+        new_frame_hash: &str,
+    ) -> Result<(), Pxc1Error> {
+        let header_json = fs::read_to_string(self.dir.join("header.json"))?;
+        let mut header: Header = serde_json::from_str(&header_json)?;
+        let section = header
+            .sections
+            .iter_mut()
+            .find(|s| s.name == name)
+            .ok_or_else(|| Pxc1Error::SectionNotFound(name.to_string()))?;
+
+        if frame_offset_in_section >= section.frame_hashes.len() {
+            return Err(Pxc1Error::InvalidHeader(format!(
+                "update_single_frame_hash: section '{}' has {} frame_hashes entries, index {} out of range",
+                name,
+                section.frame_hashes.len(),
+                frame_offset_in_section
+            )));
+        }
+        section.frame_hashes[frame_offset_in_section] = new_frame_hash.to_string();
+
+        let header_json = serde_json::to_string_pretty(&header)?;
+        fs::write(self.dir.join("header.json"), &header_json)?;
+        self.write_frame_0(&header)?;
+        Ok(())
     }
 
     /// Update header.json with a precomputed section hash and rewrite frame 0.
@@ -455,10 +564,11 @@ impl Decoder {
     /// path of hashing a resident whole-section RAM buffer no longer applies
     /// - this trades that for re-reading (I/O, not RAM) whatever frames
     /// aren't already cache-warm from just having been patched.
-    pub fn hash_section_streaming(&mut self, name: &str) -> Result<String, Pxc1Error> {
+    pub fn hash_section_streaming(&mut self, name: &str) -> Result<(String, Vec<String>), Pxc1Error> {
         let section = self.header.get_section(name)?;
         let frames_needed = (section.byte_length + BYTES_PER_FRAME - 1) / BYTES_PER_FRAME;
         let mut hasher = Sha256::new();
+        let mut frame_hashes = Vec::with_capacity(frames_needed);
         let mut remaining = section.byte_length;
 
         for i in 0..frames_needed {
@@ -466,9 +576,14 @@ impl Decoder {
             let take = remaining.min(BYTES_PER_FRAME);
             let frame = self.get_frame(frame_idx)?;
             hasher.update(&frame[..take]);
+            
+            let mut frame_hasher = Sha256::new();
+            frame_hasher.update(&frame[..take]);
+            frame_hashes.push(hex::encode(frame_hasher.finalize()));
+            
             remaining -= take;
         }
-        Ok(hex::encode(hasher.finalize()))
+        Ok((hex::encode(hasher.finalize()), frame_hashes))
     }
 
     /// Reads a section's data, decoding its frames in parallel (each frame's
@@ -488,6 +603,17 @@ impl Decoder {
         let start_frame = section.start_frame;
         let dir = self.dir.clone();
 
+        // Spec §6a: an accelerated section (non-empty frame_hashes) is
+        // verified per-frame as each frame is decoded, instead of hashing
+        // the whole reassembled buffer afterward - same parallel pass,
+        // just checked against a different (cheaper-to-keep-current)
+        // target. Unaccelerated sections (frame_hashes empty - the case
+        // for every container written before §6a existed) fall back to
+        // exactly the original whole-section hash check below, unchanged.
+        let use_frame_hashes = !section.frame_hashes.is_empty();
+        let frame_hashes = &section.frame_hashes;
+        let name_owned = name.to_string();
+
         // Decode straight into this frame's slice of the final buffer, in
         // parallel across frames - NOT into an intermediate Vec<Vec<u8>>
         // first. Holding every frame's decoded bytes alongside the final
@@ -501,7 +627,23 @@ impl Decoder {
             .for_each(|(i, chunk)| {
                 let frame_path = dir.join(format!("frame_{:05}.png", start_frame + i));
                 match read_frame_data(&frame_path) {
-                    Ok(frame_data) => chunk.copy_from_slice(&frame_data[..chunk.len()]),
+                    Ok(frame_data) => {
+                        chunk.copy_from_slice(&frame_data[..chunk.len()]);
+                        if use_frame_hashes {
+                            let mut frame_hasher = Sha256::new();
+                            frame_hasher.update(&*chunk);
+                            let got = hex::encode(frame_hasher.finalize());
+                            if frame_hashes.get(i).map(|h| h.as_str()) != Some(got.as_str()) {
+                                let mut slot = first_err.lock().unwrap();
+                                if slot.is_none() {
+                                    *slot = Some(Pxc1Error::HashMismatch(format!(
+                                        "section '{}' frame {} (index {} of frame_hashes): got {}",
+                                        name_owned, start_frame + i, i, got
+                                    )));
+                                }
+                            }
+                        }
+                    }
                     Err(e) => {
                         let mut slot = first_err.lock().unwrap();
                         if slot.is_none() {
@@ -514,7 +656,13 @@ impl Decoder {
             return Err(e);
         }
 
-        // Verify SHA-256
+        if use_frame_hashes {
+            // Already verified per-frame above; section.sha256 is not
+            // required to be current for an accelerated section (§6a).
+            return Ok(data);
+        }
+
+        // Legacy path: whole-section hash (unaccelerated container).
         let mut hasher = Sha256::new();
         hasher.update(&data);
         let sha256 = hex::encode(hasher.finalize());
@@ -580,6 +728,7 @@ mod tests {
             start_frame: 1,
             byte_length: rootfs_data.len(),
             sha256: rootfs_hash,
+            ..Default::default()
         }];
 
         // Write header
@@ -616,6 +765,7 @@ mod tests {
                 start_frame: 1,
                 byte_length: data.len(),
                 sha256: hash,
+                ..Default::default()
             }])
             .unwrap();
         encoder.write_section("big", &data).unwrap();
@@ -635,7 +785,7 @@ mod tests {
         assert_eq!(slice, data[start..start + len]);
 
         // Streamed hash matches the section's recorded SHA-256.
-        let streamed_hash = decoder.hash_section_streaming("big").unwrap();
+        let (streamed_hash, _) = decoder.hash_section_streaming("big").unwrap();
         let decoder2 = Decoder::open(dir).unwrap();
         assert_eq!(streamed_hash, decoder2.header().get_section("big").unwrap().sha256);
     }
@@ -658,6 +808,7 @@ mod tests {
                 start_frame: 1,
                 byte_length: data.len(),
                 sha256: hash,
+                ..Default::default()
             }])
             .unwrap();
         encoder.write_section("s", &data).unwrap();
@@ -687,5 +838,113 @@ mod tests {
         // Wrong format
         header.format = "PXC0".to_string();
         assert!(header.validate().is_err());
+    }
+
+    #[test]
+    fn test_write_frame_breaks_symlink_instead_of_following_it() {
+        // Simulates a zero-copy container fork: child's frame_00001.png is a
+        // symlink into a shared base container. Patching that frame in the
+        // child (as compact_internal() does) must not follow the symlink and
+        // mutate the base's file - it must land on a private file instead.
+        let base_dir = tempfile::tempdir().unwrap();
+        let child_dir = tempfile::tempdir().unwrap();
+
+        let base_encoder = Encoder::new(base_dir.path());
+        let original = vec![0xAAu8; BYTES_PER_FRAME];
+        base_encoder.write_frame(1, &original).unwrap();
+
+        let base_frame_path = base_dir.path().join("frame_00001.png");
+        let child_frame_path = child_dir.path().join("frame_00001.png");
+        std::os::unix::fs::symlink(&base_frame_path, &child_frame_path).unwrap();
+        assert!(fs::symlink_metadata(&child_frame_path).unwrap().file_type().is_symlink());
+
+        // Patch the frame through the child container.
+        let child_encoder = Encoder::new(child_dir.path());
+        let patched = vec![0xBBu8; BYTES_PER_FRAME];
+        child_encoder.write_frame(1, &patched).unwrap();
+
+        // The child's frame path is now a private regular file with the new data...
+        assert!(!fs::symlink_metadata(&child_frame_path).unwrap().file_type().is_symlink());
+        let child_bytes = read_frame_data(&child_frame_path).unwrap();
+        assert_eq!(child_bytes, patched);
+
+        // ...and the shared base file is untouched.
+        let base_bytes = read_frame_data(&base_frame_path).unwrap();
+        assert_eq!(base_bytes, original);
+    }
+
+    #[test]
+    fn test_frame_hashes_accelerated_verify_and_patch() {
+        // Spec §6a: writing a section should auto-populate frame_hashes,
+        // read_section() should verify per-frame using it, patching one
+        // frame via write_frame + update_single_frame_hash should keep
+        // verification passing without touching any other frame, and a
+        // corrupted frame that's NOT reflected in frame_hashes must still
+        // be caught (this isn't a weaker check, just a cheaper one).
+        let test_dir = tempfile::tempdir().unwrap();
+        let dir = test_dir.path();
+
+        let data: Vec<u8> = (0..(BYTES_PER_FRAME * 3 + 555))
+            .map(|i| (i % 253) as u8)
+            .collect();
+        let hash = {
+            let mut hasher = Sha256::new();
+            hasher.update(&data);
+            hex::encode(hasher.finalize())
+        };
+
+        let encoder = Encoder::new(dir);
+        encoder
+            .create(vec![Section {
+                name: "acc".to_string(),
+                start_frame: 1,
+                byte_length: data.len(),
+                sha256: hash,
+                ..Default::default()
+            }])
+            .unwrap();
+        encoder.write_section("acc", &data).unwrap();
+
+        // frame_hashes should now be populated: 4 frames (3 full + 1 partial).
+        let header_json = fs::read_to_string(dir.join("header.json")).unwrap();
+        let header: Header = serde_json::from_str(&header_json).unwrap();
+        let section = header.get_section("acc").unwrap();
+        assert_eq!(section.frame_hashes.len(), 4);
+
+        // Per-frame-verified read succeeds and returns the right bytes.
+        let mut decoder = Decoder::open(dir).unwrap();
+        let read_back = decoder.read_section("acc").unwrap();
+        assert_eq!(read_back, data);
+
+        // Patch frame index 1 (within the section) via the fast path: write
+        // new bytes, hash them in memory, update just that one entry - no
+        // section-wide rehash.
+        let mut patched_frame = vec![0u8; BYTES_PER_FRAME];
+        patched_frame[0..4].copy_from_slice(b"PXC1");
+        let mut fh = Sha256::new();
+        fh.update(&patched_frame);
+        let new_frame_hash = hex::encode(fh.finalize());
+
+        encoder.write_frame(section.start_frame + 1, &patched_frame).unwrap();
+        encoder.update_single_frame_hash("acc", 1, &new_frame_hash).unwrap();
+
+        // header.json's sha256 (whole-section) is now stale - by design,
+        // per §6a - but per-frame verified reads must still succeed and
+        // reflect the patched bytes.
+        let mut decoder2 = Decoder::open(dir).unwrap();
+        let read_back2 = decoder2.read_section("acc").unwrap();
+        assert_eq!(&read_back2[BYTES_PER_FRAME..BYTES_PER_FRAME + 4], b"PXC1");
+
+        // Now corrupt frame index 2's on-disk bytes WITHOUT updating its
+        // recorded frame_hashes entry - this must be caught as a mismatch,
+        // proving the accelerated path is still a real integrity check.
+        let mut corrupted = vec![9u8; BYTES_PER_FRAME];
+        corrupted[0] = 1; // different from whatever was there
+        encoder.write_frame(section.start_frame + 2, &corrupted).unwrap();
+        // (deliberately NOT calling update_single_frame_hash for this one)
+
+        let mut decoder3 = Decoder::open(dir).unwrap();
+        let result = decoder3.read_section("acc");
+        assert!(matches!(result, Err(Pxc1Error::HashMismatch(_))));
     }
 }
