@@ -42,6 +42,7 @@ EOF
     chmod +x install_pkgs.sh
 
     virt-customize -a "$DESKTOP_RAW" \
+        --run-command 'grub-install /dev/sda && update-grub' \
         --firstboot install_pkgs.sh
 
     echo "Booting image in QEMU to run package installation..."
