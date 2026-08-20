@@ -45,7 +45,7 @@ EOF
         --firstboot install_pkgs.sh
 
     echo "Booting image in QEMU to run package installation..."
-    qemu-system-x86_64 -m 4096 -enable-kvm -cpu host -nographic -serial stdio -no-reboot -drive file="$DESKTOP_RAW",format=raw,if=virtio -netdev user,id=n1 -device virtio-net-pci,netdev=n1
+    qemu-system-x86_64 -m 4096 -enable-kvm -cpu host -nographic -no-reboot -drive file="$DESKTOP_RAW",format=raw,if=virtio -netdev user,id=n1 -device virtio-net-pci,netdev=n1
         
     echo "Installing v2 pixel backend..."
     if [ -f "$V2_BACKEND" ]; then
