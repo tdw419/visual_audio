@@ -31,7 +31,6 @@ if [ ! -f "$DESKTOP_RAW" ]; then
     echo "Installing ubuntu-desktop-minimal and self-hosting tools (This will take 15-25 minutes)..."
     cat << 'EOF' > install_pkgs.sh
 #!/bin/bash
-exec > /dev/console 2>&1
 export DEBIAN_FRONTEND=noninteractive
 while ! ip route show | grep -q default; do sleep 1; done
 apt-get update
@@ -41,8 +40,20 @@ poweroff
 EOF
     chmod +x install_pkgs.sh
 
+    cat << 'EOF' > 99-qemu-net.yaml
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    id0:
+      match:
+        name: "e*"
+      dhcp4: true
+EOF
+
     virt-customize -a "$DESKTOP_RAW" \
         --run-command 'grub-install /dev/sda && update-grub' \
+        --copy-in 99-qemu-net.yaml:/etc/netplan/ \
         --firstboot install_pkgs.sh
 
     echo "Booting image in QEMU to run package installation..."
