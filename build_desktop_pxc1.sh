@@ -29,18 +29,23 @@ if [ ! -f "$DESKTOP_RAW" ]; then
     virt-resize --expand /dev/sda1 "$SOURCE_RAW" "$DESKTOP_RAW"
     
     echo "Installing ubuntu-desktop-minimal and self-hosting tools (This will take 15-25 minutes)..."
+    cat << 'EOF' > install_pkgs.sh
+#!/bin/bash
+exec > /dev/console 2>&1
+export DEBIAN_FRONTEND=noninteractive
+while ! ip route show | grep -q default; do sleep 1; done
+apt-get update
+apt-get install -y ubuntu-desktop-minimal qemu-system-x86 qemu-utils bridge-utils curl libvulkan1 openssh-server
+apt-get clean
+poweroff
+EOF
+    chmod +x install_pkgs.sh
+
     virt-customize -a "$DESKTOP_RAW" \
-        --memsize 4096 \
-        --network \
-        --run-command 'mkdir -p /run/systemd/resolve && echo "nameserver 10.0.2.3" > /run/systemd/resolve/stub-resolv.conf && rm -f /etc/resolv.conf && ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf' \
-        --run-command 'find /etc/apt -type f -exec sed -i "s/archive.ubuntu.com/91.189.91.83/g" {} +' \
-        --run-command 'find /etc/apt -type f -exec sed -i "s/security.ubuntu.com/91.189.91.83/g" {} +' \
-        --run-command 'find /etc/apt -type f -exec sed -i "s/ports.ubuntu.com/91.189.91.83/g" {} +' \
-        --run-command 'while ! ip route show | grep -q default; do sleep 1; done' \
-        --run-command 'apt-get update' \
-        --run-command 'DEBIAN_FRONTEND=noninteractive apt-get install -y ubuntu-desktop-minimal qemu-system-x86 qemu-utils bridge-utils curl libvulkan1 openssh-server' \
-        --run-command 'find /etc/apt -type f -exec sed -i "s/91.189.91.83/archive.ubuntu.com/g" {} +' \
-        --run-command 'apt-get clean'
+        --firstboot install_pkgs.sh
+
+    echo "Booting image in QEMU to run package installation..."
+    qemu-system-x86_64 -m 4096 -enable-kvm -cpu host -nographic -serial stdio -no-reboot -drive file="$DESKTOP_RAW",format=raw,if=virtio -netdev user,id=n1 -device virtio-net-pci,netdev=n1
         
     echo "Installing v2 pixel backend..."
     if [ -f "$V2_BACKEND" ]; then
