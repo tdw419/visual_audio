@@ -3,7 +3,7 @@
 set -e
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONTAINER_DIR="$PROJECT_ROOT/ubuntu_desktop_pxc1_v1"
+CONTAINER_DIR="$PROJECT_ROOT/ubuntu_desktop_pxc1_v3_selfhost"
 BACKEND="$PROJECT_ROOT/systems/virtio_pixel_rs/target/release/virtio_pixel_backend"
 SOCKET="/tmp/virtio-pixel-interactive.sock"
 LOG_DIR="$PROJECT_ROOT/logs"
