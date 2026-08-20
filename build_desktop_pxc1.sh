@@ -110,11 +110,38 @@ TimeoutStartSec=5sec
     echo "✓ Network timeout configured for nested boot (5s instead of indefinite)"
     
     echo "Setting up SSH access for nested VMs..."
-    # Ensure SSH is configured and running
+    # Create the jericho user documented in the README (this is a cloud image;
+    # it provisions accounts via cloud-init, not a baked-in user, so it doesn't
+    # exist otherwise).
     virt-customize -a "$DESKTOP_RAW" \
-        --run-command 'systemctl enable ssh.service' \
-        --run-command 'systemctl start ssh.service'
-    echo "✓ SSH service configured"
+        --run-command 'id -u jericho >/dev/null 2>&1 || useradd -m -s /bin/bash -G sudo jericho' \
+        --password 'jericho:password:israel'
+    echo "✓ jericho user created (password: israel)"
+
+    # Ubuntu cloud images ship /etc/ssh/sshd_config.d/60-cloudimg-settings.conf
+    # with "PasswordAuthentication no". sshd applies FIRST-MATCH-WINS for this
+    # directive, and that file is pulled in by an Include near the top of
+    # sshd_config - so editing/appending to sshd_config itself (or dropping in
+    # a later-sorting file under sshd_config.d/) has no effect, it's always
+    # overridden by the earlier cloudimg drop-in. Edit that file directly.
+    virt-customize -a "$DESKTOP_RAW" \
+        --run-command 'sed -i "s/^PasswordAuthentication no/PasswordAuthentication yes/" /etc/ssh/sshd_config.d/60-cloudimg-settings.conf'
+    echo "✓ PasswordAuthentication enabled (patched the cloudimg drop-in directly, not sshd_config)"
+
+    # SSH host keys must be generated on FIRST BOOT, not in the virt-customize
+    # chroot (no working entropy/init context there for ssh-keygen -A to
+    # produce keys that persist correctly).
+    cat << 'EOF' > setup_ssh.sh
+#!/bin/bash
+ssh-keygen -A
+systemctl enable ssh.service
+EOF
+    chmod +x setup_ssh.sh
+    virt-customize -a "$DESKTOP_RAW" \
+        --firstboot setup_ssh.sh \
+        --run-command 'systemctl disable ssh.service'  # Disable during build, enable on firstboot
+    rm -f setup_ssh.sh
+    echo "✓ SSH firstboot script configured (host keys generated + service enabled on first boot)"
     
     echo "Creating self-hosting user instructions..."
     cat <<'EOF' > /tmp/selfhost_readme.txt
