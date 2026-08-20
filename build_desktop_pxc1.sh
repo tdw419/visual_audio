@@ -32,10 +32,14 @@ if [ ! -f "$DESKTOP_RAW" ]; then
     cat << 'EOF' > install_pkgs.sh
 #!/bin/bash
 export DEBIAN_FRONTEND=noninteractive
+echo '#!/bin/sh' > /usr/sbin/policy-rc.d
+echo 'exit 101' >> /usr/sbin/policy-rc.d
+chmod +x /usr/sbin/policy-rc.d
 while ! ip route show | grep -q default; do sleep 1; done
 apt-get update
 apt-get install -y ubuntu-desktop-minimal qemu-system-x86 qemu-utils bridge-utils curl libvulkan1 openssh-server
 apt-get clean
+rm -f /usr/sbin/policy-rc.d
 poweroff
 EOF
     chmod +x install_pkgs.sh
@@ -163,7 +167,7 @@ echo "=== 1b. Verifying $DESKTOP_RAW actually boots to GRUB before encoding ==="
 BOOT_CHECK_LOG="$(mktemp)"
 timeout 20 qemu-system-x86_64 -m 1G -enable-kvm \
     -drive file="$DESKTOP_RAW",format=raw,if=virtio \
-    -nographic -serial "file:$BOOT_CHECK_LOG" -no-reboot >/dev/null 2>&1 || true
+    -display none -serial "file:$BOOT_CHECK_LOG" -no-reboot >/dev/null 2>&1 || true
 if grep -q "grub rescue" "$BOOT_CHECK_LOG" || ! grep -qiE "grub|linux|vmlinuz|loading" "$BOOT_CHECK_LOG"; then
     echo "ERROR: $DESKTOP_RAW does not boot cleanly (grub rescue or no boot output detected)." >&2
     echo "--- boot check serial log ---" >&2
