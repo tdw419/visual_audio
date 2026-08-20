@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build a 15GB Ubuntu Desktop Image and encode it into PXC1 Hilbert pixels
+# Build a 15GB Ubuntu Desktop Image with Self-Hosting Capability and encode it into PXC1 Hilbert pixels
 
 set -e
 
@@ -13,7 +13,12 @@ INITRAMFS="initramfs-cognitive/output/initramfs-cognitive.gz"
 GGUF="$HOME/.cache/visual_audio/cognitive/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
 OUTPUT_DIR="ubuntu_desktop_pxc1_v1"
 
-echo "=== 1. Preparing 15GB Desktop Image ==="
+# Self-Hosting Components
+V2_BACKEND="systems/virtio_pixel_rs_v2/target/release/virtio_pixel_backend_v2"
+SELFHOST_LAUNCHER="tools/pixel_self_host_nested_vm.sh"
+FORK_TOOL="tools/pixel_fork_container.sh"
+
+echo "=== 1. Preparing 15GB Desktop Image with Self-Hosting ==="
 if [ ! -f "$DESKTOP_RAW" ]; then
     echo "Creating 15G raw disk..."
     qemu-img create -f raw "$DESKTOP_RAW" 15G
@@ -23,15 +28,117 @@ if [ ! -f "$DESKTOP_RAW" ]; then
     # Use virt-resize to copy and expand the filesystem natively
     virt-resize --expand /dev/sda1 "$SOURCE_RAW" "$DESKTOP_RAW"
     
-    echo "Installing ubuntu-desktop-minimal via libguestfs (This will take 10-20 minutes)..."
+    echo "Installing ubuntu-desktop-minimal and self-hosting tools (This will take 15-25 minutes)..."
     virt-customize -a "$DESKTOP_RAW" \
         --memsize 4096 \
         --network \
         --run-command 'apt-get update' \
-        --run-command 'DEBIAN_FRONTEND=noninteractive apt-get install -y ubuntu-desktop-minimal' \
+        --run-command 'DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            ubuntu-desktop-minimal \
+            qemu-system-x86 \
+            qemu-utils \
+            bridge-utils \
+            curl \
+            libvulkan1 \
+            openssh-server' \
         --run-command 'apt-get clean'
+        
+    echo "Installing v2 pixel backend..."
+    if [ -f "$V2_BACKEND" ]; then
+        virt-customize -a "$DESKTOP_RAW" \
+            --copy-in "$V2_BACKEND:/usr/local/bin/" \
+            --chmod 0755:/usr/local/bin/virtio_pixel_backend_v2
+        echo "✓ v2 backend installed"
+    else
+        echo "⚠ v2 backend not found at $V2_BACKEND - will need to be installed manually in guest"
+    fi
+    
+    echo "Installing self-hosting launchers..."
+    if [ -f "$SELFHOST_LAUNCHER" ]; then
+        virt-customize -a "$DESKTOP_RAW" \
+            --copy-in "$SELFHOST_LAUNCHER:/usr/local/bin/" \
+            --chmod 0755:/usr/local/bin/pixel_self_host_nested_vm.sh
+        echo "✓ Self-host launcher installed"
+    else
+        echo "⚠ Self-host launcher not found at $SELFHOST_LAUNCHER"
+    fi
+    
+    if [ -f "$FORK_TOOL" ]; then
+        virt-customize -a "$DESKTOP_RAW" \
+            --copy-in "$FORK_TOOL:/usr/local/bin/" \
+            --chmod 0755:/usr/local/bin/pixel_fork_container.sh
+        echo "✓ Container fork tool installed"
+    else
+        echo "⚠ Container fork tool not found at $FORK_TOOL"
+    fi
+    
+    echo "Setting up self-hosting infrastructure..."
+    virt-customize -a "$DESKTOP_RAW" \
+        --run-command 'mkdir -p /var/lib/pixel_containers' \
+        --run-command 'chmod 777 /var/lib/pixel_containers' \
+        --run-command 'chown root:root /var/lib/pixel_containers'
+    echo "✓ Container storage directory created"
+    
+    echo "Configuring systemd for nested boot optimization..."
+    # Add timeout for network-wait-online (but don't mask it - needed for normal desktop operation)
+    virt-customize -a "$DESKTOP_RAW" \
+        --run-command 'mkdir -p /etc/systemd/system/systemd-networkd-wait-online.service.d/' \
+        --write '/etc/systemd/system/systemd-networkd-wait-online.service.d/timeout.conf:[Service]
+TimeoutStartSec=5sec
+' \
+        --run-command 'systemctl daemon-reload'
+    echo "✓ Network timeout configured for nested boot (5s instead of indefinite)"
+    
+    echo "Setting up SSH access for nested VMs..."
+    # Ensure SSH is configured and running
+    virt-customize -a "$DESKTOP_RAW" \
+        --run-command 'systemctl enable ssh.service' \
+        --run-command 'systemctl start ssh.service'
+    echo "✓ SSH service configured"
+    
+    echo "Creating self-hosting user instructions..."
+    cat <<'EOF' > /tmp/selfhost_readme.txt
+Pixel Self-Hosting Instructions
+================================
+
+This Ubuntu Desktop VM is equipped with pixel self-hosting capability.
+
+Quick Start:
+-----------
+1. Fork a container: sudo /usr/local/bin/pixel_fork_container.sh /path/to/source /var/lib/pixel_containers/nested_vm
+2. Boot nested VM: sudo /usr/local/bin/pixel_self_host_nested_vm.sh --container /var/lib/pixel_containers/nested_vm
+3. Access nested VM: ssh -p 2224 jericho@127.0.0.1 (password: israel)
+
+Requirements:
+-----------
+- v2 backend: /usr/local/bin/virtio_pixel_backend_v2
+- QEMU: qemu-system-x86_64 (pre-installed)
+- Launcher: /usr/local/bin/pixel_self_host_nested_vm.sh
+- Container storage: /var/lib/pixel_containers
+
+Container Management:
+--------------------
+- Fork containers instantly: sudo /usr/local/bin/pixel_fork_container.sh <source> <dest>
+- Check container health: ls -la /var/lib/pixel_containers/
+- Monitor nested VMs: sudo /usr/local/bin/pixel_self_host_nested_vm.sh --container <dir>
+
+Performance Notes:
+------------------
+- Nested VMs should use 1.5-2G RAM minimum
+- Each nesting level adds ~20-30% overhead
+- Network timeout is set to 5s for faster nested boots
+
+For more information, see: /usr/local/share/doc/pixel-self-hosting/
+EOF
+    virt-customize -a "$DESKTOP_RAW" \
+        --copy-in /tmp/selfhost_readme.txt:/usr/local/share/doc/pixel-self-hosting/README.txt
+    echo "✓ Self-hosting documentation installed"
+    
+    rm -f /tmp/selfhost_readme.txt
+    
 else
     echo "Found existing $DESKTOP_RAW, skipping generation."
+    echo "To rebuild with self-hosting components, delete this file and re-run."
 fi
 
 echo ""
@@ -52,4 +159,19 @@ tools/pxc1/target/release/pxc1-encode \
 echo ""
 echo "=== Desktop PXC1 encoding complete! ==="
 echo "Container ready at: $OUTPUT_DIR/"
+echo ""
+echo "Self-Hosting Golden Image Features:"
+echo "  ✓ v2 backend: /usr/local/bin/virtio_pixel_backend_v2"
+echo "  ✓ QEMU hypervisor: qemu-system-x86_64"
+echo "  ✓ Self-host launcher: /usr/local/bin/pixel_self_host_nested_vm.sh"
+echo "  ✓ Zero-copy forking: /usr/local/bin/pixel_fork_container.sh"
+echo "  ✓ Container storage: /var/lib/pixel_containers"
+echo "  ✓ Network optimization: 5s timeout for nested boots"
+echo "  ✓ Documentation: /usr/local/share/doc/pixel-self-hosting/"
+echo ""
+echo "Usage:"
+echo "  1. Boot golden image: ./pixel_ubuntu.sh (or pixel_ubuntu_v2.sh)"
+echo "  2. Inside VM: Fork a container and launch nested VM"
+echo "  3. Or use the pre-installed launchers directly"
+echo ""
 echo "Update interactive_ubuntu_pixel.sh to point CONTAINER_DIR to $OUTPUT_DIR to boot it."
