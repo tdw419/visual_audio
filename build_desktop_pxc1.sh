@@ -11,7 +11,7 @@ SOURCE_RAW="ubuntu-24.04-server-cloudimg-amd64.raw"
 DESKTOP_RAW="ubuntu-desktop-15g.raw"
 INITRAMFS="initramfs-cognitive/output/initramfs-cognitive.gz"
 GGUF="$HOME/.cache/visual_audio/cognitive/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
-OUTPUT_DIR="ubuntu_desktop_pxc1_v1"
+OUTPUT_DIR="ubuntu_desktop_pxc1_v3_selfhost"
 
 # Self-Hosting Components
 V2_BACKEND="systems/virtio_pixel_rs_v2/target/release/virtio_pixel_backend_v2"
@@ -32,15 +32,9 @@ if [ ! -f "$DESKTOP_RAW" ]; then
     virt-customize -a "$DESKTOP_RAW" \
         --memsize 4096 \
         --network \
+        --run-command 'mkdir -p /run/systemd/resolve && echo "nameserver 10.0.2.3" > /run/systemd/resolve/stub-resolv.conf && rm -f /etc/resolv.conf && ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf' \
         --run-command 'apt-get update' \
-        --run-command 'DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            ubuntu-desktop-minimal \
-            qemu-system-x86 \
-            qemu-utils \
-            bridge-utils \
-            curl \
-            libvulkan1 \
-            openssh-server' \
+        --run-command 'for i in 1 2 3 4 5; do DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=10 install -y ubuntu-desktop-minimal qemu-system-x86 qemu-utils bridge-utils curl libvulkan1 openssh-server && break || sleep 5; done' \
         --run-command 'apt-get clean'
         
     echo "Installing v2 pixel backend..."
@@ -131,7 +125,8 @@ Performance Notes:
 For more information, see: /usr/local/share/doc/pixel-self-hosting/
 EOF
     virt-customize -a "$DESKTOP_RAW" \
-        --copy-in /tmp/selfhost_readme.txt:/usr/local/share/doc/pixel-self-hosting/README.txt
+        --run-command 'mkdir -p /usr/local/share/doc/pixel-self-hosting/' \
+        --upload /tmp/selfhost_readme.txt:/usr/local/share/doc/pixel-self-hosting/README.txt
     echo "✓ Self-hosting documentation installed"
     
     rm -f /tmp/selfhost_readme.txt
