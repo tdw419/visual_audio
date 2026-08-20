@@ -33,8 +33,13 @@ if [ ! -f "$DESKTOP_RAW" ]; then
         --memsize 4096 \
         --network \
         --run-command 'mkdir -p /run/systemd/resolve && echo "nameserver 10.0.2.3" > /run/systemd/resolve/stub-resolv.conf && rm -f /etc/resolv.conf && ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf' \
+        --run-command 'find /etc/apt -type f -exec sed -i "s/archive.ubuntu.com/91.189.91.83/g" {} +' \
+        --run-command 'find /etc/apt -type f -exec sed -i "s/security.ubuntu.com/91.189.91.83/g" {} +' \
+        --run-command 'find /etc/apt -type f -exec sed -i "s/ports.ubuntu.com/91.189.91.83/g" {} +' \
+        --run-command 'while ! ip route show | grep -q default; do sleep 1; done' \
         --run-command 'apt-get update' \
-        --run-command 'for i in 1 2 3 4 5; do DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=10 install -y ubuntu-desktop-minimal qemu-system-x86 qemu-utils bridge-utils curl libvulkan1 openssh-server && break || sleep 5; done' \
+        --run-command 'DEBIAN_FRONTEND=noninteractive apt-get install -y ubuntu-desktop-minimal qemu-system-x86 qemu-utils bridge-utils curl libvulkan1 openssh-server' \
+        --run-command 'find /etc/apt -type f -exec sed -i "s/91.189.91.83/archive.ubuntu.com/g" {} +' \
         --run-command 'apt-get clean'
         
     echo "Installing v2 pixel backend..."
@@ -135,6 +140,22 @@ else
     echo "Found existing $DESKTOP_RAW, skipping generation."
     echo "To rebuild with self-hosting components, delete this file and re-run."
 fi
+
+echo ""
+echo "=== 1b. Verifying $DESKTOP_RAW actually boots to GRUB before encoding ==="
+BOOT_CHECK_LOG="$(mktemp)"
+timeout 20 qemu-system-x86_64 -m 1G -enable-kvm \
+    -drive file="$DESKTOP_RAW",format=raw,if=virtio \
+    -nographic -serial "file:$BOOT_CHECK_LOG" -no-reboot >/dev/null 2>&1 || true
+if grep -q "grub rescue" "$BOOT_CHECK_LOG" || ! grep -qiE "grub|linux|vmlinuz|loading" "$BOOT_CHECK_LOG"; then
+    echo "ERROR: $DESKTOP_RAW does not boot cleanly (grub rescue or no boot output detected)." >&2
+    echo "--- boot check serial log ---" >&2
+    cat "$BOOT_CHECK_LOG" >&2
+    rm -f "$BOOT_CHECK_LOG"
+    exit 1
+fi
+echo "✓ Boot check passed (GRUB/kernel output detected)"
+rm -f "$BOOT_CHECK_LOG"
 
 echo ""
 echo "=== 2. Compiling PXC1 Encoder ==="
