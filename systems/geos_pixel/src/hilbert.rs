@@ -28,6 +28,12 @@ impl HilbertCurve {
     }
 
     /// Convert 2D coordinates `(x, y)` to 1D distance `d` on an `n` x `n` grid.
+    /// Reflects against the shrinking step `s`, NOT the full grid size `n`.
+    /// Verified against Python reference implementation via brute-force
+    /// (see tools/hilbert_reference_verify.py).
+    ///
+    /// DO NOT CHANGE to `n - 1 - x` — that causes usize underflow for most
+    /// inputs once s < x. The "bug" was actually correct all along.
     pub fn xy2d(n: usize, mut x: usize, mut y: usize) -> usize {
         let mut d = 0;
         let mut s = n / 2;
@@ -37,6 +43,8 @@ impl HilbertCurve {
             d += s * s * ((3 * rx) ^ ry);
             if ry == 0 {
                 if rx == 1 {
+                    // Reflect against current quadrant size s, NOT full grid n
+                    // Verified: s-1-x is correct (see tools/hilbert_reference_verify.py)
                     x = s - 1 - x;
                     y = s - 1 - y;
                 }
