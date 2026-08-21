@@ -544,7 +544,20 @@ impl VirtioPixelServer {
             18 => (self.handle_set_vring_enable(&payload)?, vec![]),
             24 => {
                 let capacity = { self.extractor.lock().unwrap().decoded_size / 512 };
-                let config_space = capacity.to_le_bytes(); // 8 bytes (le64 capacity)
+
+                // struct virtio_blk_config (virtio v1.1 §5.2.4) - previously
+                // this only filled in capacity (bytes 0-7) and zero-padded
+                // everything past it, which zeroed both blk_size (offset 20,
+                // even though we advertise VIRTIO_BLK_F_BLK_SIZE) and the
+                // writeback/wce byte (offset 32, paired with the
+                // VIRTIO_BLK_F_CONFIG_WCE feature bit below) - a zeroed wce
+                // reads as "write-through" to the guest regardless of
+                // VIRTIO_BLK_F_FLUSH, which is exactly the mismatch that let
+                // ext4 trust unfsync'd writes as durable.
+                let mut config_space = [0u8; 60];
+                config_space[0..8].copy_from_slice(&capacity.to_le_bytes());
+                config_space[20..24].copy_from_slice(&512u32.to_le_bytes()); // blk_size
+                config_space[32] = 1; // writeback = 1 (write-back cache, matches VIRTIO_BLK_F_CONFIG_WCE)
 
                 let config_offset = u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]) as usize;
                 let config_size = u32::from_le_bytes([payload[4], payload[5], payload[6], payload[7]]) as usize;
@@ -561,7 +574,8 @@ impl VirtioPixelServer {
                     if src_idx < config_space.len() && (12 + i) < reply.len() {
                         reply[12 + i] = config_space[src_idx];
                     } else if (12 + i) < reply.len() {
-                        // Pad with zeros for unimplemented config fields (size_max, seg_max, blk_size, etc.)
+                        // Pad with zeros for fields past what we model above
+                        // (seg_max, geometry, topology, num_queues, discard/write-zeroes limits)
                         reply[12 + i] = 0;
                     }
                 }
@@ -629,23 +643,38 @@ impl VirtioPixelServer {
         // to be set, otherwise it never calls GET_PROTOCOL_FEATURES and
         // the negotiation stalls before SET_MEM_TABLE and GET_CONFIG.
         //
-        // VirtIO Block features (bits 32+):
-        //   - Bit 32: VIRTIO_F_VERSION_1
-        //   - Bit  6: VIRTIO_BLK_F_BLK_SIZE (block size is configurable)
-        //   - Bit 11: VIRTIO_BLK_F_RO (read-only, disabled for RW mount)
-        //   - Bit 32 is actually VIRTIO_F_VERSION_1 in VirtIO 1.0 spec
+        // VirtIO Block device feature bits are RAW bit numbers in the same
+        // 64-bit space as the transport bits below - there is no "+32 for
+        // device features" convention (a previous version of this comment
+        // claimed one, and it was wrong: it meant VIRTIO_BLK_F_FLUSH/BLK_SIZE/
+        // CONFIG_WCE were being advertised at bits 41/38/43, which don't mean
+        // anything to the guest driver, so it silently never negotiated them -
+        // confirmed live via SET_FEATURES logging: the guest echoed back only
+        // 0x140000000 (VIRTIO_F_VERSION_1 alone) no matter what we sent at
+        // those wrong bit positions). Per include/uapi/linux/virtio_blk.h:
+        //   - Bit  6: VIRTIO_BLK_F_BLK_SIZE
+        //   - Bit  9: VIRTIO_BLK_F_FLUSH
+        //   - Bit 11: VIRTIO_BLK_F_CONFIG_WCE
+        // VIRTIO_F_VERSION_1 (bit 32) is correctly a transport-level bit, not
+        // a device feature, which is why it was the only one ever negotiated.
         //
-        // Response format: 0x0000000140000040
-        // - Upper bits (32+): VirtIO device features
-        //   - Bit 32: VIRTIO_F_VERSION_1
-        //   - Bit 38 (6 in device features): VIRTIO_BLK_F_BLK_SIZE
-        // - Lower bits (0-31): vhost features
-        //   - Bit 26: VHOST_F_LOG_ALL (migration support)
-        //   - Bit 30: VHOST_USER_F_PROTOCOL_FEATURES (required by QEMU 8.2.2)
-        let features = (1u64 << 26) | (1u64 << 30) | (1u64 << 32) | (1u64 << 38);
+        // VIRTIO_BLK_F_FLUSH being unreachable meant the guest's virtio_blk
+        // driver assumed the device has no write-back cache and never issued
+        // a flush/FUA request at all (confirmed live - an explicit in-guest
+        // `sync` produced zero VIRTIO_BLK_T_FLUSH calls to this backend
+        // before this fix, and /sys/class/block/vda/queue/write_cache read
+        // "write through"). That means ext4's journal commit protocol was
+        // trusting every write as durable the instant it's acked, which the
+        // COW journal never actually guaranteed (writes only reach the OS
+        // page cache without fsync) - a silent gap in exactly the durability
+        // contract a block device must uphold, independent of whatever
+        // handle_request's FLUSH branch does once it's actually reachable.
+        let features = (1u64 << 26) | (1u64 << 30) | (1u64 << 32) | (1u64 << 6) | (1u64 << 9) | (1u64 << 11);
         info!("GET_FEATURES returning: 0x{:016x}", features);
         info!("  - VIRTIO_F_VERSION_1 (bit 32) enabled");
-        info!("  - VIRTIO_BLK_F_BLK_SIZE (bit 38/6) enabled");
+        info!("  - VIRTIO_BLK_F_BLK_SIZE (bit 6) enabled");
+        info!("  - VIRTIO_BLK_F_FLUSH (bit 9) enabled");
+        info!("  - VIRTIO_BLK_F_CONFIG_WCE (bit 11) enabled - config.writeback=1 makes the write-back cache mode explicit");
         info!("  - VHOST_F_LOG_ALL (bit 26) for migration support");
         info!("  - VHOST_USER_F_PROTOCOL_FEATURES (bit 30) - REQUIRED for QEMU 8.2.2");
         Ok(features.to_le_bytes().to_vec())
@@ -654,6 +683,12 @@ impl VirtioPixelServer {
     fn handle_set_features(&mut self, payload: &[u8]) -> Result<Vec<u8>> {
         if payload.len() >= 8 {
             let features = u64::from_le_bytes(payload[0..8].try_into().unwrap());
+            info!(
+                "SET_FEATURES: 0x{:016x} (FLUSH={}, CONFIG_WCE={})",
+                features,
+                (features & (1 << 9)) != 0,
+                (features & (1 << 11)) != 0
+            );
             let log_all = (features & (1 << 26)) != 0;
             self.guest_memory.set_logging_enabled(log_all);
             if log_all {
@@ -1117,6 +1152,17 @@ impl VirtioPixelServer {
         if !self.queues[queue_idx].ready {
             return Ok(()); // Queue not ready yet
         }
+        // SET_VRING_ENABLE can arrive for a queue the guest never actually
+        // configured with SET_VRING_ADDR (e.g. unused multi-queue slots
+        // beyond the one the guest driver actually negotiated). Polling one
+        // of those means reading avail_idx from GPA avail+2 == 0x2, which
+        // isn't a real mapped region and spams "UVA out of range" forever.
+        // ready=true alone isn't enough signal - require a real vring addr.
+        // (`avail`, set by SET_VRING_ADDR - NOT the vestigial `avail_addr`
+        // field, which nothing in this file ever assigns.)
+        if self.queues[queue_idx].avail == 0 {
+            return Ok(()); // Enabled but never given a vring address
+        }
 
         let avail_idx = self.read_avail_idx(queue_idx)?;
         let last_avail = self.queues[queue_idx].last_avail_idx;
@@ -1145,7 +1191,7 @@ impl VirtioPixelServer {
             if let Err(e) = self.handle_virtio_block_request(&descriptors) {
                 error!("Error processing request {}: {}", req_idx, e);
                 // Try to write IOERR status if we have enough descriptors
-                if descriptors.len() >= 3 {
+                if descriptors.len() >= 2 {
                     // Status descriptor is usually the last one
                     let status_desc = descriptors.last().unwrap();
                     if let Err(write_err) = self.guest_memory.write(status_desc.addr, &[VIRTIO_BLK_S_IOERR]) {
@@ -1291,17 +1337,25 @@ impl VirtioPixelServer {
 
     /// Handle VirtIO block request (Header → Data → Status)
     fn handle_virtio_block_request(&mut self, descriptors: &[VirtqDesc]) -> Result<()> {
-        // Expect at least 3 descriptors: Header, Data, Status
-        if descriptors.len() < 3 {
+        // IN/OUT requests are Header, Data, Status (3 descriptors). FLUSH
+        // requests per the virtio-blk spec carry no data segment at all -
+        // just Header, Status (2 descriptors). Treating that as malformed
+        // and erroring out before ever calling handle_flush() meant FLUSH
+        // never got acked, which the guest filesystem can only interpret as
+        // a real disk that lost/hung a barrier write.
+        if descriptors.len() < 2 {
             return Err(anyhow::anyhow!(
-                "Expected 3+ descriptors, got {}",
+                "Expected 2+ descriptors, got {}",
                 descriptors.len()
             ));
         }
 
         let header_desc = &descriptors[0];
-        let data_desc = &descriptors[1];
-        let status_desc = &descriptors[2];
+        let (data_desc, status_desc) = if descriptors.len() >= 3 {
+            (Some(&descriptors[1]), &descriptors[2])
+        } else {
+            (None, &descriptors[1])
+        };
 
         // Read request header
         let header_bytes = self.guest_memory.read(header_desc.addr, header_desc.len as usize)?;
@@ -1330,12 +1384,13 @@ impl VirtioPixelServer {
             "Block request: type={} sector={} data_len={} status_len={}",
             req_type,
             sector,
-            data_desc.len,
+            data_desc.map(|d| d.len).unwrap_or(0),
             status_desc.len
         );
 
         // Handle read request (T_IN=0)
         if req_type == VIRTIO_BLK_T_IN {
+            let data_desc = data_desc.ok_or_else(|| anyhow::anyhow!("VIRTIO_BLK_T_IN missing data descriptor"))?;
             let offset = sector * 512;
             let length = data_desc.len as u32;
 
@@ -1391,6 +1446,7 @@ impl VirtioPixelServer {
         } else if req_type == VIRTIO_BLK_T_OUT {
             // Writes land in an in-memory sector overlay, not the source MKV -
             // re-encoding video frames on every write is a much bigger project.
+            let data_desc = data_desc.ok_or_else(|| anyhow::anyhow!("VIRTIO_BLK_T_OUT missing data descriptor"))?;
             let offset = sector * 512;
             let write_data = self.guest_memory.read(data_desc.addr, data_desc.len as usize)?;
 
@@ -1400,6 +1456,16 @@ impl VirtioPixelServer {
                 "  Wrote {} bytes to overlay at offset 0x{:x} (sector {})",
                 write_data.len(), offset, sector
             );
+        } else if req_type == VIRTIO_BLK_T_FLUSH {
+            // The guest filesystem (e.g. ext4's own journal commit) only
+            // proceeds past a barrier once FLUSH completes - acking this
+            // without an actual fsync means we're lying about durability,
+            // exactly like a disk with a broken write cache. A host-side
+            // kill at the wrong moment then looks like corruption on the
+            // next boot even though every individual write "succeeded".
+            let mut extractor = self.extractor.lock().unwrap();
+            extractor.flush_durable()?;
+            info!("  FLUSH: journal fsync'd");
         }
 
         // Write status OK

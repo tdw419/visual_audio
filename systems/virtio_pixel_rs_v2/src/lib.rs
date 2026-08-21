@@ -337,8 +337,27 @@ impl SpatialMkvExtractor {
                 let codec = journal.choose_codec_with_dedup(&block_data);
                 let _ = journal.write_block(coord, &block_data, codec);
             }
+
+            // fsync once per guest write request, not once per inner 4KB
+            // block above - the durability guarantee (nothing acked as
+            // VIRTIO_BLK_S_OK until it's actually on disk) only needs the
+            // whole request durable by the time this function returns, and
+            // batching to one fsync per request avoids the same guarantee
+            // costing dozens of syscalls for one multi-block write.
+            journal.sync()?;
         }
 
+        Ok(())
+    }
+
+    /// Durably persist all writes issued so far. Must be called - and must
+    /// actually complete - before acking a guest VIRTIO_BLK_T_FLUSH; a no-op
+    /// flush means the guest filesystem's durability assumptions (e.g. its
+    /// own journal commit protocol) are silently violated.
+    pub fn flush_durable(&mut self) -> Result<()> {
+        if let Some(journal) = self.cow_journal.as_mut() {
+            journal.sync()?;
+        }
         Ok(())
     }
 

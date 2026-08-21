@@ -284,12 +284,30 @@ impl CowJournal {
         record.extend_from_slice(&entry.compressed_data);
 
         self.file.write_all(&record)?;
+        // NOT fsync'd here - a single guest write (e.g. 147KB) fans out into
+        // dozens of 4KB write_block calls (see SpatialMkvExtractor::write),
+        // and fsync-per-block serializes every one of them, which measured
+        // as a multi-minute stall on a single in-guest `sync` under real
+        // load. The caller fsyncs once per guest request instead (see
+        // SpatialMkvExtractor::write's call to cow_journal.sync() after the
+        // loop) - same durability guarantee (nothing is acked to the guest
+        // as VIRTIO_BLK_S_OK until it's on disk), at a sane syscall cost.
         Ok(())
     }
 
     /// Flush journal buffer to disk OS buffer
     pub fn flush(&mut self) -> Result<()> {
         self.file.flush()?;
+        Ok(())
+    }
+
+    /// Durably persist all journal writes so far (fsync). write_block() only
+    /// gets bytes as far as the OS page cache - a guest-issued
+    /// VIRTIO_BLK_T_FLUSH must not be acked until this actually returns, or
+    /// the guest filesystem's own journal commits are lying about durability
+    /// (the same failure mode as a real disk with a broken write cache).
+    pub fn sync(&mut self) -> Result<()> {
+        self.file.sync_data()?;
         Ok(())
     }
 
@@ -495,6 +513,34 @@ impl CowJournal {
                 BlockCodec::ZERO_FILL | BlockCodec::DEDUP_REF => {}
             }
 
+            // Verify the record wasn't torn or bit-flipped: the header stores a
+            // CRC32 of the original (decoded) payload computed at write time
+            // (see write_block), but until now nothing checked it back on replay -
+            // a corrupt-but-length-valid record (e.g. a partial write that landed
+            // between two flushed records) would replay straight into guest
+            // sectors. Decode and re-verify before trusting the entry.
+            match self.decode_entry(&entry) {
+                Ok(decoded) => {
+                    let actual_crc32 = crc32fast::hash(&decoded);
+                    if actual_crc32 != entry.crc32 {
+                        log::warn!(
+                            "Journal entry at ({}, {}, {}) seq={} failed CRC32 check (expected {:08x}, got {:08x}) - dropping corrupt entry",
+                            x, y, z, seq, entry.crc32, actual_crc32
+                        );
+                        offset += RECORD_HEADER_SIZE as u64 + compressed_len as u64;
+                        continue;
+                    }
+                }
+                Err(e) => {
+                    log::warn!(
+                        "Journal entry at ({}, {}, {}) seq={} failed to decode ({}) - dropping corrupt entry",
+                        x, y, z, seq, e
+                    );
+                    offset += RECORD_HEADER_SIZE as u64 + compressed_len as u64;
+                    continue;
+                }
+            }
+
             {
                 let mut index = self.in_memory_index.lock().unwrap();
                 index.insert(entry.coord, entry.clone());
@@ -616,6 +662,40 @@ mod tests {
         let base_reader = |_| Ok(None);
         let recovered = journal.read_block(coord, &base_reader).unwrap();
         assert_eq!(recovered.unwrap(), data);
+    }
+
+    #[test]
+    fn test_corrupt_record_dropped_on_replay() {
+        use std::fs::OpenOptions;
+        use std::io::{Seek, SeekFrom, Write};
+
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_path_buf();
+
+        let coord = Coord3D::new(7, 9, 2);
+        let data = b"ABCDEFGHIJ0123456789"; // 20 bytes, non-uniform (not ZERO_FILL-eligible)
+        {
+            let mut journal = CowJournal::open(&path, "test_hash").unwrap();
+            journal.write_block(coord, data, BlockCodec::RAW).unwrap();
+            journal.flush().unwrap();
+        } // drop closes the file
+
+        // Bit-flip the last byte of the payload on disk - same-length, so the
+        // "incomplete record" length check can't catch it, only a CRC check can.
+        {
+            let mut f = OpenOptions::new().write(true).open(&path).unwrap();
+            let end = f.seek(SeekFrom::End(0)).unwrap();
+            f.seek(SeekFrom::Start(end - 1)).unwrap();
+            f.write_all(&[data[data.len() - 1] ^ 0xFF]).unwrap();
+        }
+
+        let reopened = CowJournal::open(&path, "test_hash").unwrap();
+        let base_reader = |_| Ok(None);
+        let recovered = reopened.read_block(coord, &base_reader).unwrap();
+        assert!(
+            recovered.is_none(),
+            "corrupted entry should have been dropped on replay, not silently trusted"
+        );
     }
 
     #[test]
