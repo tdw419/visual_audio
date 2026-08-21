@@ -61,6 +61,7 @@ fi
 
 echo "$DISPLAY_MSG"
 echo "SSH: ssh -p 2222 jericho@127.0.0.1  (password: israel)"
+echo "Monitor: socat - UNIX-CONNECT:/tmp/qemu-monitor.sock"
 echo "To exit QEMU, press Ctrl-A, then press X."
 echo ""
 
@@ -178,6 +179,7 @@ echo "Booting into interactive console with ${NUM_QUEUES} I/O queues..."
 echo ""
 
 # Boot with QEMU natively (SeaBIOS -> GRUB -> Pixel Disk Kernel)
+MONITOR_SOCKET="/tmp/qemu-monitor.sock"
 qemu-system-x86_64 \
     -machine q35,memory-backend=ram \
     -object memory-backend-file,share=on,size=4G,mem-path=/home/jericho/scratch/qemu_shm_v2,id=ram \
@@ -194,4 +196,6 @@ qemu-system-x86_64 \
     -device vhost-user-blk-pci,chardev=blk0,num-queues=${NUM_QUEUES},bootindex=1 \
     -fsdev local,id=zionshare,path=/home/jericho/zion,security_model=mapped-xattr \
     -device virtio-9p-pci,fsdev=zionshare,mount_tag=host_zion \
+    -chardev socket,id=mon0,path="$MONITOR_SOCKET",server=on,wait=off \
+    -mon chardev=mon0,mode=readline \
     -serial stdio
