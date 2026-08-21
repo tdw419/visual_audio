@@ -25,6 +25,12 @@ from typing import Callable, Tuple, Optional, List, Dict
 from dataclasses import dataclass
 from pathlib import Path
 
+sys_path_added = str(Path(__file__).resolve().parent)
+import sys as _sys
+if sys_path_added not in _sys.path:
+    _sys.path.insert(0, sys_path_added)
+from geos_hilbert import hilbert_d2xy_true, hilbert_xy2d_true
+
 
 @dataclass
 class VCCResult:
@@ -40,44 +46,8 @@ class VCCEngineV2:
     """Visual Consistency Contract verification engine v2."""
 
     # VCC Layer 1: Hilbert Curve Invariance
-    @staticmethod
-    def hilbert_d2xy(n: int, d: int) -> Tuple[int, int]:
-        """Hilbert distance d to (x, y) coordinates on n×n grid."""
-        x, y = 0, 0
-        s = 1
-        temp = d
-        while s < n:
-            rx = 1 & (temp // 2)
-            ry = 1 & (temp ^ rx)
-            if ry == 0:
-                if rx == 1:
-                    x = s - 1 - x
-                    y = s - 1 - y
-                x, y = y, x
-            x += s * rx
-            y += s * ry
-            temp = temp // 4
-            s *= 2
-        return x, y
-
-    @staticmethod
-    def hilbert_xy2d(n: int, x: int, y: int) -> int:
-        """Hilbert (x, y) to distance d on n×n grid."""
-        d = 0
-        s = n // 2
-        while s > 0:
-            rx = 1 & (x // s)
-            ry = 1 & (y // s)
-            d += s * s * ((3 * rx) ^ ry)
-            if ry == 0:
-                if rx == 1:
-                    x = s - 1 - x
-                    y = s - 1 - y
-                x, y = y, x
-            x %= s
-            y %= s
-            s //= 2
-        return d
+    hilbert_d2xy = staticmethod(hilbert_d2xy_true)
+    hilbert_xy2d = staticmethod(hilbert_xy2d_true)
 
     @classmethod
     def verify_hilbert_invariance_full(cls, n: int) -> VCCResult:

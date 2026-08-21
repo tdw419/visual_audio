@@ -46,44 +46,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from dense_encoder_video import encode_mkv, decode_mkv
-
-
-# ============================================================================
-# Hilbert Curve Mapping
-# ============================================================================
-
-def hilbert_d2xy(n: int, d: int) -> Tuple[int, int]:
-    """
-    Convert distance d along Hilbert curve to (x, y) coordinates.
-    
-    Args:
-        n: Grid size (must be power of 2)
-        d: Distance along curve (0 to n*n-1)
-    
-    Returns:
-        (x, y) coordinates
-    """
-    x, y = 0, 0
-    s = 1
-    rx = ry = 0
-    
-    while s < n:
-        rx = (d >> 1) & 1
-        ry = (d >> 0) & 1
-        
-        # Rotate/flip
-        if ry == 0:
-            if rx == 1:
-                x = s - 1 - x
-                y = s - 1 - y
-            x, y = y, x
-        
-        x += s * rx
-        y += s * ry
-        d >>= 2
-        s <<= 1
-    
-    return x, y
+from geos_hilbert import hilbert_d2xy_legacy_qemu as hilbert_d2xy
 
 
 _hilbert_cache = {}

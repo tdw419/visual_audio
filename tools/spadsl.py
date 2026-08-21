@@ -45,6 +45,7 @@ from typing import Dict, List, Tuple
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from tools.glyph_isa_v2 import GlyphAssemblerV2, GlyphCPUv2, OpcodeMapV2, INSTR_WIDTH
+from tools.geos_hilbert import hilbert_d2xy_true as hilbert_d2xy, hilbert_xy2d_true as xy2hilbert_d
 
 WIDTH_INSTRS = 8
 WIDTH_PX = WIDTH_INSTRS * INSTR_WIDTH
@@ -58,62 +59,6 @@ REG_ACC = 24
 
 class SpaDSLError(Exception):
     pass
-
-
-def hilbert_d2xy(n: int, d: int) -> Tuple[int, int]:
-    """
-    Convert Hilbert distance d to (x, y) coordinates for n x n grid.
-    
-    Args:
-        n: Size of grid (must be power of 2)
-        d: Hilbert distance (0 to n*n-1)
-    
-    Returns:
-        (x, y) coordinates
-    
-    Based on the classic algorithm from "Hacker's Delight".
-    """
-    x, y = 0, 0
-    s = 1
-    while s < n:
-        rx = 1 & (d // 2)
-        ry = 1 & (d ^ rx)
-        if ry == 0:
-            if rx == 1:
-                x = s - 1 - x
-                y = s - 1 - y
-            x, y = y, x
-        x += s * rx
-        y += s * ry
-        d //= 4
-        s *= 2
-    return x, y
-
-
-def xy2hilbert_d(n: int, x: int, y: int) -> int:
-    """
-    Convert (x, y) coordinates to Hilbert distance for n x n grid.
-    
-    Args:
-        n: Size of grid (must be power of 2)
-        x, y: Coordinates
-    
-    Returns:
-        Hilbert distance (0 to n*n-1)
-    """
-    d = 0
-    s = n // 2
-    while s > 0:
-        rx = 1 if (x & s) > 0 else 0
-        ry = 1 if (y & s) > 0 else 0
-        d += s * s * ((3 * rx) ^ ry)
-        if ry == 0:
-            if rx == 1:
-                x = s - 1 - x
-                y = s - 1 - y
-            x, y = y, x
-        s //= 2
-    return d
 
 
 def linear_index_from_2d(x: int, y: int, width: int, layout: str) -> int:

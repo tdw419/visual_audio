@@ -19,30 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from dense_encoder_video import encode_mkv
-
-
-def hilbert_d2xy(n: int, d: int) -> tuple:
-    """Convert distance d along Hilbert curve to (x, y) coordinates."""
-    x, y = 0, 0
-    s = 1
-    rx = ry = 0
-    
-    while s < n:
-        rx = (d >> 1) & 1
-        ry = (d >> 0) & 1
-        
-        if ry == 0:
-            if rx == 1:
-                x = s - 1 - x
-                y = s - 1 - y
-            x, y = y, x
-        
-        x += s * rx
-        y += s * ry
-        d >>= 2
-        s <<= 1
-    
-    return x, y
+from geos_hilbert import hilbert_d2xy_legacy_qemu as hilbert_d2xy
 
 
 def create_display_layer(width: int, height: int) -> bytes:
