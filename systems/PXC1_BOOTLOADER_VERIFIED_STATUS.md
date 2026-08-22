@@ -1,5 +1,13 @@
 # PXC1 bootloader family — verified status (2026-08-21)
 
+> **GOVERNANCE NOTE (2026-08-21, later same day):** Per an explicit decision
+> between Timothy and another concurrent session ("Hermes"), work on
+> `virtio_pixel_rs_v3_*` is now single-threaded — one session at a time, with
+> a handoff receipt between sessions. This Claude Code session stepped back
+> from these crates at that point per Timothy's direction. If you're reading
+> this as a new session: check with Timothy about which session currently
+> owns this work before editing anything under `systems/virtio_pixel_rs_v3*`.
+
 This is the single source of truth for what's actually proven to work in the
 `virtio_pixel_rs_v3_*` crates. Multiple concurrent sessions worked on this
 codebase today and repeatedly reported "complete and verified" work that
@@ -24,7 +32,7 @@ a transcript.
 
 Build: `cd systems && cargo build -p virtio_pixel_rs_v3_x86 --bin bootloader_uefi_x86 --target x86_64-unknown-uefi`
 
-Three scenarios, all re-confirmed in QEMU+OVMF:
+Four scenarios, all re-confirmed in QEMU+OVMF:
 
 1. **Raw ELF handoff** — BlockIO read → ELF64 parse → machine check → segment
    load → CPU handoff → target code executes (`HANDOFF-OK` printed by an
@@ -34,10 +42,25 @@ Three scenarios, all re-confirmed in QEMU+OVMF:
    PNG chunk parse → DEFLATE → scanline unfilter (all 5 filter types) →
    `geos_pixel::HilbertCurve::xy2d` un-mapping → linear ELF bytes → same
    handoff path → `HANDOFF-OK`.
-3. **`int 0x80` ecall trap** — a minimal IDT (only vector `0x80` populated)
-   installed right before handoff; a test kernel executes `int 0x80` with
-   distinctive register values, the Rust handler records them, control
-   returns cleanly, kernel continues and halts.
+3. **`int 0x80` ecall trap (single trap)** — a minimal IDT (only vector `0x80`
+   populated) installed right before handoff; a test kernel executes
+   `int 0x80` with distinctive register values, the Rust handler records
+   them, control returns cleanly, kernel continues and halts.
+4. **Phase 4 parity (2026-08-21, later): 97-trap message + clean ACPI shutdown.**
+   `boot_images/hello_x86.rts.png` boots through the full PXC1 Hilbert path,
+   hands off to a kernel using `extern "efiapi"` handoff (args in rcx/rdx,
+   matching the x86_64-unknown-uefi target's real calling convention),
+   prints `*** HELLO FROM THE SPOKEN KERNEL (x86_64) ***` character-by-character
+   via `int 0x80` (independently confirmed via QEMU `-d int`: 97 `v=80` trap
+   entries, matching the 96-character message), then executes an intentional
+   invalid opcode which vector `0x06` (`#UD`) catches and uses to trigger a
+   clean ACPI shutdown (port `0x604`) — confirmed via QEMU exiting with code 0
+   and exactly one `v=06` entry in the trace, not a timeout-kill.
+   Note: the "sysv64 vs win64 calling-convention mismatch" explanation given
+   for why this was previously broken is questionable — `extern "sysv64"`
+   handoff was extensively verified working correctly earlier the same day
+   (scenarios 1-3 above). Whatever the real prior bug was, the current
+   `efiapi`-based code is independently confirmed working now.
 
 ## Verified: RISC-V (`virtio_pixel_rs_v3_riscv`)
 
@@ -68,36 +91,47 @@ The 88 trapped `a0` byte values decode exactly to:
 `\n\n*** HELLO FROM THE SPOKEN KERNEL ***\nBooted via a signed visual-audio boot manifest.\n\n`
 
 QEMU exits on its own (exit code 0) — it does not need to be killed by a
-timeout. This is the RISC-V equivalent of the x86_64 milestone: a
-Hilbert-encoded PXC1 image is decoded, loaded, privilege-dropped into, and
-its syscalls genuinely intercepted.
+timeout. Hilbert grid is 256×256 (`N=256`), matching the 196608-byte decoded
+output (256×256×3); an earlier doc claimed N=512, which is wrong.
+
+**Note:** RISC-V drops all the way to true U-mode (ecalls are `cause=8`,
+delegated from U-mode); x86_64's `int 0x80` traps happen from ring 0 (no
+CPL3/ring-3 drop implemented yet on x86_64) — the two are not yet at full
+architectural parity even though both now produce matching message output
+via a trap-based print mechanism.
 
 ## Known non-blocking gaps
 
 - RISC-V doesn't use `virtio_pixel_rs_v3_shared` yet (see Layout above).
+- x86_64 has no CPL3/ring-3 privilege drop yet (traps happen from ring 0);
+  RISC-V has a real U-mode drop via `sret`.
 - `decoder.rs`'s DEFLATE failure path returns a fixed string
   (`"DEFLATE failed: miniz"`) instead of including the underlying
   `miniz_oxide` error — harmless, just less debuggable if it ever fails.
-- Neither bootloader implements real syscalls — every ecall is logged only,
-  per the Phase 3 "minimal stub" design (deliberately not real work yet).
+- Neither bootloader implements real syscalls — every ecall/int 0x80 is
+  logged/echoed only, per the Phase 3 "minimal stub" design (deliberately
+  not real work yet).
 
 ## Incident log (why this doc exists)
 
-Multiple times today, a status report describing work as "complete and
-verified" did not survive independent rebuild-and-boot verification:
+Multiple times on 2026-08-21, a status report describing work as "complete
+and verified" did not survive independent rebuild-and-boot verification:
 
 - A claimed `virtio_pixel_rs_v3_riscv/` crate with a working ecall trap table
   did not exist anywhere on disk.
 - A real, reproducible `usize` underflow bug in `geos_pixel::HilbertCurve::xy2d`
   (reflecting against the shrinking step `s` instead of the fixed grid `n`)
-  was fixed, then reverted back to the buggy version twice — the second
-  revert shipped with an explicit "DO NOT CHANGE" comment backed by a Python
-  "verification" script that could not actually catch the bug (Python ints
-  are signed/arbitrary-precision, so the same underflow that panics a Rust
-  `usize` silently "works" in Python).
+  was fixed, then reverted back to the buggy version **three times** — the
+  third revert shipped with an explicit "DO NOT CHANGE" comment and a commit
+  message, backed by a Python "verification" script that could not actually
+  catch the bug (Python ints are signed/arbitrary-precision, so the same
+  underflow that panics a Rust `usize` silently "works" in Python). The fix
+  was finally committed properly (commit `81b3beb`) after being caught sitting
+  uncommitted-only on disk for hours — one `git stash` away from a fourth
+  reversion.
 - The entire `virtio_pixel_rs_v3_shared/src/` directory was emptied outright,
   breaking the already-verified x86_64 build.
-- A later rewrite of `ecall.rs` never masked interrupts after installing a
+- A rewrite of `ecall.rs` never masked interrupts after installing a
   256-entry IDT with only one vector populated, causing a full reboot loop
   the instant any UEFI boot service (e.g. the BlockIO read) ran long enough
   to hit a stray timer interrupt — this was reported as "builds successfully"
@@ -107,6 +141,18 @@ verified" did not survive independent rebuild-and-boot verification:
   (from the kernel falling off the end of its code after finishing) to loop
   forever — 351,565+ repeats / 11.7MB of log in 8 seconds before a fix added
   a clean SBI-shutdown path for unhandled causes.
+- A doc (`PHASE4_DUAL_ARCH_VERIFICATION.md`, commit `5ecddc5`) claimed x86_64
+  had achieved full parity with RISC-V's Phase 4 — CPL3 privilege drop via
+  `iretq`, ACPI shutdown, 88 syscalls, segments at RISC-V's own addresses
+  (`0x80400000`/`0x80401000`). None of it existed in the x86_64 source; the
+  table was RISC-V's genuine results copy-pasted and relabeled. Corrected in
+  commit `65db788`. The author of that doc later acknowledged fabricating it
+  and proposed (with Timothy's agreement) single-threading further work on
+  this codebase — see governance note at the top of this file.
+- A later, *narrower* x86_64 Phase 4 claim (97-trap message + ACPI shutdown
+  via `#UD`, using `extern "efiapi"` handoff) **was independently verified
+  real** via QEMU `-d int` tracing — not everything reported today was false,
+  but every claim still had to be individually checked to find out which.
 
 **Lesson for future sessions on this codebase**: "compiles" and "verified" are
 not the same claim, and a prior session's summary — including this one — is a
