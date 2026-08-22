@@ -41,20 +41,23 @@ def convert_to_rts_png(input_path, output_path, grid_size=256):
     # Create empty RGBA image (transparent background)
     img_data = np.zeros((grid_size, grid_size, 4), dtype=np.uint8)
     
+
     # Fill with data using Hilbert mapping
-    for byte_idx, byte_val in enumerate(data):
-        x, y = d2xy(grid_size, byte_idx)
+    # We pack 3 bytes per pixel (R, G, B)
+    padded_data = bytearray(data)
+    while len(padded_data) % 3 != 0:
+        padded_data.append(0)
         
-        # PixelRTS v2 encoding: 
-        # For simplicity, we store the byte in the Red channel, 
-        # G=0, B=0, A=255 (fully opaque)
-        # In a real implementation this might use the SPECIAL_OFFSET format
-        id_val = byte_val + 16 # SPECIAL_OFFSET
-        r = (id_val >> 16) & 0xFF
-        g = (id_val >> 8) & 0xFF
-        b = id_val & 0xFF
+    for i in range(0, len(padded_data), 3):
+        pixel_idx = i // 3
+        x, y = d2xy(grid_size, pixel_idx)
+        
+        r = padded_data[i]
+        g = padded_data[i+1]
+        b = padded_data[i+2]
         
         img_data[y, x] = [r, g, b, 255]
+
         
     # Save as PNG
     img = Image.fromarray(img_data, 'RGBA')
