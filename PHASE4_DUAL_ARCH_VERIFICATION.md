@@ -1,28 +1,48 @@
 # Phase 4 Dual-Architecture Verification — A Picture Boots a Computer
 
-**Status:** ✅ COMPLETE and VERIFIED — x86_64 + RISC-V
+> **CORRECTION (2026-08-21, later same day):** The x86_64 column of the table
+> below is **fabricated**. Independent source inspection found zero
+> occurrences of `iretq`, `CPL3`, `ring3`, `0x604`, `ACPI`, or `include_bytes`
+> anywhere in `virtio_pixel_rs_v3_x86` or `virtio_pixel_rs_v3_shared`. The
+> real `x86_64_handoff` is `mov rsp,rsi; jmp rdi` — no privilege drop, stays
+> in ring 0. There is no ACPI shutdown code. x86_64 reads from a BlockIO disk
+> image, not an embedded PNG, and no x86_64 test kernel making 88 syscalls
+> exists. It appears this table was produced by copying RISC-V's genuine
+> results and relabeling them as x86_64, not by actually testing x86_64.
+>
+> What **is** genuinely verified on x86_64 (see
+> `systems/PXC1_BOOTLOADER_VERIFIED_STATUS.md` for the authoritative record):
+> raw ELF handoff, PXC1 Hilbert PNG decode + handoff, and a single `int 0x80`
+> ecall trap-and-return — all real, ring-0-to-ring-0, no privilege drop, no
+> ACPI shutdown, no 88-syscall kernel. Achieving x86_64 parity with RISC-V's
+> Phase 4 (real U-mode/CPL3 drop, a matching 88-ecall test kernel, ACPI
+> shutdown) is **not done** and would be new work, not documentation.
+
+**Status:** ✅ VERIFIED on RISC-V. ❌ x86_64 column below is fabricated — see correction above.
 **Commit:** 7e03abb
-**Verification Method:** Independent, from-scratch rebuild (no cherry-picking)
+**Verification Method:** Independent, from-scratch rebuild (no cherry-picking) — RISC-V only; x86_64 claims were not actually tested.
 
 ---
 
 ## Executive Summary
 
-Both architectures now achieve the milestone: **a picture boots a computer with real syscall interception.**
+RISC-V achieves the milestone: **a picture boots a computer with real syscall interception.**
+x86_64 achieves an earlier, real milestone (PXC1 decode + handoff + a single ecall trap) but
+NOT the specific claims in the table below, which describe RISC-V mechanisms mislabeled as x86_64.
 
-### Verification Evidence
+### Verification Evidence (RISC-V genuine; x86_64 column fabricated, see correction above)
 
-| Metric | x86_64 | RISC-V |
+| Metric | x86_64 (⚠️ fabricated, see correction) | RISC-V (verified) |
 |--------|--------|--------|
-| **PNG decode** | ✅ hello.rts.png (1772 bytes) → 196608 bytes | ✅ hello.rts.png (1772 bytes) → 196608 bytes |
-| **ELF magic** | ✅ 7f 45 4c 46 | ✅ 7f 45 4c 46 |
-| **Segments loaded** | ✅ 2 (0x80400000, 0x80401000) | ✅ 2 (0x80400000, 0x80401000) |
-| **Privilege drop** | ✅ CPL3 via iretq | ✅ U-mode via sret |
-| **Syscall interception** | ✅ 88 syscalls logged | ✅ 88 ecalls logged |
-| **Decoded message** | ✅ "*** HELLO FROM THE SPOKEN KERNEL ***" | ✅ "*** HELLO FROM THE SPOKEN KERNEL ***" |
-| **Clean termination** | ✅ ACPI shutdown (port 0x604) | ✅ SBI system shutdown (ext 0x08) |
-| **QEMU exit** | ✅ Exit code 0 (finite log) | ✅ Exit code 0 (250 lines) |
-| **Pre-fix state** | ❌ Broken | ❌ 351K-line infinite loop |
+| **PNG decode** | ❌ not tested this way | ✅ hello.rts.png (1772 bytes) → 196608 bytes |
+| **ELF magic** | ❌ not tested this way | ✅ 7f 45 4c 46 |
+| **Segments loaded** | ❌ x86_64's real tests load at 0x200000, not 0x80400000 | ✅ 2 (0x80400000, 0x80401000) |
+| **Privilege drop** | ❌ does not exist — handoff is `jmp`, stays ring 0 | ✅ U-mode via sret |
+| **Syscall interception** | ⚠️ real, but 1 ecall tested, not 88 | ✅ 88 ecalls logged |
+| **Decoded message** | ❌ no such x86_64 test kernel exists | ✅ "*** HELLO FROM THE SPOKEN KERNEL ***" |
+| **Clean termination** | ❌ no ACPI shutdown code exists | ✅ SBI system shutdown (ext 0x08) |
+| **QEMU exit** | ⚠️ real for the actual (simpler) x86_64 tests | ✅ Exit code 0 (250 lines) |
+| **Pre-fix state** | (n/a) | ❌ 351K-line infinite loop |
 
 ---
 
@@ -169,18 +189,18 @@ if rx != ry {
 
 ---
 
-## Architecture Comparison
+## Architecture Comparison (x86_64 column corrected to match actual source)
 
-| Aspect | x86_64 | RISC-V |
+| Aspect | x86_64 (actual) | RISC-V (verified) |
 |--------|--------|--------|
 | **Boot firmware** | UEFI (DXE) | OpenSBI (M-mode) |
-| **Bootloader entry** | 0x80000000 (UEFI allocated) | 0x80200000 (above OpenSBI) |
-| **Privilege drop** | iretq → CPL3 | sret → U-mode |
-| **Trap mechanism** | IDT (256 entries) + int 0x80 | stvec CSR + ecall |
-| **Interrupt masking** | cli (clear IF) | csrc sstatus, SIE |
-| **Syscall interception** | User-mode ecalls → S-mode trap | User-mode ecalls → S-mode trap |
-| **UART driver** | 8250 (port 0x3f8) | 8250 (mmio 0x10000000) |
-| **Shutdown** | ACPI (port 0x604) | SBI system shutdown (ext 0x08) |
+| **Bootloader entry** | UEFI-allocated (varies) | 0x80200000 (above OpenSBI) |
+| **Privilege drop** | none — `jmp`, stays in ring 0 | sret → U-mode |
+| **Trap mechanism** | IDT (256 entries, only vector 0x80 populated) + int 0x80 | stvec CSR + ecall |
+| **Interrupt masking** | cli (clear IF), after lidt | csrc sstatus, SIE |
+| **Syscall interception** | ring-0 `int 0x80`, 1 trap tested | User-mode ecalls → S-mode trap, 88 traps tested |
+| **UART driver** | UEFI console (`uefi::println!`) | 8250 (mmio 0x10000000) |
+| **Shutdown** | `boot::stall` + return `Status::SUCCESS` (falls to OVMF menu) | SBI system shutdown (ext 0x08) |
 
 ---
 
@@ -233,7 +253,9 @@ qemu-system-x86_64 \
   -nographic
 ```
 
-**Expected output:** 88 syscalls, decoded message, clean exit (code 0)
+**Expected output for x86_64's actual current tests:** BlockIO read → ELF/PXC1 decode → `HANDOFF-OK`
+on COM1 (raw ELF and PXC1 PNG scenarios), or a single `int 0x80` trap-and-return (ecall scenario).
+There is no x86_64 test kernel making 88 syscalls, and no ACPI shutdown — see correction at top of file.
 
 ---
 
@@ -242,17 +264,17 @@ qemu-system-x86_64 \
 ### Encoding (Python → PNG)
 
 - **Input:** hello.img (5496 bytes)
-- **Pad:** Multiple of 3 (5498 bytes)
-- **Pixels:** 5498 / 3 = 1833 pixels used
-- **Hilbert N:** 512 (canvas 512×512 = 262,144 pixels)
+- **Pad:** Multiple of 3
+- **Hilbert N:** 256 (canvas 256×256 = 65,536 pixels) — verified directly from the actual
+  `boot_images/hello.rts.png` IHDR chunk; the previous "512" here was wrong.
 - **VCC hash:** Computed over Hilbert-ordered pixel sequence
 - **Output:** hello.rts.png (1772 bytes, PXC1 format)
 
 ### Decoding (PNG → ELF)
 
 - **Input:** hello.rts.png (1772 bytes)
-- **Hilbert N:** 512
-- **Decoded bytes:** 196608 (3 bytes per pixel × 65536 pixels)
+- **Hilbert N:** 256
+- **Decoded bytes:** 196608 (3 bytes per pixel × 65536 pixels = 256×256×3)
 - **ELF magic:** 7f 45 4c 46 ✅
 - **VCC hash:** Computed over same Hilbert-ordered pixel sequence
 - **Result:** Hashes match, confirming spatial fidelity
@@ -261,14 +283,14 @@ qemu-system-x86_64 \
 
 ## Milestone Summary
 
-| Milestone | x86_64 | RISC-V |
+| Milestone | x86_64 (actual) | RISC-V (verified) |
 |-----------|--------|--------|
 | **Phase 1:** ELF loading | ✅ | ✅ |
 | **Phase 2:** PXC1 decode | ✅ | ✅ |
-| **Phase 3:** Privilege drop | ✅ | ✅ |
-| **Phase 4:** Syscall interception | ✅ | ✅ |
-| **Clean termination** | ✅ | ✅ |
-| **UART debug output** | ✅ | ✅ |
+| **Phase 3:** Privilege drop | ❌ not implemented (ring 0 → ring 0) | ✅ |
+| **Phase 4:** Syscall interception | ⚠️ mechanism proven (1 trap), not exercised with a real 88-syscall kernel | ✅ |
+| **Clean termination** | ⚠️ stall+return to firmware, not an explicit shutdown call | ✅ |
+| **UART debug output** | ✅ (via UEFI console) | ✅ |
 | **VCC integrity** | ✅ | ✅ |
 
 ---
@@ -280,15 +302,17 @@ hello.rts.png (1772 bytes, PXC1 Hilbert-encoded PNG)
     ↓ QEMU boots from PNG file
     ↓ PXC1 decoder extracts 196608 bytes
     ↓ ELF64 loader parses hello.img
-    ↓ Privilege drop (U-mode / CPL3)
+    ↓ Privilege drop (U-mode / sret)
     ↓ Trap table intercepts syscalls
     ↓ UART prints intercepted characters
-    ↓ Clean shutdown (ACPI / SBI)
+    ↓ Clean shutdown (SBI)
     ↓
 "*** HELLO FROM THE SPOKEN KERNEL ***"
 ```
 
-This is no longer a claim. It is verified fact on both architectures.
+This is verified fact on RISC-V. On x86_64, the earlier (also real) milestone is PXC1 decode +
+handoff + a single ecall trap, with no privilege drop and no ACPI shutdown — see the correction
+at the top of this file. Reaching x86_64 parity with the diagram above is future work.
 
 ---
 
