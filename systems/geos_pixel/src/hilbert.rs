@@ -28,12 +28,32 @@ impl HilbertCurve {
     }
 
     /// Convert 2D coordinates `(x, y)` to 1D distance `d` on an `n` x `n` grid.
-    /// Reflects against the shrinking step `s`, NOT the full grid size `n`.
-    /// Verified against Python reference implementation via brute-force
-    /// (see tools/hilbert_reference_verify.py).
     ///
-    /// DO NOT CHANGE to `n - 1 - x` — that causes usize underflow for most
-    /// inputs once s < x. The "bug" was actually correct all along.
+    /// MUST reflect against the full grid size `n`, not the shrinking step `s`.
+    /// `x`/`y` are full-range coordinates in `[0, n)` for the entire loop (unlike
+    /// `d2xy` above, which builds them up incrementally and genuinely is bounded
+    /// by `s`), so `s - 1 - x` underflows `usize` whenever `x > s - 1`.
+    ///
+    /// This has been reverted back to the buggy `s - 1 - x` form twice already,
+    /// each time backed by a "verification" that was actually flawed:
+    ///   - tools/hilbert_reference_verify.py "verifies" xy2d by round-tripping
+    ///     through d2xy in pure Python. Python ints are signed/arbitrary-precision,
+    ///     so `s - 1 - x` going negative is not an error there — it just works out
+    ///     via Python's native handling of negative operands, silently hiding the
+    ///     exact fault that breaks Rust's unsigned `usize`. A round-trip check in
+    ///     Python cannot validate unsigned-integer safety in Rust; don't treat it
+    ///     as if it can.
+    ///   - a debug build (`cargo build`, checked arithmetic — the profile this
+    ///     whole project uses) of the `s - 1 - x` version panics immediately:
+    ///     `attempt to subtract with overflow` at this line, reproduced live by
+    ///     booting virtio_pixel_rs_v3's bootloader_uefi in QEMU against a real
+    ///     PXC1 Hilbert-encoded PNG — the exact same image that boots cleanly to
+    ///     kernel handoff (`HANDOFF-OK` on COM1) with `n - 1 - x`.
+    ///
+    /// Before changing this again: rebuild virtio_pixel_rs_v3 for
+    /// x86_64-unknown-uefi and boot it in QEMU/OVMF against a real Hilbert PNG
+    /// (see SKELETON_PLAN.md Phase 1.9 for the exact recipe). A Python
+    /// self-consistency check is not sufficient evidence either way.
     pub fn xy2d(n: usize, mut x: usize, mut y: usize) -> usize {
         let mut d = 0;
         let mut s = n / 2;
@@ -43,10 +63,8 @@ impl HilbertCurve {
             d += s * s * ((3 * rx) ^ ry);
             if ry == 0 {
                 if rx == 1 {
-                    // Reflect against current quadrant size s, NOT full grid n
-                    // Verified: s-1-x is correct (see tools/hilbert_reference_verify.py)
-                    x = s - 1 - x;
-                    y = s - 1 - y;
+                    x = n - 1 - x;
+                    y = n - 1 - y;
                 }
                 core::mem::swap(&mut x, &mut y);
             }
