@@ -1,6 +1,81 @@
-# Visual Audio — Speak Software Into Existence
+# Visual Audio — Spatial Computing Boot & Windowing System
 
-A system for encoding text and software as audio through UPIC-inspired graphical synthesis. The pipeline: **prompt → LLM tokens → visual audio → software**.
+A multi-modal project spanning three major systems:
+
+1. **Visual Audio Codec** — Encode text and software as audio (speak software into existence)
+2. **V4 Boot System** — Boot complete operating systems from pixel-encoded PNG containers
+3. **Geometry OS Windowing** — GPU-first spatial window coordinator with Glyph ISA
+
+---
+
+## Quick Start by System
+
+### Visual Audio Codec (Speak Software)
+
+The pipeline: **prompt → LLM tokens → visual audio → software**
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Speak text with phonemes (human-legible)
+python3 tools/speak.py say "hello software"
+
+# Encode software with bytes (machine-readable)
+python3 tools/speak.py encode script.py -o spoken.wav -p spoken.upic.json
+
+# Decode software from audio
+python3 tools/speak.py decode spoken.wav -o recovered.py
+python3 recovered.py  # runs!
+```
+
+**Documentation**: See `docs/PHONEME_ARCHITECTURE.md`, `docs/SONIC_CODEC_RESULTS.md`
+
+### V4 Boot System (Boot from PNG)
+
+Boot Ubuntu 24.04 from pixel-encoded spatial storage.
+
+```bash
+# Build V4 bootloader
+cd systems/v4_bootloader_x86
+cargo build --release --target x86_64-unknown-uefi
+
+# Boot Ubuntu from V4 container
+qemu-system-x86_64 -m 2G -enable-kvm -cpu host \
+    -display vnc=:1 \
+    -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
+    -drive if=pflash,format=raw,file=/tmp/my_vars.fd \
+    -drive id=bootdisk,format=raw,file=/tmp/ubuntu_v4_efi.img,if=none \
+    -device ide-hd,drive=bootdisk,bootindex=1 \
+    -drive id=rootdisk,file=ubuntu-desktop-15g.raw,format=raw,if=none \
+    -device virtio-blk-pci,drive=rootdisk,bootindex=2 \
+    -serial file:/tmp/qemu_serial.log
+
+# Connect VNC viewer
+vncviewer localhost:1
+```
+
+**Documentation**: See `docs/V4_BOOT_GUIDE.md`, `V4_UBUNTU_BOOT_RECEIPT.md`
+
+### Geometry OS Windowing (GPU-First Spatial Windows)
+
+Spatial window coordinator running entirely on GPU via WGSL compute shaders.
+
+```bash
+# Build window coordinator
+cd systems/geos_pixel
+cargo build --example interactive_windows --features gpu --release
+
+# Run interactive window demo
+cargo run --example interactive_windows --features gpu
+
+# Run end-to-end V4 boot + window coordinator demo
+./demo_wc008_no_passthrough.sh  # VNC display
+./demo_wc008_sdl.sh            # SDL window
+./demo_wc008_verify.sh         # Headless verification
+```
+
+**Documentation**: See `WINDOWING_SYSTEM_ROADMAP.md`, `SPATIAL_COORDINATOR_SPEC.md`, `WC008_RECEIPT.md`
 
 ## Concept
 
