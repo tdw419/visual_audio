@@ -195,6 +195,65 @@ def create_gpu_hardware(pixel_data: np.ndarray, cpu_state: np.ndarray, max_instr
 # MAIN BOOT SEQUENCE
 # ============================================================================
 
+def dump_full_cpu_state(cpu_readback, cpu_layout, device, output_buffer):
+    """Print full CPU/CSR/PLIC state plus any UART output captured so far.
+
+    Ground-truth introspection for a stalled boot: rather than guessing why
+    the PC is cycling from the trace alone, dump every field the WGSL
+    emulator actually has, the same way v5_interactive's SIGUSR1 hook dumps
+    the raw framebuffer instead of trusting a screenshot API.
+    """
+    def u64(field):
+        v = cpu_readback[0][field]
+        return (int(v[1]) << 32) | int(v[0])
+
+    regs = cpu_readback['regs'][0]
+    reg_names = ['zero', 'ra', 'sp', 'gp', 'tp', 't0', 't1', 't2', 's0', 's1',
+                 'a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7',
+                 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9', 's10', 's11',
+                 't3', 't4', 't5', 't6']
+
+    print(f"\n{'='*70}")
+    print("Full CPU state dump")
+    print(f"{'='*70}")
+    print(f"  PC        = 0x{u64('pc'):016x}")
+    print(f"  priv_mode = {int(cpu_readback['priv_mode'][0])} "
+          f"(3=M, 1=S, 0=U)")
+    print(f"  instr_count = {int(cpu_readback['instr_count'][0])}")
+    for i, name in enumerate(reg_names):
+        val = (int(regs[i][1]) << 32) | int(regs[i][0])
+        print(f"  x{i:<2} {name:<5} = 0x{val:016x}")
+
+    print("  -- CSRs --")
+    for field in ['satp', 'mstatus', 'mtvec', 'mepc', 'mcause', 'mtval',
+                  'mscratch', 'mie', 'mip', 'stvec', 'sepc', 'scause',
+                  'stval', 'sscratch', 'medeleg', 'mideleg', 'menvcfg']:
+        print(f"  {field:<10}= 0x{u64(field):016x}")
+
+    print("  -- PLIC / interrupts --")
+    for field in ['plic_pending', 'plic_enable', 'plic_claimed',
+                  'plic_priority_irq1', 'timer_interrupt_count',
+                  'total_interrupt_count']:
+        print(f"  {field:<24}= {int(cpu_readback[field][0])}")
+
+    print("  -- CLINT --")
+    mtime = (int(cpu_readback['mtime_high'][0]) << 32) | int(cpu_readback['mtime_low'][0])
+    mtimecmp = (int(cpu_readback['mtimecmp_high'][0]) << 32) | int(cpu_readback['mtimecmp_low'][0])
+    print(f"  mtime     = 0x{mtime:016x}")
+    print(f"  mtimecmp  = 0x{mtimecmp:016x}")
+
+    output_data = np.frombuffer(device.queue.read_buffer(output_buffer), dtype=np.uint8)
+    text = ''
+    for b in output_data:
+        if b == 0:
+            break
+        if 32 <= b < 127 or b in (10, 13):
+            text += chr(b)
+    print(f"  -- UART output captured so far ({len(text)} chars) --")
+    print(text if text else "  (none — console banner never printed)")
+    print(f"{'='*70}\n")
+
+
 def inject_command(queue, harness, cpu_layout, text):
     """Write `text` into the UART input buffer and tell the shader how much
     is available, resetting the guest read position to 0.
@@ -574,6 +633,9 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
     last_output_ptr = 0
     command_scan_start = 0
     pc_history = []
+    seen_pcs = set()          # cumulative working set of dispatch-boundary PCs
+    working_set_size_at = 0   # size of seen_pcs the last time it grew
+    iters_since_growth = 0
     iterations_since_injection = 0
     iteration = 0
     autonomous_turns_used = 0
@@ -661,33 +723,12 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
 
             if total_irq_count == boot_xv6_on_gpu.last_total_irq:
                 boot_xv6_on_gpu.irq_stall_counter += 1
-                # If we're not actually stalling, let it run
-                if True:
-                    pass
-                elif boot_xv6_on_gpu.irq_stall_counter >= stall_threshold:
+                if boot_xv6_on_gpu.irq_stall_counter >= stall_threshold:
                     print(f"\n[!] INTERRUPT STALL DETECTED - interrupts frozen at {total_irq_count}")
                     print(f"    Last {len(set(pc_history[-20:]))} unique PCs in last 20 dispatches:")
                     for i, p in enumerate(pc_history[-20:]):
                         print(f"      [{i}] 0x{p:016x}")
-                    # Read full CPU state for diagnosis
-                    cpu_data = np.frombuffer(
-                        dtype=cpu_layout
-                    )
-                    regs = cpu_data['regs'][0]
-                    mstatus_val = int((int(cpu_data[0]['mstatus'][1]) << 32) | int(cpu_data[0]['mstatus'][0]))
-                    mie_val = int((int(cpu_data[0]['mie'][1]) << 32) | int(cpu_data[0]['mie'][0]))
-                    mip_val = int((int(cpu_data[0]['mip'][1]) << 32) | int(cpu_data[0]['mip'][0]))
-                    plic_pending = int(cpu_data[0]['plic_pending'])
-                    plic_enable = int(cpu_data[0]['plic_enable'])
-                    print(f"    Current MSTATUS: 0x{mstatus_val:08x}")
-                    print(f"    Current MIE: 0x{mie_val:08x}")
-                    print(f"    Current MIP: 0x{mip_val:08x}")
-                    print(f"    PLIC pending: 0x{plic_pending:08x}")
-                    print(f"    PLIC enable:  0x{plic_enable:08x}")
-                    print(f"    RA: 0x{int(regs[1][1]):08x}_{int(regs[1][0]):08x}")
-                    print(f"    SP: 0x{int(regs[2][1]):08x}_{int(regs[2][0]):08x}")
-                    print(f"    A0: 0x{int(regs[10][1]):08x}_{int(regs[10][0]):08x}")
-                    print(f"    A1: 0x{int(regs[11][1]):08x}_{int(regs[11][0]):08x}")
+                    dump_full_cpu_state(cpu_readback, cpu_layout, device, harness['output_buffer'])
                     break
             else:
                 boot_xv6_on_gpu.last_total_irq = total_irq_count
@@ -700,6 +741,29 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
                     print(f"\n[!] CPU PC stall detected (iter {iteration}) - cycling through {len(set(pc_history[-1000:]))} addresses:")
                     for i, p in enumerate(pc_history[-15:]):
                         print(f"    [{i}] 0x{p:016x}")
+                    dump_full_cpu_state(cpu_readback, cpu_layout, device, harness['output_buffer'])
+                    break
+
+            # Working-set stall detection: catches a loop that bounces among
+            # more than 5 addresses (which the check above misses entirely -
+            # e.g. cycling through ~99 addresses in a 20KB trap/PLIC region).
+            # If the *cumulative* set of dispatch-boundary PCs hasn't grown
+            # in stall_threshold iterations after boot is established, the
+            # CPU isn't making forward progress even though instr_count and
+            # interrupt counters keep climbing.
+            if iteration > 50:
+                before = len(seen_pcs)
+                seen_pcs.add(pc)
+                if len(seen_pcs) > before:
+                    iters_since_growth = 0
+                else:
+                    iters_since_growth += 1
+                if iters_since_growth >= stall_threshold:
+                    print(f"\n[!] Working-set stall detected (iter {iteration}) - "
+                          f"no new PC seen in {stall_threshold} dispatches; "
+                          f"{len(seen_pcs)} addresses total, all within "
+                          f"[0x{min(seen_pcs):016x}, 0x{max(seen_pcs):016x}]")
+                    dump_full_cpu_state(cpu_readback, cpu_layout, device, harness['output_buffer'])
                     break
 
             # Periodic UART dump during command execution phase (after injection).
