@@ -189,22 +189,121 @@ re-confirmed: a "surprising, opposite-of-predicted" result needs repeated
 trials before being trusted, especially on hardware showing ~10% run-to-run
 variance even on identical inputs.
 
-## Bottom-Line Verdict on "Linux on the GPU"
+## 6. Can Linux Decompose Into Parallel Lanes? (Research, Not Implemented)
+
+Investigated on mechanism, not intuition: per-CPU data/RCU/io_uring show
+Linux avoids *needless* serialization at coarse grain (tens-hundreds of
+cores), not that it eliminates serialization — categorically different
+from SIMT's thousands-of-lanes-same-instruction-stream model. Two specific
+operations have **no spatial-parallelism analog at all**: context
+switching (time-multiplexing one core, not spatially parallelizable by
+nature) and interrupt handling (inherently per-CPU sequential). And a
+kernel running N processes is running N *different* programs, not
+divergent branches of one program — structurally identical to running N
+copies of a thing that already loses alone, not to the bounded-divergence
+shape that wins on GPU. No prior art found (GPUfs/GPUnet, unikernels)
+demonstrates a general-purpose kernel's core scheduler/memory-management
+running as GPU compute with a real win.
+
+**Verdict: incoherent as literally stated.** The coherent narrower version
+— many independent, ideally homogeneous compute-bound *workloads* run as
+GPU lanes while process lifecycle/scheduling/interrupts stay on a real
+CPU core — is just how GPU compute dispatch already works today. Not
+implemented; this was a research pass to close the open question from
+§5, not a new capability.
+
+## 7. Architecture (B): Many Independent CPU-Emulator Instances
+
+Given §6, decided to build a CPU emulator "regardless of speed," using
+the only GPU-favorable shape available: **many independent single-hart
+RISC-V machines**, zero shared state between lanes, as opposed to true
+multi-hart SMP (one coordinated guest, needing atomics/CAS loops/IPI
+routing — shared-state serialization *inside* the emulator, the exact
+pattern §6 identified as SIMT-hostile).
+
+Built `systems/geos_pixel_v5/shaders/multi_instance_rv32i.wgsl` — a
+minimal RV32I interpreter (ADDI/LW/SW/BLT/BGE/JAL/ADD/ECALL), N fully
+isolated instances (own register file, own private RAM slice, no
+atomics), plus `tools/rv32i_assembler.py` (independently verified against
+`riscv64-linux-gnu-objdump -m riscv:rv32` byte-for-byte before use) to
+assemble a real test program (sum 1..N per instance).
+
+**Result: does NOT beat a CPU, unlike the native Collatz benchmark.**
+Every result verified correct (closed-form oracle + native CPU baseline,
+both matching, at every N):
+
+| N | GPU instances/sec | Speedup vs. CPU |
+|---|---|---|
+| 100 | 20,193 | 0.00x |
+| 10,000 | 1,255,002 | 0.17x |
+| 100,000 | 1,838,542-2,022,935 | 0.21x |
+| 1,000,000 | 5,009,242-5,107,647 | 0.51-0.54x |
+| 4,000,000 | 5,641,951-5,833,952 | 0.55x |
+
+Plateaus around 0.55x and never crosses 1.0x. (N≥8M hit real hardware
+ceilings: `max_storage_buffer_binding_size` limits RAM-buffer instance
+count to ~8.4M at this per-instance RAM size, and above that,
+`dispatch_workgroups`'s 65535-per-dimension cap needs the same 2D-grid
+fix used in `parallel_pixels_bench.rs` — not applied here since the trend
+was already clear.)
+
+**Root cause, measured directly, not estimated:** built
+`shaders/native_sum_baseline.wgsl` — the *identical* algorithm (sum 1..N,
+same N per lane), zero instruction fetch/decode, plain WGSL loop. Ran
+both against the same inputs, both independently verified against the
+CPU baseline:
+
+| | Same algorithm, same N | vs. CPU |
+|---|---|---|
+| CPU (native loop) | ~9-10M instances/sec | 1x |
+| GPU (native compute, zero decode) | ~219-229M instances/sec | **~22-24x faster** |
+| GPU (RV32I interpreted) | ~2-5.8M instances/sec | 0.2-0.55x (slower) |
+| **Measured decode-tax multiplier** | **31.0x-45.7x** (N=100K/1M/4M) | — |
+
+The GPU parallel win is real and substantial (~22-24x, consistent with
+the Collatz result) — but instruction-by-instruction interpretation costs
+31-46x per instruction, more than cancelling it out. This isn't a
+guessed number (an external analysis asserted "15-30x" without
+measurement); it's measured, stable across a 40x range of N, and the
+real number is higher than the guess, not lower.
+
+**Implication:** architecture (B) (many independent instances, no shared
+state) is necessary but not sufficient for a CPU emulator to win on GPU.
+RV32I has no "cheap decode, expensive compute" instructions to exploit —
+every base opcode costs about the same to execute once decoded, so a
+compute-heavier guest *program* can't shift this ratio; the tax is fixed
+per fetched instruction regardless of what it computes. The only lever
+that removes it: ahead-of-time transpilation of guest code directly into
+native shader arithmetic (skip the interpreter loop and its decode chain
+entirely) — a real, known technique (static binary recompilation), but a
+compiler-backend-scale project, not a follow-up experiment, and it only
+applies to known/fixed guest programs compiled ahead of time, not
+arbitrary unknown binaries.
+
+## Bottom-Line Verdict on "Linux on the GPU" / CPU Emulator on GPU
 
 - **Give up on:** one Linux kernel executing as a single GPU thread being
   faster than a CPU. Disproven with real numbers (~1M instr/s, 2-3 orders
   of magnitude slower); architectural mismatch, not fixable by tuning.
-- **Don't give up on:** GPU execution benefiting Linux-shaped workloads in
-  general. Tonight proved the actual prerequisite — many independent
-  programs running in parallel across GPU lanes is genuinely ~40x faster
-  than a CPU, verified correct at scale, with a real divergence-cost
-  metric now available to explain and improve throughput.
-- **The unsolved part:** whether something Linux-like can be decomposed
-  into many independent parallel lanes at all. Most of what a kernel does
-  (memory management, scheduling, syscall dispatch) is inherently about
-  serializing access to shared state — the opposite of the "many
-  independent programs" shape that actually won tonight. That's a real
-  design question, not a performance-tuning one, and remains open.
+  Confirmed by mechanism-level research (§6): context switching and
+  interrupt handling have no spatial-parallelism analog at all.
+- **Give up on (newly, this session):** many independent *interpreted* CPU
+  emulator instances beating a CPU, at least for simple integer workloads
+  and this interpreter design. Measured, not assumed: interpretation
+  overhead (31-46x per instruction) exceeds the real GPU parallel
+  advantage (~22-24x) for the same underlying algorithm, so the net stays
+  below 1x even with millions of instances running in parallel and zero
+  shared-state contention between them.
+- **Don't give up on:** GPU execution benefiting Linux-shaped or
+  CPU-emulation-shaped work in general — when the computation itself is
+  native (not interpreted), the win is real and large (~22-45x depending
+  on workload, verified twice now with two different algorithms).
+- **What's left unsolved, sharper than before:** the only known way to get
+  a CPU emulator that's actually GPU-fast is ahead-of-time transpilation
+  to native shader code instead of runtime interpretation — a real,
+  substantial engineering project (a compiler backend), not a tuning
+  pass, and it trades away the ability to run arbitrary/unknown guest
+  binaries in exchange for speed on known, fixed ones.
 
 ## Files Changed/Added
 
@@ -220,3 +319,17 @@ variance even on identical inputs.
 - `tools/xv6_gpu_watchdog.sh` (new — auto-restart on GPU-dispatch hang)
 - `boot_v4_for_kms_test.sh` (new — disposable V4 boot script for testing
   without touching the live V5 guest)
+- `systems/geos_pixel_v5/src/framebuffer_dump.rs` (new — reusable
+  signal/interval-triggered pixel snapshot dumper, extracted from
+  `v5_interactive.rs`'s hook; 3 unit tests)
+- `systems/geos_pixel_v5/src/bin/pixel_compute_service.rs` (new —
+  persistent Unix-socket daemon serving pixel-encoded compute jobs;
+  end-to-end verified correct at N=10K and N=1M via
+  `tools/test_pixel_compute_service.py`)
+- `tools/rv32i_assembler.py` (new — minimal RV32I assembler, output
+  independently verified against `objdump -m riscv:rv32`)
+- `systems/geos_pixel_v5/shaders/multi_instance_rv32i.{wgsl,spv}` (new —
+  many-independent-instances CPU emulator, architecture (B))
+- `systems/geos_pixel_v5/shaders/native_sum_baseline.{wgsl,spv}` (new —
+  decode-tax isolation baseline)
+- `systems/geos_pixel_v5/examples/multi_instance_rv32i_bench.rs` (new)

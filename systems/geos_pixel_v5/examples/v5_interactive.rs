@@ -13,21 +13,20 @@ fn main() {
     #[cfg(feature = "evdev")]
     use geos_pixel_v5::evdev_input::EvdevReader;
 
-    // Frame-dump hook: SIGUSR1 writes the current frame to /tmp/v5_frame_dump.png
-    // so an external process can inspect what's on screen without needing a
-    // compositor or DRM buffer handle of its own (dumb-buffer GEM handles are
-    // private to this process's DRM fd, so they can't just be mmap'd from
-    // outside without PRIME/dma-buf export).
+    // Frame-dump hook (geos_pixel_v5::framebuffer_dump): SIGUSR1, or every
+    // 300 frames automatically, writes the current frame to
+    // /tmp/v5_frame_dumps/ so an external process can inspect what's on
+    // screen without needing a compositor or DRM buffer handle of its own
+    // (dumb-buffer GEM handles are private to this process's DRM fd, so
+    // they can't just be mmap'd from outside without PRIME/dma-buf export).
     #[cfg(feature = "evdev")]
-    static DUMP_REQUESTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    geos_pixel_v5::framebuffer_dump::install_sigusr1_hook();
     #[cfg(feature = "evdev")]
-    extern "C" fn request_dump(_sig: libc::c_int) {
-        DUMP_REQUESTED.store(true, std::sync::atomic::Ordering::SeqCst);
-    }
-    #[cfg(feature = "evdev")]
-    unsafe {
-        libc::signal(libc::SIGUSR1, request_dump as libc::sighandler_t);
-    }
+    let mut frame_dumper = geos_pixel_v5::framebuffer_dump::FrameDumper::with_interval(
+        "/tmp/v5_frame_dumps",
+        geos_pixel_v5::framebuffer_dump::Interval::Frames(300),
+    )
+    .expect("create frame dump dir");
 
     struct Card(std::fs::File);
 
@@ -136,18 +135,12 @@ fn main() {
         let img = ws.render();
 
         #[cfg(feature = "evdev")]
-        if DUMP_REQUESTED.swap(false, std::sync::atomic::Ordering::SeqCst) {
-            let path = "/tmp/v5_frame_dump.png";
-            match image::save_buffer(
-                path,
-                &img[..dw.min(geos_pixel_v5::window::SCREEN_W as usize)
-                    * dh.min(geos_pixel_v5::window::SCREEN_H as usize)
-                    * 4],
-                dw.min(geos_pixel_v5::window::SCREEN_W as usize) as u32,
-                dh.min(geos_pixel_v5::window::SCREEN_H as usize) as u32,
-                image::ColorType::Rgba8,
-            ) {
-                Ok(()) => println!("Frame dumped to {}", path),
+        {
+            let dump_w = dw.min(geos_pixel_v5::window::SCREEN_W as usize) as u32;
+            let dump_h = dh.min(geos_pixel_v5::window::SCREEN_H as usize) as u32;
+            match frame_dumper.maybe_dump(&img[..(dump_w * dump_h * 4) as usize], dump_w, dump_h) {
+                Ok(Some(path)) => println!("Frame dumped to {}", path.display()),
+                Ok(None) => {}
                 Err(e) => eprintln!("Frame dump failed: {}", e),
             }
         }
