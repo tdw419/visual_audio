@@ -280,6 +280,44 @@ compiler-backend-scale project, not a follow-up experiment, and it only
 applies to known/fixed guest programs compiled ahead of time, not
 arbitrary unknown binaries.
 
+## 8. Basic-Block Threading Recovers the Decode Tax — Crosses 1.0x
+
+§7 asked whether the CPU emulator needs to beat a CPU, or just not be
+"too slow." Reframed the question again: rather than interpreting raw
+instruction bytes every step, decode the guest program **once, on the
+host**, into a `DecodedOp` array (opcode/rd/rs1/rs2/imm, branch/jump
+targets pre-resolved to op-indices) and upload it as a single **shared,
+read-only** buffer every lane executes against — safe to share since
+nothing ever writes to it, so this reintroduces none of the
+shared-*mutable*-state cost that ruled out true multi-hart SMP in §7.
+
+Built `shaders/basic_block_rv32i.wgsl` + `examples/basic_block_rv32i_bench.rs`,
+decoding the exact same machine-code bytes as §7's interpreter (not a
+different or simplified program — same bytes, independently verified
+against objdump), isolating exactly one variable: runtime decode vs.
+precomputed ops. Every result checked against the CPU baseline at every N:
+
+| N | §7 Interpreted | §8 Basic-block threaded | vs. interpreted | **vs. CPU** |
+|---|---|---|---|---|
+| 100,000 | 1.8-2.0M instances/sec | 6.8M instances/sec | ~3.4-3.7x faster | 0.93x |
+| 1,000,000 | 5.0-5.1M instances/sec | 14.2M instances/sec | ~2.8x faster | **1.43x** |
+| 4,000,000 | 5.6-5.8M instances/sec | 27.4M instances/sec | ~4.7-4.9x faster | **2.69x** |
+
+**Crosses 1.0x, and the margin over the CPU grows with N** (0.93x → 1.43x
+→ 2.69x) instead of plateauing below it like the interpreted version did.
+Still well short of the native-compute ceiling (~219-229M instances/sec,
+§7) — roughly 8x behind native at N=4M, real overhead remains
+(array-indexed register file, a 6-case switch dispatch per op) — but far
+less overhead than full runtime decoding, and the practical threshold
+that actually matters (beat a CPU, or at minimum "not too slow") is met.
+
+**Answer to "can it run without being too slow?":** yes, conditionally —
+not via raw interpretation (§7, 0.2-0.55x, a dead end on its own), and
+not requiring a full ahead-of-time compiler backend either (§7's
+"only lever" framing was too pessimistic) — a middle-ground technique,
+decode-once/execute-many, that's a bounded, already-demonstrated amount
+of engineering, not a research project.
+
 ## Bottom-Line Verdict on "Linux on the GPU" / CPU Emulator on GPU
 
 - **Give up on:** one Linux kernel executing as a single GPU thread being
@@ -287,23 +325,28 @@ arbitrary unknown binaries.
   of magnitude slower); architectural mismatch, not fixable by tuning.
   Confirmed by mechanism-level research (§6): context switching and
   interrupt handling have no spatial-parallelism analog at all.
-- **Give up on (newly, this session):** many independent *interpreted* CPU
-  emulator instances beating a CPU, at least for simple integer workloads
-  and this interpreter design. Measured, not assumed: interpretation
-  overhead (31-46x per instruction) exceeds the real GPU parallel
-  advantage (~22-24x) for the same underlying algorithm, so the net stays
-  below 1x even with millions of instances running in parallel and zero
-  shared-state contention between them.
-- **Don't give up on:** GPU execution benefiting Linux-shaped or
-  CPU-emulation-shaped work in general — when the computation itself is
-  native (not interpreted), the win is real and large (~22-45x depending
-  on workload, verified twice now with two different algorithms).
-- **What's left unsolved, sharper than before:** the only known way to get
-  a CPU emulator that's actually GPU-fast is ahead-of-time transpilation
-  to native shader code instead of runtime interpretation — a real,
-  substantial engineering project (a compiler backend), not a tuning
-  pass, and it trades away the ability to run arbitrary/unknown guest
-  binaries in exchange for speed on known, fixed ones.
+- **Give up on:** raw byte-by-byte instruction interpretation as the
+  execution strategy. Measured, not assumed: interpretation overhead
+  (31-46x per instruction) exceeds the real GPU parallel advantage
+  (~22-24x) for the same algorithm, so raw interpretation stays below 1x
+  even with millions of parallel instances (§7).
+- **Don't give up on — revised upward this session:** a GPU CPU emulator
+  beating a CPU is achievable, not just "many independent instances
+  running native compute." Basic-block threading (§8) — decode once,
+  execute pre-decoded ops from a shared read-only table — crosses 1.0x
+  and the margin grows with scale (up to 2.69x measured at N=4M). This
+  overturns §7's own "only ahead-of-time transpilation can fix this"
+  conclusion; a lighter, already-built middle ground works too.
+- **What's left unsolved:** how far basic-block threading scales past
+  N=4M (buffer/dispatch limits stopped us here, same as §7 — fixable
+  with the 2D-grid technique from `parallel_pixels_bench.rs`), whether it
+  holds up for a real instruction mix beyond this 6-opcode test program
+  (loads/stores to varying addresses, deeper branching), and whether it
+  can be applied to the real xv6-capable RV64 emulator
+  (`RISCV_CPU_MMU.wgsl`) rather than just this minimal RV32I test — that
+  emulator's opcode set and per-instruction state (CSRs, MMU, privilege
+  modes) are far larger, so the decode-tax reduction and the remaining
+  8x-behind-native gap may not transfer directly at that scale.
 
 ## Files Changed/Added
 
@@ -333,3 +376,6 @@ arbitrary unknown binaries.
 - `systems/geos_pixel_v5/shaders/native_sum_baseline.{wgsl,spv}` (new —
   decode-tax isolation baseline)
 - `systems/geos_pixel_v5/examples/multi_instance_rv32i_bench.rs` (new)
+- `systems/geos_pixel_v5/shaders/basic_block_rv32i.{wgsl,spv}` (new —
+  decode-once/execute-many, crosses 1.0x vs. CPU)
+- `systems/geos_pixel_v5/examples/basic_block_rv32i_bench.rs` (new)
