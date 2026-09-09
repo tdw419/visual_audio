@@ -1,0 +1,9 @@
+{
+  "iteration": 100,
+  "status": "running",
+  "last_progress_metric": 39500000,
+  "best_progress_metric": 41500000,
+  "applied_mutations": [],
+  "start_time": 1787881501.5405917,
+  "last_checkpoint_time": 1787893604.97794
+}

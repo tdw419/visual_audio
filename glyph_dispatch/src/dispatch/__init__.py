@@ -1,0 +1,41 @@
+# Glyph Dispatcher — Host-side implementation
+
+from .dispatcher import GlyphDispatcher
+from .request_struct import (
+    REQUEST_STRUCT_BASE,
+    REQUEST_STRUCT_SIZE,
+    MMIO_DISPATCH_TRIGGER,
+    OFFSET_FLAGS,
+    OFFSET_GLYPH_ID,
+    OFFSET_INPUT_BUF_PTR,
+    OFFSET_INPUT_BUF_LEN,
+    OFFSET_OUTPUT_BUF_PTR,
+    OFFSET_OUTPUT_BUF_LEN,
+    OFFSET_RESULT_STATUS,
+    FLAG_BUSY,
+    FLAG_ERROR,
+    RESULT_SUCCESS,
+    RESULT_ERROR,
+    GLYPH_ID_TEST_COUNTER,
+    GLYPH_ID_SHA256,
+)
+
+__all__ = [
+    'GlyphDispatcher',
+    'REQUEST_STRUCT_BASE',
+    'REQUEST_STRUCT_SIZE',
+    'MMIO_DISPATCH_TRIGGER',
+    'OFFSET_FLAGS',
+    'OFFSET_GLYPH_ID',
+    'OFFSET_INPUT_BUF_PTR',
+    'OFFSET_INPUT_BUF_LEN',
+    'OFFSET_OUTPUT_BUF_PTR',
+    'OFFSET_OUTPUT_BUF_LEN',
+    'OFFSET_RESULT_STATUS',
+    'FLAG_BUSY',
+    'FLAG_ERROR',
+    'RESULT_SUCCESS',
+    'RESULT_ERROR',
+    'GLYPH_ID_TEST_COUNTER',
+    'GLYPH_ID_SHA256',
+]

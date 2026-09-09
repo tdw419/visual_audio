@@ -144,3 +144,8 @@ initramfs-cognitive/virtio_blk.ko
 
 # Backend run logs (can grow unbounded across long-running VM sessions)
 logs/
+.worktrees/
+.ckpt/
+
+# Phase 27: browser boot receipts are load-bearing evidence, never ignore
+!browser_boot/**/receipts/*.log

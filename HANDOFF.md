@@ -1,5 +1,22 @@
 # Visual Audio Session Handoff
 
+## UPDATE 2026-08-26: RV64I initrd poisoning RESOLVED
+
+**Root cause**: OpenSBI (Ubuntu fw_jump.bin, FW_JUMP_FDT_ADDR=0x82200000) relocates
+its FDT copy to 0x82200000 (firmware/fw_base.S), which sat INSIDE the initrd range
+(0x82000000..0x8250B5E1). The FDT copy corrupted the gzip at +2MB; the kernel's
+inflate resynchronized and produced garbage cpio entries → "broken padding" →
+free_initrd_mem() 0xCC poison (POISON_FREE_INITMEM). The chunked-write sync-fence
+hypothesis (CHUNKED_WRITE_FIX.md) was ruled out; the small-write workaround was
+reverted.
+
+**Fix**: initrd moved from 0x82000000 to 0x82800000 in
+tests/standalone_alpine_boot.py (mirrored in tests/initrd_verification.py,
+tests/check_dtb_initrd.py, rv64_inflate_probe/* and tools/analyze_mem_dump.py).
+Verified: initrd byte-perfect at unpack point (0 diff), full boot passes the old
+failure point. Gate: rv64_inflate_probe/verify_initrd_gate.sh.
+Details: rv64_inflate_probe/CORRUPTION_FIX_SPEC.md.
+
 ## Update 2026-08-06: Phase 7 Extensions COMPLETE - Pixel Execution, Evolution Persistence, Auto-Continue
 
 **Phase 7 Extensions:** ✓ COMPLETE

@@ -1,0 +1,24 @@
+/* string.h -- minimal bare-metal shim for linux/string.h */
+#ifndef _LINUX_STRING_H
+#define _LINUX_STRING_H
+
+#include <stddef.h>
+
+static inline void *memcpy(void *dest, const void *src, size_t n)
+{
+    unsigned char *d = dest;
+    const unsigned char *s = src;
+    while (n--)
+        *d++ = *s++;
+    return dest;
+}
+
+static inline void *memset(void *s, int c, size_t n)
+{
+    unsigned char *p = s;
+    while (n--)
+        *p++ = (unsigned char)c;
+    return s;
+}
+
+#endif

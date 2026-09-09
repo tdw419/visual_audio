@@ -16,6 +16,8 @@ cmd = [
     '-pix_fmt', 'rgb24',
     '-s', '1024x1024',
     '-i', '/dev/zero',  # Black pixels (padding)
+    '-frames:v', '1',   # Hard stop at 1 frame — without this, ffmpeg encodes
+                        # /dev/zero forever and fills /tmp (7GB incident 2026-09-08)
     '-c:v', 'rawvideo',
     '-f', 'nut',
     '/tmp/tiny_test.nut'

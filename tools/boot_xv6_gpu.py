@@ -77,7 +77,7 @@ class ELF64Loader:
             }
             self.program_headers.append(ph)
 
-        sloader.entry_point = self.e_entry
+        self.entry_point = self.e_entry
 
     def get_loadable_segments(self):
         """Return loadable program headers (PT_LOAD)."""
@@ -91,7 +91,7 @@ class ELF64Loader:
     def print_info(self):
         """Print ELF information."""
         print(f"ELF64 File: {self.path}")
-        print(f"Entry Point: 0x{sloader.entry_point:016x}")
+        print(f"Entry Point: 0x{self.entry_point:016x}")
         print(f"\nLoadable Segments:")
         for seg in self.program_headers:
             flags_str = []
@@ -341,8 +341,10 @@ def boot_xv6_on_gpu(elf_path: str, command: str = None, autonomous: bool = False
     # Check if we should inject the EFI tables
     is_pe32 = fmt == "PE32+"
     print("\n[2] Loading kernel segments into memory...")
-    MEMORY_SIZE_MB = 128
-    MEMORY_SIZE = MEMORY_SIZE_MB * 1024 * 1024  # 128MB
+    # Use smaller memory size to fit within GPU limits (max 128MB per buffer)
+    # Note: xv6 fs.img loads at 0x81000000, so need at least 17MB total (16MB + 1MB)
+    MEMORY_SIZE_MB = 18  # 16MB for kernel, 2MB headroom for fs.img at 0x81000000
+    MEMORY_SIZE = MEMORY_SIZE_MB * 1024 * 1024
     PHYS_START = 0x80000000  # xv6 physical memory base
 
     # Create memory array (4 bytes per pixel, RGBA layout)

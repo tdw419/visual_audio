@@ -69,6 +69,10 @@ class Node:
         return self.prop_u32(name, *cells)
 
     def child(self, name: str) -> 'Node':
+        # Check for existing child with same name - kernel rejects duplicate nodes
+        for existing in self.children:
+            if existing.name == name:
+                return existing
         node = Node(name)
         self.children.append(node)
         return node
@@ -136,7 +140,8 @@ class FDTWriter:
 def build_device_tree(ram_base: int, ram_size: int, uart_base: int,
                       isa: str, timebase: int, bootargs: str,
                       kernel_addr: int | None = None, initrd_addr: int | None = None,
-                      initrd_size: int | None = None) -> bytes:
+                      initrd_size: int | None = None,
+                      disk_reserved: bool = True) -> bytes:
     uart_path = f'/soc/serial@{uart_base:x}'
 
     root = Node('')
@@ -148,6 +153,17 @@ def build_device_tree(ram_base: int, ram_size: int, uart_base: int,
     chosen = root.child('chosen')
     chosen.prop_str('bootargs', bootargs)
     chosen.prop_str('stdout-path', uart_path)
+
+    # Bootloader-provided entropy (standard /chosen/rng-seed binding, what QEMU virt
+    # fills on every boot). Without it the kernel's crng must wait for interrupt-jitter
+    # entropy only, and 6.12's kernel_init_freeable -> wait_for_random_bytes() blocks the
+    # initcall chain (boot hangs right after "Mountpoint-cache hash table entries" with
+    # the CPU spinning in idle/RNG/blake2s/chacha code). Fixed seed = deterministic boot
+    # (ASLR constant), matching the A/B equivalence gates.
+    chosen.prop('rng-seed', bytes.fromhex(
+        '5e 8f 1a 2b 3c 4d 5e 6f 70 81 92 a3 b4 c5 d6 e7 '
+        'f8 09 1a 2b 3c 4d 5e 6f 80 91 a2 b3 c4 d5 e6 f7'
+    ))
     
     # NOTE: there is no standard DTB property for the kernel's own load address — the kernel
     # is already executing by the time it parses this DTB (fw_jump just jumps to a fixed,
@@ -175,6 +191,44 @@ def build_device_tree(ram_base: int, ram_size: int, uart_base: int,
     opensbi_mem = reserved.child(f'opensbi@{ram_base:x}')
     opensbi_mem.prop_u64('reg', ram_base, opensbi_reserved_size)
     opensbi_mem.prop('no-map')
+
+    # Explicitly reserve the initrd's physical range too (belt-and-suspenders alongside
+    # linux,initrd-start/-end above). Linux is *supposed* to memblock_reserve() the initrd
+    # automatically from those /chosen properties during early_init_dt_check_for_initrd(),
+    # and this node is honored (kernel logs "OF: reserved mem" for the opensbi node; the
+    # initrd node is reserved by reserve_initrd_mem() from /chosen). The historically
+    # observed clobbering of the initrd range was NOT the kernel's allocator — it was
+    # OpenSBI's boot path: the Ubuntu fw_jump.bin is built with FW_JUMP_FDT_ADDR=0x82200000
+    # and RELOCATES the DTB there (firmware/fw_base.S), which sat inside the initrd range
+    # (0x82000000-0x8250b5e1) and corrupted the gzip at +0x200000 (the "FDT magic found at
+    # initrd_start+0x200000" observation). Fix: place the initrd clear of 0x82200000
+    # (see rv64_inflate_probe/CORRUPTION_FIX_SPEC.md). The kernel's unflatten working copy
+    # is allocated from free RAM (not the reserved initrd range) on both QEMU and the GPU
+    # emulator; the ~1MB 0xCC block at the front of the initrd is POISON_FREE_INITMEM from
+    # free_initrd_mem() after the resulting "broken padding" failure, not a kernel allocation.
+    if initrd_addr is not None and initrd_size is not None:
+        initrd_mem = reserved.child(f'initrd@{initrd_addr:x}')
+        initrd_mem.prop_u64('reg', initrd_addr, initrd_size)
+
+    # VirtIO block device backing store at 0x81600000 (22MB offset from RAM_BASE).
+    # The SPATIAL_RV64I.wgsl shader hardcodes disk_pa = 0x81600000 + sector*512.
+    # NOT 0x81000000 (xv6's convention): measured against the actual Alpine
+    # kernel, that address overlaps the kernel's real in-memory footprint
+    # (loads at 0x80200000, PE SizeOfImage extends to ~0x815e3000) -- writing
+    # the disk image there was silently corrupting the loaded kernel bytes.
+    # 0x81600000 has 1MB+ margin past the kernel and 8MB of headroom before
+    # initrd at 0x82000000. This reserved-memory node then also stops Linux's
+    # own allocator from touching the range post-boot. Must stay in sync with
+    # DISK_PA in standalone_alpine_boot.py and the WGSL constant above.
+    # Only reserve the in-shader virtio disk window (DISK_PA) for the GPU-only
+    # (vq_ready=0) path. Under Route B host offload the disk is a host file and
+    # this range collides with a large kernel image — omit it.
+    if disk_reserved:
+        disk_reserved_size = 8 * 1024 * 1024
+        disk_reserved_addr = ram_base + 0x1600000  # 0x81600000
+        disk_mem = reserved.child(f'disk@{disk_reserved_addr:x}')
+        disk_mem.prop_u64('reg', disk_reserved_addr, disk_reserved_size)
+        disk_mem.prop('no-map')
 
     mem = root.child(f'memory@{ram_base:x}')
     mem.prop_str('device_type', 'memory')
@@ -216,6 +270,56 @@ def build_device_tree(ram_base: int, ram_size: int, uart_base: int,
     clint.prop_str('compatible', 'sifive,clint0', 'riscv,clint0')
     clint.prop_u64('reg', 0x11000000, 0x10000)
     clint.prop_u32('interrupts-extended', 1, 3, 1, 7)
+
+    # PLIC (Platform-Level Interrupt Controller). Required: Linux 6.12's
+    # virtio_mmio_probe() does `irq = platform_get_irq(pdev, 0); if (irq < 0)
+    # return irq;` — with no interrupt-parent the virtio node never probes and
+    # the boot sits at "Waiting for root device /dev/vda...". phandle 2.
+    # interrupts-extended -> cpu0 intc (phandle 1): 11 = M-mode external, 9 = S.
+    plic = soc.child('plic@c000000')
+    plic.prop_str('compatible', 'sifive,plic-1.0.0', 'riscv,plic0')
+    plic.prop_u64('reg', 0x0c000000, 0x4000000)
+    plic.prop('interrupt-controller')
+    plic.prop_u32('#interrupt-cells', 1)
+    plic.prop_u32('#address-cells', 0)
+    plic.prop_u32('riscv,ndev', 31)
+    plic.prop_u32('interrupts-extended', 1, 11, 1, 9)
+    plic.prop_u32('phandle', 2)
+
+    # The kernel's clockevent driver (drivers/clocksource/timer-riscv.c) probes by
+    # matching this node via TIMER_OF_DECLARE(riscv_timer, "riscv,timer", ...).
+    # Without it NO clockevent device registers, timer interrupts are never
+    # delivered to S-mode, and the kernel silently spins forever the first time
+    # init code waits on jiffies/timeouts (observed: infinite loop right after
+    # "Mountpoint-cache hash table entries" — QEMU with the same kernel prints
+    # "riscv-timer: Timer interrupt in S-mode is available via sstc extension"
+    # at 0.000190s and sails past). interrupt 5 = STIP (S-mode timer).
+    timer = root.child('timer')
+    timer.prop_str('compatible', 'riscv,timer')
+    timer.prop_u32('interrupts-extended', 1, 5)
+
+    # VirtIO block device (mmio) at 0x10007000 (QEMU virtio-mmio.0 base).
+    # The kernel's virtio_mmio driver probes devices at 0x10007000+ (default
+    # virt machine layout), not at 0x10001000. Must match MMIO write range check
+    # in SPATIAL_RV64I.wgsl (0x10007000 <= addr < 0x10007200).
+    #
+    # Interrupt requirement investigation: This emulator has NO PLIC node yet,
+    # and virtio-mmio normally requires an interrupt for async completion (via
+    # virtio_blk's ->request_done callback). However, the current WGSL emulator
+    # processes NOTIFY synchronously in-handler (writes to 0x10001050 trigger
+    # immediate descriptor-ring walk), not via a deferred interrupt path.
+    # Hypothesis: synchronous processing may be sufficient for this kernel's
+    # virtio_blk driver, which polls for completion when no IRQ is configured.
+    # If boot stalls at VFS root-mount with "unknown-block(0,0)" even after
+    # p1.d2.t1 porting, the missing PLIC/IRQ wiring is a likely root cause.
+    # This node omits 'interrupts' intentionally to test synchronous-only
+    # completion first; adding PLIC + interrupt-extended is deferred to a
+    # followup task if synchronous handling proves insufficient.
+    virtio_blk = soc.child('virtio_mmio@10007000')
+    virtio_blk.prop_str('compatible', 'virtio,mmio')
+    virtio_blk.prop_u64('reg', 0x10007000, 0x200)
+    virtio_blk.prop_u32('interrupt-parent', 2)   # PLIC
+    virtio_blk.prop_u32('interrupts', 1)         # PLIC source 1
 
     return FDTWriter(root).serialize()
 

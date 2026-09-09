@@ -1,0 +1,3 @@
+{"name": "not8", "family": "bitops", "ok": true, "code": "OK", "detail": "", "escalations": 1, "kernel_result": 4294902015, "kernel_exit": "0xfeed0009", "kernel_status": "0xcafe0009"}
+{"name": "max2", "family": "arithmetic", "ok": true, "code": "OK", "detail": "", "escalations": 1, "kernel_result": 3000, "kernel_exit": "0xfeed0009", "kernel_status": "0xcafe0009"}
+{"name": "sign", "family": "arithmetic", "ok": true, "code": "OK", "detail": "", "escalations": 1, "kernel_result": 4294967295, "kernel_exit": "0xfeed0009", "kernel_status": "0xcafe0009"}

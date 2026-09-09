@@ -46,7 +46,8 @@ def trace_with_per_instruction(kernel_path: str, output_path: str,
     print(f"Using device: {device}")
     
     # Load kernel segments
-    MEMORY_SIZE_MB = 128
+    # Use smaller memory size to fit within GPU limits (max 128MB per buffer)
+    MEMORY_SIZE_MB = 16  # Reduced from 128 to stay within GPU limits
     MEMORY_SIZE = MEMORY_SIZE_MB * 1024 * 1024
     PHYS_START = 0x80000000
     pixel_count = MEMORY_SIZE // 4
@@ -149,7 +150,7 @@ def trace_with_per_instruction(kernel_path: str, output_path: str,
         {'binding': 1, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'storage'}},
         {'binding': 2, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'storage'}},
         {'binding': 3, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'uniform'}},
-        {'binding': 4, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'read-only-storage'}},
+        {'binding': 4, 'visibility': wgpu.ShaderStage.COMPUTE, 'buffer': {'type': 'storage'}},  # Changed from read-only-storage
     ])
     
     # Create bind group

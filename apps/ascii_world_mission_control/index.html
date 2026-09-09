@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry OS - ASCII World Mission Control</title>
+    <style>
+        :root {
+            --bg-color: #1a1a2e;
+            --bg-gradient-end: #050508;
+            --ascii-green: #00ff00;
+            --ascii-dim: #008800;
+            --neon-blue: #00f0ff;
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            background: radial-gradient(circle at center, var(--bg-color) 0%, var(--bg-gradient-end) 100%);
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+        }
+
+        /* 40% ASCII Substrate (Left) */
+        .ascii-substrate {
+            width: 40%;
+            height: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+            border-right: 1px solid var(--ascii-dim);
+            color: var(--ascii-green);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            text-shadow: 0 0 5px var(--ascii-green);
+        }
+
+        .ascii-header {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            white-space: pre;
+        }
+
+        .ascii-log {
+            flex-grow: 1;
+            font-size: 0.9rem;
+            line-height: 1.4;
+            white-space: pre-wrap;
+        }
+
+        /* 60% Glassmorphic Reality GUI (Right) */
+        .reality-substrate {
+            width: 60%;
+            height: 100%;
+            padding: 40px;
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .glass-container {
+            width: 100%;
+            height: 100%;
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .glass-header {
+            padding: 15px 20px;
+            background: rgba(0, 0, 0, 0.2);
+            border-bottom: 1px solid var(--glass-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .glass-title {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-weight: 600;
+            color: var(--neon-blue);
+            text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+            letter-spacing: 1px;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            background-color: var(--ascii-green);
+            border-radius: 50%;
+            box-shadow: 0 0 8px var(--ascii-green);
+        }
+
+        .desktop-stream {
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+            position: relative;
+        }
+
+        #desktop-image {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        /* Scanline effect for ASCII side */
+        .scanlines {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 40%;
+            height: 100%;
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.1) 50%,
+                rgba(0,0,0,0.1)
+            );
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .blinking-cursor::after {
+            content: "█";
+            animation: blink 1s step-end infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Neural Substrate (Left) -->
+    <div class="ascii-substrate">
+        <div class="scanlines"></div>
+        <div class="ascii-header">
+┌──────────────────────────────────────────┐
+│ GEOMETRY OS - MISSION CONTROL (PORTAL)   │
+├──────────────────────────────────────────┤
+│ MODE: Neural-Reality Dual Substrate      │
+│ SUBSTRATE: Glyph Assembly Active         │
+│ TARGET: pixel_ubuntu_v2.sh               │
+└──────────────────────────────────────────┘
+        </div>
+        <div class="ascii-log" id="ascii-log">
+> Initializing Spatial Cognition...
+> Boot sequence triggered...
+> QEMU Monitor socket: /tmp/qemu-monitor.sock
+> SSH Port: 2222
+> State: [WAITING FOR KERNEL]
+> ...
+> [  120.0s ] GDM Started
+> [  120.5s ] UI Rendered
+
+Awaiting command input<span class="blinking-cursor"></span>
+        </div>
+    </div>
+
+    <!-- Reality Substrate (Right) -->
+    <div class="reality-substrate">
+        <div class="glass-container">
+            <div class="glass-header">
+                <span class="glass-title">VM DESKTOP STREAM</span>
+                <span class="status-dot"></span>
+            </div>
+            <div class="desktop-stream">
+                <img id="desktop-image" src="" alt="Waiting for Framebuffer..." style="display: none;">
+                <div id="no-signal" style="color: rgba(255,255,255,0.3); font-family: sans-serif; letter-spacing: 2px;">NO SIGNAL</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Poll for the latest PNG snapshot
+        setInterval(() => {
+            fetch('/api/frame')
+                .then(r => {
+                    if (r.ok) {
+                        document.getElementById('desktop-image').src = '/api/frame?' + new Date().getTime();
+                        document.getElementById('desktop-image').style.display = 'block';
+                        document.getElementById('no-signal').style.display = 'none';
+                    }
+                })
+                .catch(e => console.log('Waiting for frame...'));
+        }, 1000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,409 @@
+[    0.000000] Linux version 6.6.134-0-lts (buildozer@build-3-20-x86) (gcc (Alpine 13.2.1_git20240309) 13.2.1 20240309, GNU ld (GNU Binutils) 2.42) #1-Alpine SMP PREEMPT_DYNAMIC 2026-04-11 17:03:51
+[    0.000000] BIOS-provided physical RAM map:
+[    0.000000] BIOS-e820: [mem 0x0000000000000000-0x000000000009fbff] usable
+[    0.000000] BIOS-e820: [mem 0x000000000009fc00-0x000000000009ffff] reserved
+[    0.000000] BIOS-e820: [mem 0x00000000000f0000-0x00000000000fffff] reserved
+[    0.000000] BIOS-e820: [mem 0x0000000000100000-0x0000000006ffffff] usable
+[    0.000000] BIOS-e820: [mem 0x0000000007000000-0x0000000007ffffff] reserved
+[    0.000000] BIOS-e820: [mem 0x00000000fffc0000-0x00000000ffffffff] reserved
+[    0.000000] Notice: NX (Execute Disable) protection missing in CPU!
+[    0.000000] APIC: Static calls initialized
+[    0.000000] DMI not present or invalid.
+[    0.000000] vmware: hypercall mode: 0x00
+[    0.000000] Hypervisor detected: VMware
+[    0.000000] vmware: Failed to get TSC freq from the hypervisor
+[    0.000000] tsc: Detected 1000.000 MHz processor
+[    0.023960] last_pfn = 0x7000 max_arch_pfn = 0x100000
+[    0.024030] MTRRs disabled (not available)
+[    0.024074] x86/PAT: PAT not supported by the CPU.
+[    0.024125] x86/PAT: Configuration [0-7]: WB  WT  UC- UC  WB  WT  UC- UC  
+[    0.087600] found SMP MP-table at [mem 0x000f8bf0-0x000f8bff]
+[    0.089785] RAMDISK: [mem 0x04000000-0x04131fff]
+[    0.090005] 0MB HIGHMEM available.
+[    0.090065] 112MB LOWMEM available.
+[    0.090120]   mapped low ram: 0 - 07000000
+[    0.091205]   low ram: 0 - 07000000
+[    0.091310] Zone ranges:
+[    0.091350]   DMA      [mem 0x0000000000001000-0x0000000000ffffff]
+[    0.091479]   Normal   [mem 0x0000000001000000-0x0000000006ffffff]
+[    0.091604]   HighMem  empty
+[    0.091690] Movable zone start for each node
+[    0.091725] Early memory node ranges
+[    0.091765]   node   0: [mem 0x0000000000001000-0x000000000009efff]
+[    0.091865]   node   0: [mem 0x0000000000100000-0x0000000006ffffff]
+[    0.091970] Initmem setup node 0 [mem 0x0000000000001000-0x0000000006ffffff]
+[    0.092470] On node 0, zone DMA: 1 pages in unavailable ranges
+[    0.099604] On node 0, zone DMA: 97 pages in unavailable ranges
+[    0.113900] Intel MultiProcessor Specification v1.4
+[    0.113979]     Virtual Wire compatibility mode.
+[    0.114055] MPTABLE: OEM ID: BOCHSCPU
+[    0.114110] MPTABLE: Product ID: 0.1         
+[    0.114170] MPTABLE: APIC at: 0xFEE00000
+[    0.114245] Limiting to 8 possible CPUs
+[    0.114330] IOAPIC[0]: apic_id 0 already used, trying 1
+[    0.114425] IOAPIC[0]: Unable to change apic_id!
+[    0.114509] IOAPIC[0]: apic_id 255, version 0, address 0xfec00000, GSI 0-0
+[    0.114705] Processors: 1
+[    0.114765] smpboot: Allowing 1 CPUs, 0 hotplug CPUs
+[    0.115350] PM: hibernation: Registered nosave memory: [mem 0x00000000-0x00000fff]
+[    0.115490] PM: hibernation: Registered nosave memory: [mem 0x0009f000-0x000fffff]
+[    0.115620] [mem 0x08000000-0xfffbffff] available for PCI devices
+[    0.115715] Booting paravirtualized kernel on VMware hypervisor
+[    0.115780] clocksource: refined-jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 6370452778343963 ns
+[    0.116055] setup_percpu: NR_CPUS:64 nr_cpumask_bits:1 nr_cpu_ids:1 nr_node_ids:1
+[    0.116560] percpu: Embedded 33 pages/cpu s105556 r0 d29612 u135168
+[    0.117875] Kernel command line: console=ttyS0 rdinit=/init noapic nolapic acpi=off nosmp
+[    0.126815] random: crng init done
+[    0.127180] Dentry cache hash table entries: 16384 (order: 4, 65536 bytes, linear)
+[    0.127560] Inode-cache hash table entries: 8192 (order: 3, 32768 bytes, linear)
+[    0.128000] Built 1 zonelists, mobility grouping on.  Total pages: 28294
+[    0.129675] mem auto-init: stack:all(zero), heap alloc:on, heap free:off
+[    0.129820] Initializing HighMem for node 0 (00000000:00000000)
+[    0.155240] Checking if this processor honours the WP bit even in supervisor mode...Ok.
+[    0.161155] Memory: 91804K/114296K available (9378K kernel code, 897K rwdata, 3360K rodata, 1216K init, 1988K bss, 22492K reserved, 0K cma-reserved, 0K highmem)
+[    0.206335] SLUB: HWalign=32, Order=0-3, MinObjects=0, CPUs=1, Nodes=1
+[    0.206495] kmemleak: Kernel memory leak detector disabled
+[    0.207215] ftrace: allocating 36271 entries in 71 pages
+[    0.322015] ftrace: allocated 71 pages with 4 groups
+[    0.324795] Dynamic Preempt: voluntary
+[    0.326300] rcu: Preemptible hierarchical RCU implementation.
+[    0.326354] rcu: 	RCU restricting CPUs from NR_CPUS=64 to nr_cpu_ids=1.
+[    0.326435] 	Trampoline variant of Tasks RCU enabled.
+[    0.326479] 	Rude variant of Tasks RCU enabled.
+[    0.326515] 	Tracing variant of Tasks RCU enabled.
+[    0.326560] rcu: RCU calculated value of scheduler-enlistment delay is 30 jiffies.
+[    0.326625] rcu: Adjusting geometry for rcu_fanout_leaf=16, nr_cpu_ids=1
+[    0.465949] NR_IRQS: 4352, nr_irqs: 33, preallocated irqs: 16
+[    0.468970] rcu: srcu_init: Setting srcu_struct sizes based on contention.
+[    0.471884] kfence: initialized - using 2097152 bytes for 255 objects at 0x(ptrval)-0x(ptrval)
+[    0.475285] Console: colour VGA+ 80x25
+[    0.475449] printk: console [ttyS0] enabled
+[    1.336074] APIC disabled via kernel command line
+[    1.351225] APIC: Keep in PIC mode(8259)
+[    1.363440] clocksource: tsc-early: mask: 0xffffffffffffffff max_cycles: 0x1cd42e4dffb, max_idle_ns: 881590591483 ns
+[    1.397395] Calibrating delay loop (skipped), value calculated using timer frequency.. 2000.33 BogoMIPS (lpj=3333333)
+[    1.400743] Last level iTLB entries: 4KB 64, 2MB 64, 4MB 64
+[    1.403986] Last level dTLB entries: 4KB 64, 2MB 0, 4MB 64, 1GB 0
+[    1.403986] Spectre V1 : Mitigation: usercopy/swapgs barriers and __user pointer sanitization
+[    1.403986] Spectre V2 : Mitigation: Retpolines
+[    1.403986] Spectre V2 : Spectre v2 / SpectreRSB: Filling RSB on context switch and VMEXIT
+[    1.403986] Speculative Store Bypass: Vulnerable
+[    1.403986] L1TF: Kernel not compiled for PAE. No mitigation for L1TF
+[    1.404101] MDS: Vulnerable: Clear CPU buffers attempted, no microcode
+[    1.407319] MMIO Stale Data: Unknown: No mitigations
+[    1.407319] ITS: Vulnerable
+[    1.407319] x86/fpu: x87 FPU will use FXSAVE
+[    1.540653] Freeing SMP alternatives memory: 32K
+[    1.540653] pid_max: default: 32768 minimum: 301
+[    1.547860] LSM: initializing lsm=lockdown,capability,landlock,yama
+[    1.554861] landlock: Up and running.
+[    1.557319] Yama: becoming mindful.
+[    1.557525] Mount-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    1.560653] Mountpoint-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    1.570998] smpboot: SMP disabled
+[    1.581133] RCU Tasks: Setting shift to 0 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=1.
+[    1.583986] RCU Tasks Rude: Setting shift to 0 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=1.
+[    1.584766] RCU Tasks Trace: Setting shift to 0 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=1.
+[    1.587319] Performance Events: 
+[    1.587319] no APIC, boot with the "lapic" boot parameter to force-enable it.
+[    1.587425] no hardware sampling interrupt available.
+[    1.590653] PMU not available due to virtualization, using software events only.
+[    1.590653] signal: max sigframe size: 1440
+[    1.590828] rcu: Hierarchical SRCU implementation.
+[    1.593986] rcu: 	Max phase no-delay instances is 1000.
+[    1.604726] NMI watchdog: Perf NMI watchdog permanently disabled
+[    1.607319] smp: Bringing up secondary CPUs ...
+[    1.607535] smp: Brought up 1 node, 1 CPU
+[    1.610653] smpboot: Max logical packages: 2
+[    1.610653] ----------------
+[    1.610653] | NMI testsuite:
+[    1.610653] --------------------
+[    1.610653]   remote IPI:  ok  |
+[    1.610653]    local IPI:TIMEOUT|
+[    3.443158] CPU: 0 PID: 1 Comm: swapper/0 Not tainted 6.6.134-0-lts #1-Alpine
+[    3.443986] Call Trace:
+[    3.443986]  dump_stack_lvl+0x39/0x50
+[    3.443986]  dump_stack+0xd/0x20
+[    3.443986]  nmi_selftest+0x18e/0x3b0
+[    3.443986]  native_smp_cpus_done+0x157/0x270
+[    3.443986]  smp_init+0x76/0x90
+[    3.443986]  kernel_init_freeable+0x143/0x450
+[    3.443986]  ? rest_init+0xc0/0xc0
+[    3.443986]  ? calculate_sigpending+0x2f/0x40
+[    3.443986]  ? rest_init+0xc0/0xc0
+[    3.443986]  kernel_init+0x17/0x1a0
+[    3.443986]  ret_from_fork+0x38/0x60
+[    3.443986]  ? rest_init+0xc0/0xc0
+[    3.443986]  ret_from_fork_asm+0x12/0x20
+[    3.443986]  entry_INT80_32+0xf0/0xf5
+[    3.444166] 
+[    3.447319] --------------------
+[    3.447319] BUG:   1 unexpected failures (out of   2) - debugging disabled! |
+[    3.447319] -----------------------------------------------------------------
+[    3.447450] smpboot: Total of 1 processors activated (2000.33 BogoMIPS)
+[    3.455446] devtmpfs: initialized
+[    3.471348] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 6370867519511994 ns
+[    3.473986] futex hash table entries: 256 (order: 2, 16384 bytes, linear)
+[    3.478210] pinctrl core: initialized pinctrl subsystem
+[    3.495261] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+[    3.501388] audit: initializing netlink subsys (disabled)
+[    3.504121] audit: type=2000 audit(1788531880.106:1): state=initialized audit_enabled=0 res=1
+[    3.512368] thermal_sys: Registered thermal governor 'fair_share'
+[    3.512448] thermal_sys: Registered thermal governor 'bang_bang'
+[    3.513986] thermal_sys: Registered thermal governor 'step_wise'
+[    3.513986] thermal_sys: Registered thermal governor 'user_space'
+[    3.513986] cpuidle: using governor ladder
+[    3.513986] cpuidle: using governor menu
+[    3.518930] clocksource: pit: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 1601818034827 ns
+[    3.537319] PCI: PCI BIOS revision 2.10 entry at 0xfdb22, last bus=0
+[    3.537319] PCI: Using configuration type 1 for base access
+[    3.542033] kprobes: kprobe jump-optimization is enabled. All kprobes are optimized if possible.
+[    3.661978] ACPI: Interpreter disabled.
+[    3.664671] iommu: Default domain type: Translated
+[    3.667319] iommu: DMA domain TLB invalidation policy: lazy mode
+[    3.671588] pps_core: LinuxPPS API ver. 1 registered
+[    3.673986] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    3.673986] PTP clock support registered
+[    3.698090] PCI: Probing PCI hardware
+[    3.700803] PCI host bridge to bus 0000:00
+[    3.703986] pci_bus 0000:00: root bus resource [io  0x0000-0xffff]
+[    3.703986] pci_bus 0000:00: root bus resource [mem 0x00000000-0xffffffff]
+[    3.703986] pci_bus 0000:00: No busn resource found for root bus, will use [bus 00-ff]
+[    3.703986] pci 0000:00:00.0: [8086:1237] type 00 class 0x060000
+[    3.707545] pci 0000:00:01.0: [8086:7000] type 00 class 0x060100
+[    3.711213] pci 0000:00:05.0: [10ec:8029] type 00 class 0x020000
+[    3.713986] pci 0000:00:05.0: BAR 0 [io  0xc000-0xc01f]
+[    3.717076] pci 0000:00:12.0: [1234:1111] type 00 class 0x030000
+[    3.720653] pci 0000:00:12.0: BAR 0 [mem 0xe0000000-0xe07fffff pref]
+[    3.720653] pci 0000:00:12.0: ROM [mem 0xfeb00000-0xfeb0ffff pref]
+[    3.720653] pci 0000:00:12.0: Video device with shadowed ROM at [mem 0x000c0000-0x000dffff]
+[    3.721888] pci 0000:00:1e.0: [8086:7010] type 00 class 0x010180
+[    3.724221] pci 0000:00:1e.0: BAR 0 [io  0xc030-0xc037]
+[    3.727319] pci 0000:00:1e.0: BAR 2 [io  0xc038-0xc03f]
+[    3.727319] pci 0000:00:1e.0: BAR 4 [io  0xc020-0xc02f]
+[    3.727319] pci 0000:00:1e.0: BAR 0 [io  0x01f0-0x01f7]: legacy IDE quirk
+[    3.727319] pci 0000:00:1e.0: BAR 1 [io  0x03f6]: legacy IDE quirk
+[    3.729835] pci 0000:00:1e.0: BAR 2 [io  0x0170-0x0177]: legacy IDE quirk
+[    3.730653] pci 0000:00:1e.0: BAR 3 [io  0x0376]: legacy IDE quirk
+[    3.731268] pci_bus 0000:00: busn_res: [bus 00-ff] end is updated to 00
+[    3.733986] pci 0000:00:01.0: PIIX/ICH IRQ router [8086:7000]
+[    3.735471] pci 0000:00:12.0: vgaarb: setting as boot VGA device
+[    3.737319] pci 0000:00:12.0: vgaarb: bridge control possible
+[    3.737319] pci 0000:00:12.0: vgaarb: VGA device added: decodes=io+mem,owns=io+mem,locks=none
+[    3.737415] vgaarb: loaded
+[    3.744301] clocksource: Switched to clocksource tsc-early
+[    3.838131] VFS: Disk quotas dquot_6.6.0
+[    3.838710] VFS: Dquot-cache hash table entries: 1024 (order 0, 4096 bytes)
+[    3.915701] pnp: PnP ACPI: disabled
+[    4.013251] NET: Registered PF_INET protocol family
+[    4.053016] IP idents hash table entries: 2048 (order: 2, 16384 bytes, linear)
+[    4.104980] tcp_listen_portaddr_hash hash table entries: 512 (order: 0, 4096 bytes, linear)
+[    4.163070] Table-perturb hash table entries: 65536 (order: 6, 262144 bytes, linear)
+[    4.214956] TCP established hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    4.217990] TCP bind hash table entries: 1024 (order: 2, 16384 bytes, linear)
+[    4.217990] TCP: Hash tables configured (established 1024 bind 1024)
+[    4.360991] MPTCP token hash table entries: 256 (order: 0, 4096 bytes, linear)
+[    4.363005] UDP hash table entries: 256 (order: 1, 8192 bytes, linear)
+[    4.363005] UDP-Lite hash table entries: 256 (order: 1, 8192 bytes, linear)
+[    4.518391] NET: Registered PF_UNIX/PF_LOCAL protocol family
+[    4.521630] NET: Registered PF_XDP protocol family
+[    4.521630] pci_bus 0000:00: resource 4 [io  0x0000-0xffff]
+[    4.521630] pci_bus 0000:00: resource 5 [mem 0x00000000-0xffffffff]
+[    4.521630] pci 0000:00:01.0: PIIX3: Enabling Passive Release
+[    4.706296] pci 0000:00:00.0: quirk_passive_release+0x0/0x90 took 38994 usecs
+[    4.709290] pci 0000:00:00.0: Limiting direct PCI/PCI transfers
+[    4.709290] pci 0000:00:00.0: quirk_natoma+0x0/0x40 took 42524 usecs
+[    4.709290] pci 0000:00:01.0: Activating ISA DMA hang workarounds
+[    4.892586] pci 0000:00:01.0: quirk_isa_dma_hangs+0x0/0x50 took 41191 usecs
+[    4.895640] PCI: CLS 0 bytes, default 32
+[    4.974086] Trying to unpack rootfs image as initramfs...
+[    5.201476] Freeing initrd memory: 1224K
+[    5.227901] clocksource: tsc: mask: 0xffffffffffffffff max_cycles: 0x1cd42e4dffb, max_idle_ns: 881590591483 ns
+[    5.230710] clocksource: Switched to clocksource tsc
+[    5.331986] platform rtc_cmos: registered platform RTC device (no PNP device found)
+[    5.442356] Initialise system trusted keyrings
+[    5.473086] workingset: timestamp_bits=14 max_order=15 bucket_order=1
+[    5.475650] zbud: loaded
+[    5.532821] Key type asymmetric registered
+[    5.535045] Asymmetric key parser 'x509' registered
+[    5.590941] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 249)
+[    5.639011] io scheduler mq-deadline registered
+[    5.641850] io scheduler kyber registered
+[    5.641850] io scheduler bfq registered
+[    5.725951] shpchp: Standard Hot Plug PCI Controller Driver version: 0.4
+[    5.776506] ERST DBG: ERST support is disabled.
+[    5.842070] Serial: 8250/16550 driver, 4 ports, IRQ sharing enabled
+[    5.976030] serial8250: ttyS0 at I/O 0x3f8 (irq = 4, base_baud = 115200) is a 16550A
+[    6.256251] brd: module loaded
+[    6.280291] i8042: PNP: No PS/2 controller found.
+[    6.282655] i8042: Probing ports directly.
+[    6.350941] serio: i8042 KBD port at 0x60,0x64 irq 1
+[    6.352820] serio: i8042 AUX port at 0x60,0x64 irq 12
+[    6.424139] rtc_cmos rtc_cmos: registered as rtc0
+[    6.426030] rtc_cmos rtc_cmos: setting system clock to 2026-09-04T14:24:47 UTC (1788531887)
+[    6.535461] input: AT Translated Set 2 keyboard as /devices/platform/i8042/serio0/input/input0
+[    6.595405] rtc_cmos rtc_cmos: alarms up to one day, 114 bytes nvram
+[    6.641111] intel_pstate: CPU model not supported
+[    6.680961] gre: GRE over IPv4 demultiplexor driver
+[    6.713651] NET: Registered PF_INET6 protocol family
+[    6.769756] Segment Routing with IPv6
+[    6.822751] In-situ OAM (IOAM) with IPv6
+[    6.860166] Key type dns_resolver registered
+[    6.888751] IPI shorthand broadcast: enabled
+[    7.320912] sched_clock: Marking stable (6393515346, 924916667)->(10195190000, -2876757987)
+[    7.386907] registered taskstats version 1
+[    7.417257] Loading compiled-in X.509 certificates
+[    7.491797] Loaded X.509 cert 'alpinelinux.org: Alpine Linux kernel key: 5513f209c4e86410d30a822044b57e216794f2c8'
+[    7.604042] Key type .fscrypt registered
+[    7.652367] Key type fscrypt-provisioning registered
+[    7.688147] clk: Disabling unused clocks
+[    7.726042] Freeing unused kernel image (initmem) memory: 1216K
+[    7.764102] Write protecting kernel text and read-only data: 12740k
+[    7.806397] Run /init as init process
+BL002_INITRAMFS_START
+BL002_MODULE_OK crc64
+BL002_MODULE_OK crc64-rocksoft
+BL002_MODULE_OK t10-pi
+BL002_MODULE_OK scsi_common
+[    8.287147] SCSI subsystem initialized
+BL002_MODULE_OK scsi_mod
+BL002_MODULE_OK libata
+BL002_MODULE_OK sd_mod
+[    8.610467] scsi host0: ata_piix
+[    8.636722] scsi host1: ata_piix
+[    8.661077] ata1: PATA max MWDMA2 cmd 0x1f0 ctl 0x3f6 bmdma 0xc020 irq 14
+[    8.702292] ata2: PATA max MWDMA2 cmd 0x170 ctl 0x376 bmdma 0xc028 irq 15
+[    8.903067] ata1.00: ATA-0: v86 ATA HD, 1.00, max MWDMA2
+[    8.935882] ata1.00: 32768 sectors, multi 0: LBA48 
+[    8.968547] ata2.00: ATAPI: v86 ATAPI CD-ROM, 1.00, max MWDMA2
+[    9.012562] scsi 0:0:0:0: Direct-Access     ATA      v86 ATA HD       n/a  PQ: 0 ANSI: 5
+[    9.071357] sd 0:0:0:0: [sda] 32768 512-byte logical blocks: (16.8 MB/16.0 MiB)
+[    9.119622] sd 0:0:0:0: [sda] Write Protect is off
+[    9.150122] sd 0:0:0:0: [sda] Write cache: disabled, read cache: enabled, doesn't support DPO or FUA
+[    9.252652] scsi 1:0:0:0: CD-ROM            SONY     CD-ROM CDU-1000  1.1a PQ: 0 ANSI: 1 CCS
+[    9.305302] sd 0:0:0:0: [sda] Preferred minimum I/O size 512 bytes
+[    9.360892] sd 0:0:0:0: [sda] Attached SCSI disk
+BL002_MODULE_OK ata_piix
+BL002_MODULE_OK ata_generic
+BL002_MODULE_OK mbcache
+BL002_MODULE_OK ext2
+BL002_DEV_LISTING_START
+total 0
+drwxr-xr-x    3 0        0             2160 Sep  4 14:24 [1;34m.[m
+drwxrwxr-x    9 1000     1000           200 Sep  4 14:13 [1;34m..[m
+drwxr-xr-x    2 0        0               80 Sep  4 14:24 [1;34mbsg[m
+crw-------    1 0        0           5,   1 Sep  4 14:24 [1;35mconsole[m
+crw-------    1 0        0          10, 257 Sep  4 14:24 [1;35mcpu_dma_latency[m
+crw-rw-rw-    1 0        0           1,   7 Sep  4 14:24 [1;35mfull[m
+crw-r--r--    1 0        0           1,  11 Sep  4 14:24 [1;35mkmsg[m
+crw-------    1 0        0           1,   1 Sep  4 14:24 [1;35mmem[m
+crw-rw-rw-    1 0        0           1,   3 Sep  4 14:24 [1;35mnull[m
+crw-------    1 0        0           1,   4 Sep  4 14:24 [1;35mport[m
+crw-rw-rw-    1 0        0           5,   2 Sep  4 14:24 [1;35mptmx[m
+brw-------    1 0        0           1,   0 Sep  4 14:24 [1;35mram0[m
+brw-------    1 0        0           1,   1 Sep  4 14:24 [1;35mram1[m
+brw-------    1 0        0           1,  10 Sep  4 14:24 [1;35mram10[m
+brw-------    1 0        0           1,  11 Sep  4 14:24 [1;35mram11[m
+brw-------    1 0        0           1,  12 Sep  4 14:24 [1;35mram12[m
+brw-------    1 0        0           1,  13 Sep  4 14:24 [1;35mram13[m
+brw-------    1 0        0           1,  14 Sep  4 14:24 [1;35mram14[m
+brw-------    1 0        0           1,  15 Sep  4 14:24 [1;35mram15[m
+brw-------    1 0        0           1,   2 Sep  4 14:24 [1;35mram2[m
+brw-------    1 0        0           1,   3 Sep  4 14:24 [1;35mram3[m
+brw-------    1 0        0           1,   4 Sep  4 14:24 [1;35mram4[m
+brw-------    1 0        0           1,   5 Sep  4 14:24 [1;35mram5[m
+brw-------    1 0        0           1,   6 Sep  4 14:24 [1;35mram6[m
+brw-------    1 0        0           1,   7 Sep  4 14:24 [1;35mram7[m
+brw-------    1 0        0           1,   8 Sep  4 14:24 [1;35mram8[m
+brw-------    1 0        0           1,   9 Sep  4 14:24 [1;35mram9[m
+crw-rw-rw-    1 0        0           1,   8 Sep  4 14:24 [1;35mrandom[m
+crw-------    1 0        0         253,   0 Sep  4 14:24 [1;35mrtc0[m
+brw-------    1 0        0           8,   0 Sep  4 14:24 [1;35msda[m
+crw-rw-rw-    1 0        0           5,   0 Sep  4 14:24 [1;35mtty[m
+crw-------    1 0        0           4,   0 Sep  4 14:24 [1;35mtty0[m
+crw-------    1 0        0           4,   1 Sep  4 14:24 [1;35mtty1[m
+crw-------    1 0        0           4,  10 Sep  4 14:24 [1;35mtty10[m
+crw-------    1 0        0           4,  11 Sep  4 14:24 [1;35mtty11[m
+crw-------    1 0        0           4,  12 Sep  4 14:24 [1;35mtty12[m
+crw-------    1 0        0           4,  13 Sep  4 14:24 [1;35mtty13[m
+crw-------    1 0        0           4,  14 Sep  4 14:24 [1;35mtty14[m
+crw-------    1 0        0           4,  15 Sep  4 14:24 [1;35mtty15[m
+crw-------    1 0        0           4,  16 Sep  4 14:24 [1;35mtty16[m
+crw-------    1 0        0           4,  17 Sep  4 14:24 [1;35mtty17[m
+crw-------    1 0        0           4,  18 Sep  4 14:24 [1;35mtty18[m
+crw-------    1 0        0           4,  19 Sep  4 14:24 [1;35mtty19[m
+crw-------    1 0        0           4,   2 Sep  4 14:24 [1;35mtty2[m
+crw-------    1 0        0           4,  20 Sep  4 14:24 [1;35mtty20[m
+crw-------    1 0        0           4,  21 Sep  4 14:24 [1;35mtty21[m
+crw-------    1 0        0           4,  22 Sep  4 14:24 [1;35mtty22[m
+crw-------    1 0        0           4,  23 Sep  4 14:24 [1;35mtty23[m
+crw-------    1 0        0           4,  24 Sep  4 14:24 [1;35mtty24[m
+crw-------    1 0        0           4,  25 Sep  4 14:24 [1;35mtty25[m
+crw-------    1 0        0           4,  26 Sep  4 14:24 [1;35mtty26[m
+crw-------    1 0        0           4,  27 Sep  4 14:24 [1;35mtty27[m
+crw-------    1 0        0           4,  28 Sep  4 14:24 [1;35mtty28[m
+crw-------    1 0        0           4,  29 Sep  4 14:24 [1;35mtty29[m
+crw-------    1 0        0           4,   3 Sep  4 14:24 [1;35mtty3[m
+crw-------    1 0        0           4,  30 Sep  4 14:24 [1;35mtty30[m
+crw-------    1 0        0           4,  31 Sep  4 14:24 [1;35mtty31[m
+crw-------    1 0        0           4,  32 Sep  4 14:24 [1;35mtty32[m
+crw-------    1 0        0           4,  33 Sep  4 14:24 [1;35mtty33[m
+crw-------    1 0        0           4,  34 Sep  4 14:24 [1;35mtty34[m
+crw-------    1 0        0           4,  35 Sep  4 14:24 [1;35mtty35[m
+crw-------    1 0        0           4,  36 Sep  4 14:24 [1;35mtty36[m
+crw-------    1 0        0           4,  37 Sep  4 14:24 [1;35mtty37[m
+crw-------    1 0        0           4,  38 Sep  4 14:24 [1;35mtty38[m
+crw-------    1 0        0           4,  39 Sep  4 14:24 [1;35mtty39[m
+crw-------    1 0        0           4,   4 Sep  4 14:24 [1;35mtty4[m
+crw-------    1 0        0           4,  40 Sep  4 14:24 [1;35mtty40[m
+crw-------    1 0        0           4,  41 Sep  4 14:24 [1;35mtty41[m
+crw-------    1 0        0           4,  42 Sep  4 14:24 [1;35mtty42[m
+crw-------    1 0        0           4,  43 Sep  4 14:24 [1;35mtty43[m
+crw-------    1 0        0           4,  44 Sep  4 14:24 [1;35mtty44[m
+crw-------    1 0        0           4,  45 Sep  4 14:24 [1;35mtty45[m
+crw-------    1 0        0           4,  46 Sep  4 14:24 [1;35mtty46[m
+crw-------    1 0        0           4,  47 Sep  4 14:24 [1;35mtty47[m
+crw-------    1 0        0           4,  48 Sep  4 14:24 [1;35mtty48[m
+crw-------    1 0        0           4,  49 Sep  4 14:24 [1;35mtty49[m
+crw-------    1 0        0           4,   5 Sep  4 14:24 [1;35mtty5[m
+crw-------    1 0        0           4,  50 Sep  4 14:24 [1;35mtty50[m
+crw-------    1 0        0           4,  51 Sep  4 14:24 [1;35mtty51[m
+crw-------    1 0        0           4,  52 Sep  4 14:24 [1;35mtty52[m
+crw-------    1 0        0           4,  53 Sep  4 14:24 [1;35mtty53[m
+crw-------    1 0        0           4,  54 Sep  4 14:24 [1;35mtty54[m
+crw-------    1 0        0           4,  55 Sep  4 14:24 [1;35mtty55[m
+crw-------    1 0        0           4,  56 Sep  4 14:24 [1;35mtty56[m
+crw-------    1 0        0           4,  57 Sep  4 14:24 [1;35mtty57[m
+crw-------    1 0        0           4,  58 Sep  4 14:24 [1;35mtty58[m
+crw-------    1 0        0           4,  59 Sep  4 14:24 [1;35mtty59[m
+crw-------    1 0        0           4,   6 Sep  4 14:24 [1;35mtty6[m
+crw-------    1 0        0           4,  60 Sep  4 14:24 [1;35mtty60[m
+crw-------    1 0        0           4,  61 Sep  4 14:24 [1;35mtty61[m
+crw-------    1 0        0           4,  62 Sep  4 14:24 [1;35mtty62[m
+crw-------    1 0        0           4,  63 Sep  4 14:24 [1;35mtty63[m
+crw-------    1 0        0           4,   7 Sep  4 14:24 [1;35mtty7[m
+crw-------    1 0        0           4,   8 Sep  4 14:24 [1;35mtty8[m
+crw-------    1 0        0           4,   9 Sep  4 14:24 [1;35mtty9[m
+crw-------    1 0        0           4,  64 Sep  4 14:24 [1;35mttyS0[m
+crw-------    1 0        0           4,  65 Sep  4 14:24 [1;35mttyS1[m
+crw-------    1 0        0           4,  66 Sep  4 14:24 [1;35mttyS2[m
+crw-------    1 0        0           4,  67 Sep  4 14:24 [1;35mttyS3[m
+crw-rw-rw-    1 0        0           1,   9 Sep  4 14:24 [1;35murandom[m
+crw-------    1 0        0           7,   0 Sep  4 14:24 [1;35mvcs[m
+crw-------    1 0        0           7,   1 Sep  4 14:24 [1;35mvcs1[m
+crw-------    1 0        0           7, 128 Sep  4 14:24 [1;35mvcsa[m
+crw-------    1 0        0           7, 129 Sep  4 14:24 [1;35mvcsa1[m
+crw-------    1 0        0           7,  64 Sep  4 14:24 [1;35mvcsu[m
+crw-------    1 0        0           7,  65 Sep  4 14:24 [1;35mvcsu1[m
+crw-------    1 0        0          10, 256 Sep  4 14:24 [1;35mvga_arbiter[m
+crw-rw-rw-    1 0        0           1,   5 Sep  4 14:24 [1;35mzero[m
+BL002_DEV_LISTING_END
+[   16.836347] EXT2-fs (sda): warning: mounting unchecked fs, running e2fsck is recommended
+[   16.912052] ext2 filesystem being mounted at /newroot supports timestamps until 2038-01-19 (0x7fffffff)
+BL002_ROOT_MOUNTED
+
+~ # [6ncat /root/bl003test.txt
+BL003_PERSISTED_MARKER_7f2c9a3d
+~ # [6nmd5sum /root/bl003test.txt
+7b24b2e42bfa6e3cd373d6953b04ebcf  /root/bl003test.txt
+~ # [6n

@@ -51,7 +51,22 @@ def parse_lnx(lnx_path: str) -> Tuple[bytes, bytes, int]:
     print(f"  Initrd size:   {initrd_size:,} bytes ({initrd_size/1024/1024:.1f} MB)")
 
     kernel_data = data[kernel_offset:kernel_offset + kernel_size]
-    initrd_data = data[kernel_offset + kernel_size:kernel_offset + kernel_size + initrd_size]
+
+    # NOTE: the LNX header declares initrd_size but NOT an initrd file offset. The naive
+    # assumption (contiguous after the kernel) is wrong for the production image: the
+    # initrd is padded to a 32MB boundary (file offset 0x2000000) and the header-declared
+    # section is all zeros ("INITRD: invalid magic" if loaded). Scan for the archive magic
+    # after the kernel instead (gzip 1f8b / cpio newc 070701), falling back to the
+    # contiguous layout for older images.
+    import re
+    initrd_data = None
+    for m in re.finditer(b'\x1f\x8b\x08|\x1f\x8b\x00|070701', data[kernel_offset + kernel_size:]):
+        off = kernel_offset + kernel_size + m.start()
+        if off + initrd_size <= len(data):
+            initrd_data = data[off:off + initrd_size]
+            break
+    if initrd_data is None:
+        initrd_data = data[kernel_offset + kernel_size:kernel_offset + kernel_size + initrd_size]
 
     # Extract raw kernel from PE/COFF
     print("\nExtracting kernel from PE/COFF...")

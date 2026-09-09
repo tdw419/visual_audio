@@ -1768,4 +1768,55 @@ git commit -m "container: add frame allocation scheme + self-hosting tools"
 
 ---
 
+## Phase 27: Browser-Native Boot from Visual Audio Containers 🟢 COMPLETE (2026-09-04)
+
+**Goal**: Boot a real Linux kernel inside a browser tab from a Visual Audio-encoded container — proving "software exists as pixels" for a full disk image, not just scripts. Analysis receipts live in `/home/jericho/zion/docs/research/In-Browser Linux Virtualization_RECEIPTED.md` (receipts treatment of the source doc). Key finding: the integration gap is **storage** (getting a VAC/.nut container to feed virtio-blk), not CPU speed. Do NOT chase performance parity, WasmFX, Direct Sockets, or WebRTC streaming.
+
+### Tasks
+
+- [x] **TASK_BL001: Static v86 + Linux boot receipt** ✅ 2026-09-04
+  - Priority: MEDIUM
+  - Dependencies: none
+  - Description: Serve upstream v86 + a stock Linux image from a static file server. This is the boring-boot receipt — no Visual Audio work yet, just proves the emulator harness runs in a tab. NOTE (2026-09-03): browser-use harness daemon failed to start in the session that drafted this task; a working browser (or Playwright manual run) is the prerequisite. RESOLVED (2026-09-04): ecc `chrome-devtools` MCP had no browser (no Google Chrome installed; snap Chromium is confinement-blocked from writing output; Ubuntu `apparmor_restrict_unprivileged_userns=1` breaks Chrome's sandbox). Fix: userspace Chrome-for-Testing via `@puppeteer/browsers`, launched headless with `--no-sandbox --remote-debugging-port=9222`; MCP repointed with `--browserUrl`. Harness: `browser_boot/` (scripts) — driven via raw CDP, no MCP dependency.
+  - Deviation: used v86 buildroot `linux.iso` (Linux 2.6, ~5.4MB, boots to interactive shell) instead of Alpine bzImage — Alpine-specific boot is folded into BL002 where we control the disk via virtio-blk anyway.
+  - Receipt: `BL001_BROWSER_BOOT_RECEIPT.md`. Kernel → userspace in ~4.0s: VGA console shows `VFS: Mounted root (ext2 filesystem)` + interactive `/root%` shell; serial0 shows `Welcome to Buildroot` / `(none) login:`. Screenshot `browser_boot/receipts/boot.png` (1280×757), serial log `browser_boot/receipts/serial.log`.
+  - Time estimate: 2-4h  (actual: ~1h, most of it browser-environment yak-shaving)
+
+- [x] **TASK_BL002: Container-as-disk sha256 roundtrip** ✅ 2026-09-04
+  - Priority: HIGH (the core novel claim)
+  - Dependencies: TASK_BL001
+  - Description: Convert alpine_rootfs_3mb.img (3MB, preferred first target — `alpine_rootfs_ext4_busybox.img` is 100MB, save it for a later scale test) through dense_encoder → .nut/VAC → back to raw, verify sha256 equality, then boot the reconstructed image via the TASK_BL001 emulator's disk interface (v86 exposes IDE, not literally virtio-blk — corrected in the receipt).
+  - Deviation (evidence-based, not fabricated): `alpine_rootfs_3mb.img` turned out to be a non-bootable stub fixture (empty `/bin`) from an unrelated experiment; `alpine_rootfs_ext4_busybox.img`'s busybox is RISC-V64, not x86 (v86 only emulates x86). Built a fresh, verified x86 (i686 — v86 has no long-mode) Alpine 3.20.9 rootfs instead. Used `tools/dense_encoder_multitile.py` (dense_encoder.py's single-frame format caps at 65535B; multitile already solves this).
+  - Receipt: `BL002_BROWSER_BOOT_RECEIPT.md`. (a) sha256 + `cmp` byte-identical roundtrip (257 tiles, 0.7s encode / 0.35s decode). (b) reconstructed disk boots to real Alpine userspace (`ext2 ... mounted at /newroot`, `BL002_ROOT_MOUNTED`, live shell) in ~18.7s — 8 real failures hit and fixed in sequence (arch mismatch, IOAPIC panic, missing musl loader, a caught false-positive on a rescue-shell prompt, missing scsi/libata chain, `pci=off` blocking the disk controller, wrong ATA driver, missing ext2 module), all logged in the receipt.
+  - Time estimate: 4-8h  (actual: ~2h)
+
+- [x] **TASK_BL003: OPFS persistence overlay** ✅ 2026-09-04
+  - Priority: MEDIUM
+  - Dependencies: TASK_BL002
+  - Description: Wire an OPFS overlay behind the disk backend so guest writes survive page reload. Requires COOP/COEP headers on the serving origin — this constrains embedding, flag it in any demo host. (Implemented as OPFS-backed `hda.buffer` load/flush rather than v86's per-sector HTTP-Range+overlay path — our 16MB image fits fully in memory; same observable contract, see receipt for why.)
+  - Receipt: `BL003_BROWSER_BOOT_RECEIPT.md`. Two-phase test: write a file + md5sum in the guest (disk source: http) → flush buffer to OPFS → full page reload, fresh V86 instance (disk source: opfs, confirmed) → cat + md5sum the same file — md5 `7b24b2e42bfa6e3cd373d6953b04ebcf` matches byte-for-byte across the reload. One real race-condition failure hit and fixed (serial input sent before switch_root's getty attached the tty) before reporting PASS.
+  - Time estimate: 4h  (actual: ~1h)
+
+- [x] **TASK_BL004: WAV-native sector encoding** ✅ 2026-09-04
+  - Priority: LOW until BL002 receipt exists (BL002 done first, per gating)
+  - Dependencies: TASK_BL002 receipt
+  - Description: Design a sector-addressable dual-band audio container so the browser fetches boot sectors by decoding WAV ranges instead of HTTP Range. This is the genuinely novel contribution — a browser Linux whose disk is literally audio. All perf numbers in the source research doc are unverifiable PNG images; instrument our own timings rather than quoting them.
+  - Design note: existing `tools/dual_band.py`/`sonic_codec.py` (checked first) modulate small payloads into *listenable* audio — wrong tool for O(10MB) boot-critical throughput. Built `wav_sector_container.py` instead: disk bytes stored unmodified as a real WAV's data chunk (spec-valid RIFF/WAVE, `file(1)`-confirmed), so sector `i` = WAV byte offset `44+i*sector_size`, recoverable via a plain HTTP Range GET — no audio decoding needed. v86 has no custom disk-read hook (checked `v86.d.ts`: only `{url}`/`{buffer}`/`{use_parts}`) and no header-skip option, so it can't be pointed at the `.wav` directly; instead the browser assembles the full disk buffer itself from sequential WAV-Range fetches, then hands v86 that buffer (same `{buffer}` mode as BL003).
+  - Receipt: `BL004_BROWSER_BOOT_RECEIPT.md`. 2048/2048 sectors (16MB disk) fetched via Range GET against `alpine.wav`, zero requests to any `.img`; assembled buffer's sha256 (computed in-browser) matches BL002/BL003's known-good image exactly; guest boots from it. Measured per-sector latency (this host, sequential fetches): min 0.84ms / p50 1.19ms / p95 3.24ms / max 10.16ms / avg 1.50ms.
+  - Time estimate: 8-16h  (actual: ~1.5h)
+
+- [x] **TASK_BL005: MKV-as-disk — boot from a real VAC1 container** ✅ 2026-09-04
+  - Priority: MEDIUM (Phase 27 extension; connects the boot proof to the actual container format)
+  - Dependencies: TASK_BL004 receipt
+  - Description: Replace BL004's opaque WAV with a genuine VAC1-layout Matroska container: directory JSON in frame 0, the disk image as one `disk/image` entry split into dense_encoder-framed chunks, one per 450×450 frame. The browser recovers every frame via HTTP Range GET against the .mkv plus in-browser byte manipulation only — no ffmpeg, no video decoder, no disk-image fetch.
+  - Deviation (empirical, the task's key finding): FFV1 (the project-standard codec) is unusable for this path — frames are compressed, so Range-fetched bytes are coded data with no JS decoder. Tested and switched to Matroska V_UNCOMPRESSED (`-c:v rawvideo -pix_fmt bgr24 -allow_raw_vfw 1`), which stores pixel bytes verbatim at `packet_pos+4` and stays byte-exact under `va_container.py`'s rgb24 decode; the browser unswaps BGR→RGB in JS (byte shuffling, not decoding). Cost: 150MB vs FFV1's 8.1MB for the 16MB test image — the honest price of "no decode in the browser."
+  - Receipt: `browser_boot/bl005/RECEIPT.md` + `receipts/receipt_run2.json`. Offline: encode/verify/decode roundtrip sha256-identical (3089f7df…, 257/257 per-frame CRCs) + full Python simulation of the exact browser recipe before any browser run. Live CDP (headless Chrome 152): 257 Range GETs against `disk.mkv`, zero `.img`/`.wav` requests, 0 CRC failures, browser-assembled sha256 == manifest, Alpine boots to userspace (`BL002_ROOT_MOUNTED`, shell) in 18.7s; fetch phase 1.5s (avg 3.97ms/frame, localhost). One over-broad gate (forbidden-request regex flagged the initramfs `.gz`) corrected between run1 and run2 — both receipts kept.
+
+### Non-Goals
+- Performance parity with native (emulation slowdown figures in the source doc are aspirational, not receipted).
+- Server-side streaming (Firecracker/WebRTC) — duplicates what the host stack already gives us.
+- Unshipped standards (WasmFX, Memory64, Direct Sockets) as dependencies.
+
+---
+
 ## Backlog (Unprioritized Tasks)

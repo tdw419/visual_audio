@@ -15,6 +15,7 @@ import sys
 import os
 from pathlib import Path
 import struct
+import re
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tools'))
 
@@ -61,13 +62,68 @@ def load_opensbi_alpine_and_dtb(core: SpatialRV64ICore) -> int:
     print(f"  [d] Kernel offset: 0x{kernel_offset:x}, size: {kernel_size:,} bytes")
     print(f"  [e] Initrd size: {initrd_size:,} bytes")
 
-    # Extract raw kernel and initrd
+    # Extract raw kernel and initrd. NOTE: the LNX header declares initrd_size but NOT an
+    # initrd file offset — the naive assumption (right after the kernel) is wrong for this
+    # image: the initrd is padded to a 32MB boundary (file offset 0x2000000) and the
+    # header-declared section is all zeros ("INITRD: invalid magic" if loaded). Scan for
+    # the archive magic after the kernel instead (gzip 1f8b / cpio newc 070701), falling
+    # back to the contiguous layout for older images.
     kernel_pe = alpine_data[kernel_offset:kernel_offset + kernel_size]
-    initrd_data = alpine_data[kernel_offset + kernel_size:kernel_offset + kernel_size + initrd_size]
+    initrd_data = None
+    initrd_file_off = None
+    # ALPINE_INITRD_OVERRIDE: swap in a different initrd (e.g. the tiny 163-byte
+    # cpio.gz for the small-initrd A/B that isolates cpio-parser vs inflate bugs).
+    # When set, skip the LNX magic scan entirely (it would otherwise overwrite
+    # the override with the real initrd's first initrd_size bytes).
+    override = os.environ.get('ALPINE_INITRD_OVERRIDE')
+    if override:
+        initrd_data = Path(override).read_bytes()
+        initrd_size = len(initrd_data)
+        initrd_file_off = -1
+        print(f"  [e0] Initrd OVERRIDE: {override} ({initrd_size:,} bytes)")
+    else:
+        for m in re.finditer(b'\x1f\x8b\x08|\x1f\x8b\x00|070701', alpine_data[kernel_offset + kernel_size:]):
+            off = kernel_offset + kernel_size + m.start()
+            if off + initrd_size <= len(alpine_data):
+                initrd_data = alpine_data[off:off + initrd_size]
+                initrd_file_off = off
+                break
+        if initrd_data is None:
+            initrd_data = alpine_data[kernel_offset + kernel_size:kernel_offset + kernel_size + initrd_size]
+            initrd_file_off = kernel_offset + kernel_size
+    if initrd_file_off != kernel_offset + kernel_size:
+        print(f"  [e1] Initrd found at file offset 0x{initrd_file_off:x} (not contiguous with kernel)")
 
-    # Calculate load addresses
+    # Calculate load addresses. The kernel payload is an EFI-stubbed PE image: the LNX
+    # header's kernel_size is the FILE size, but the kernel's in-memory extent (SizeOfImage,
+    # including .bss) is larger — and the kernel's own memblock reservation for its image
+    # is rounded UP (to at least a 2MB boundary), so an initrd placed right after the file
+    # size (or even right after SizeOfImage) lands INSIDE the kernel's reserved region.
+    # The kernel then prints "INITRD overlaps in-use memory region" and DISABLES the
+    # initrd — which later makes mount_root fail with "VFS: Unable to mount root fs".
+    # Place the initrd at a fixed 32MB offset instead: far past any plausible kernel
+    # extent (this kernel: 0x80200000-0x81600000 2MB-aligned) and clear of the DTB.
+    e_lfanew = struct.unpack('<I', kernel_pe[0x3C:0x40])[0]
+    if kernel_pe[e_lfanew:e_lfanew+4] == b'PE\x00\x00':
+        opt = e_lfanew + 24
+        if struct.unpack('<H', kernel_pe[opt:opt+2])[0] == 0x20b:  # PE32+
+            kernel_mem_size = struct.unpack('<I', kernel_pe[opt+56:opt+60])[0]
+        else:  # PE32
+            kernel_mem_size = struct.unpack('<I', kernel_pe[opt+56:opt+60])[0]
+    else:
+        kernel_mem_size = kernel_size
     kernel_load_addr = RAM_BASE + KERNEL_OFFSET
-    initrd_load_addr = kernel_load_addr + ((kernel_size + 4095) & ~4095)
+    # Place the initrd at a fixed 40MB offset instead: far past any plausible kernel
+    # extent (this kernel: 0x80200000-0x81600000 2MB-aligned) and clear of the DTB.
+    # IMPORTANT: must NOT span 0x82200000 — the Ubuntu opensbi fw_jump.bin is built
+    # with FW_JUMP_FDT_ADDR=0x82200000 and its boot path RELOCATES the DTB there
+    # (firmware/fw_base.S "Relocate Flatened Device Tree"), clobbering whatever sits
+    # in that range. The old 32MB offset (0x82000000) made the initrd span that
+    # address; the FDT copy corrupted the gzip at +2MB and the kernel's inflate
+    # decoded the garbage into a bogus cpio entry -> "broken padding" -> 0xCC poison.
+    initrd_load_addr = max(kernel_load_addr + ((kernel_mem_size + 4095) & ~4095),
+                           RAM_BASE + 0x2800000)  # 40MB fixed offset (clear of 0x82200000)
+    print(f"  [e2] Kernel in-memory size (PE SizeOfImage): {kernel_mem_size:,} bytes")
 
     # Generate DTB
     print("  [f] Generating DTB...")
@@ -77,7 +133,7 @@ def load_opensbi_alpine_and_dtb(core: SpatialRV64ICore) -> int:
         uart_base=0x10000000,
         isa='rv64imafdc',
         timebase=10_000_000,
-        bootargs='earlycon=uart8250,mmio,0x10000000 console=ttyS0',
+        bootargs='earlycon=uart8250,mmio,0x10000000 console=ttyS0 cma=0',
         kernel_addr=kernel_load_addr,
         initrd_addr=initrd_load_addr,
         initrd_size=initrd_size,
@@ -95,7 +151,12 @@ def load_opensbi_alpine_and_dtb(core: SpatialRV64ICore) -> int:
     print("  [j] Writing initrd...")
     core.write_mem_bytes(initrd_offset, initrd_data)
 
-    dtb_addr = (RAM_BASE + RAM_SIZE - len(dtb)) & ~0x7
+    # The DTB must NOT sit at the top of RAM: the kernel's CMA (16MB reserved from the
+    # top, config-driven — [0x83000000, 0x84000000) for 64MB) would claim the DTB's page
+    # and overwrite it, and the late of_fdt_raw_init initcall (crc32 over the DTB) then
+    # reads garbage and faults. Place it at a fixed 38MB offset: past the kernel extent
+    # and the initrd, below the CMA.
+    dtb_addr = RAM_BASE + 0x2600000
     dtb_offset = dtb_addr - RAM_BASE
     print("  [k] Writing DTB...")
     core.write_mem_bytes(dtb_offset, dtb)
@@ -133,10 +194,10 @@ def main():
     print()
 
     # Run boot with minimal GPU sync overhead
-    print("[4] Executing boot sequence (max 100M steps)...")
+    print("[4] Executing boot sequence (max 1B steps)...")
     print()
 
-    max_steps = 100_000_000
+    max_steps = 1_000_000_000
     steps = 0
     batch_size = 1_000_000  # 1M steps per batch
     check_interval = 5      # Check output every 5 batches = 5M steps

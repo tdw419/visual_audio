@@ -1,0 +1,22 @@
+[package]
+name = "pixel_emulator"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Pixel tracing infrastructure
+pixel-tracer = { path = "../pixel_trace/tracer" }
+pixel-vm = { path = "../pixel_trace/vm" }
+pixel-analyzer = { path = "../pixel_trace/analyzer" }
+
+# Geometry OS spatial primitives
+geos_pixel = { path = "../systems/geos_pixel" }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = "0.4"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"

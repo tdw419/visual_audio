@@ -161,6 +161,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let imm = (high_px.z << 24u) | low24;
 
     var next_pc = vec2<u32>(x + INSTR_WIDTH, y);
+    if (next_pc.x >= uniforms.image_width) {
+        next_pc.x = 0u;
+        next_pc.y = next_pc.y + 1u;
+    }
 
     if (opcode == OPCODE_LDI) {
         cpu.registers[rd] = imm;
@@ -188,9 +192,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let addr = cpu.registers[rs2];
         cpu.registers[rd] = mem_read(addr);
     } else if (opcode == OPCODE_ST) {
-        // ST rd rs2 -> store rs2 into the pixel at address rd (rd is the
-        // ADDRESS register here, not a destination - matches GlyphCPUv2).
-        let addr = cpu.registers[rd];
+        // ST rs1 rs2 -> store rs2 into the pixel at address rs1 (rs1 is the
+        // ADDRESS register here, matching GlyphCPUv2 and assembler).
+        let addr = cpu.registers[rs1];
         mem_write(addr, cpu.registers[rs2]);
     } else if (opcode == OPCODE_PUSH) {
         cpu.registers[31] = cpu.registers[31] - 1u;

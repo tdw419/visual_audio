@@ -1,0 +1,21 @@
+{
+  "ticket_id": "gh18-table-reservation",
+  "roadmap_item": "GH-18 (follow-up) / GH-21 (precondition)",
+  "step": "Pin syscall table words 1568..1583 to a reserved, asserted pixel range before GH-21 program-text growth",
+  "created": "2026-09-08T21:45:00-05:00",
+  "created_by": "oversight session (durability review of GH-18 pfn-5 fix)",
+  "problem": {
+    "current_state": "admit_syscall writes the table word 1570 via the pfn-5 pixel window [1312,1328). The mapping lands in trailing zero-padding beyond the program text — it is correct at the CURRENT image size but relies on headroom, not a structural guarantee.",
+    "failure_mode": "GH-21 (POSIX shim) and GH-22 (driver ABI) add kernel program text and syscall slices. When text grows into the padding, the table-write collides with real opcodes again — and the collision will be a correct-looking write into what used to be padding, i.e. a multi-session regression hunt exactly like today's _pix_write_word incident (commit e3d3c13 defect B).",
+    "precedent": "The fs window [1024,1280) already has an explicit reserved layout with an engine-exact alias in _pix_write_word branch 1. The syscall table deserves the same contract."
+  },
+  "required_fix": [
+    "Define a reserved TABLE_PIXEL_WINDOW (like the fs window) covering the pixel addresses that words 1568..1583 map to, with an explicit layout comment in baker.py and autoatlas.py.",
+    "Add a bake-time assertion (test or StaticVerifier leg) that NO program text assembles into that window — assert it in tests/test_gh18_syscall_abi.py so it guards every future bake.",
+    "Verify the pfn-5 [1312,1328) mapping is derived from a constant (not image-size-dependent arithmetic); if it depends on current height, pin the derivation so growing program text cannot move it."
+  ],
+  "gate": "New leg in tests/test_gh18_syscall_abi.py: bake every mode (baseline/admit/paged_dispatch), assert table window pixels are reserved (no opcode text) and admit_syscall write path lands inside the reserved window; full run_gate_gh18.sh stays 13/13+",
+  "attempt": 1,
+  "max_attempts": 3,
+  "priority": "MUST close before GH-21 starts (roadmap ordering note updated accordingly)"
+}

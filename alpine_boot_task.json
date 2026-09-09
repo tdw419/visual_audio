@@ -1,0 +1,12 @@
+{
+  "name": "Alpine Boot Worker",
+  "description": "Autonomous Alpine Linux boot monitoring and fixing daemon",
+  "worker_cmd": ["python3", "alpine_boot_worker_wrapper.py"],
+  "state_file": "alpine_boot_state.json",
+  "heartbeat_file": "/tmp/alpine_boot_heartbeat",
+  "supervisor_state_file": "alpine_boot_supervisor_state.json",
+  "max_heartbeat_age": 120,
+  "max_restart_backoff": 300,
+  "max_restarts_per_hour": 6,
+  "success_threshold": 100000000
+}

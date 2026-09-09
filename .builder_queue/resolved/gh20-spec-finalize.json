@@ -1,0 +1,31 @@
+{
+  "ticket_id": "gh20-spec-finalize",
+  "roadmap_item": "GH-20",
+  "step": "Finalize Pixel-FS v2 gate legs against the landed GH-18 ABI, then implement",
+  "created": "2026-09-08T21:45:00-05:00",
+  "created_by": "oversight session (post GH-18 green, pre-overnight)",
+  "failing_command": "tests/test_gh20_fs_v2.py does not exist yet — this ticket is the authorization to create it from the roadmap's PROVISIONAL sketch, now un-provisional because GH-18 landed (e3d3c13, 13/13)",
+  "context": {
+    "abi_facts": {
+      "dispatch": "indexed table at GH18_TABLE_WORD=1568 (sys_n index), KJMP packed pixel PC; JZ->:__ksys_unknown on zero slot; flag-safe zero test (XOR r4 r4 / CMP r6 r4 — r0 is the CMP FLAG register, never CMP against r0)",
+      "box2": "[736..768) tile-ABI window: argv word 750, result word 754; USER stores to this window are admitted for tile tasks",
+      "admission": "autoatlas.ingest() ONLY — proof = admission; unverified candidates rejected E_ATLAS_UNVERIFIED, table untouched",
+      "pixel_layouts": "bake stamps 1 word = 1 pixel in tile rect [1600,1696) as (cell+i//4, x+i%4); table word 1570 lives in pfn-5 window [1312,1328); _pix_write_word now raises ValueError for unknown word ranges — FS ops must extend it with explicit branches, never fall through",
+      "reentrancy": "tick masked on SYSCALL entry, unmasked on SYSRET — FS tiles run to completion",
+      "version_word": "word 952 = 0x00020018"
+    },
+    "gate_legs_to_finalize": [
+      "fs_append grows extents past initial allocation without clobbering neighbor windows",
+      "fs_rename updates directory entry in-place, inode index preserved",
+      "fs_unlink with non-zero refcount fails cleanly (E-K1 or errno), no dangling pointers",
+      "canonical replay md5 fixpoint preserved across mutations",
+      "all FS ops route through the syscall table as proven tiles (no direct pixel writes)"
+    ],
+    "hints_from_session": "the fs window [1024,1280) already has an engine-exact 2-pixel alias layout in _pix_write_word branch 1 — FS tiles likely build on that; study tools/glyph_gpt/autoatlas.py::_pix_write_word before designing",
+    "warning": "MUL does not exist in OpcodeMapV2 (ADD/SUB/AND/OR/XOR/SHL/SHR only). Multiply = shift-add triple. LDI is exact — decimalize hex constants carefully (a 0x0ABC000C-as-decimal typo cost a session today). CMP against r0 tests the flag register, not zero."
+  },
+  "attempt": 1,
+  "max_attempts": 3,
+  "gate": "PYTHONPATH=tools:. /usr/bin/python3 -m pytest tests/test_gh20_fs_v2.py -q green + full GH regression (output/run_gate_gh18.sh must stay 13/13)",
+  "receipt_discipline": "commit message pastes failing output before fix, passing run after"
+}
