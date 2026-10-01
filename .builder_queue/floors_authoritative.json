@@ -1,0 +1,21 @@
+{
+ "authority": "floors_authoritative.json (zion repo; supersedes .builder_queue/floors.json and any cross-repo floors)",
+ "measures": "REAL SpatialRV32ICore.step(1)/get_state() \u2014 4 blocking readbacks per step(), not a proxy shader; plus glyphrunner_wgsl_step = the GlyphRunner.run_wgsl per-step protocol (1 dispatch + 1 blocking cpu-state readback) against the real wgsl_glyph_isa_v2 shader",
+ "floor_us": {
+  "step": 1165.2,
+  "step_min": 581.3,
+  "step_p10": 628.3,
+  "step_p90": 2557.3,
+  "get_state": 555.0,
+  "get_state_min": 334.1,
+  "gen_dispatch_plus_map": 738.7,
+  "glyphrunner_wgsl_step": 632.4,
+  "glyphrunner_wgsl_step_min": 436.4,
+  "glyphrunner_wgsl_step_tput": 71.1
+ },
+ "readbacks_per_step_call": 4,
+ "reps": 30,
+ "freshness_window_h": 12,
+ "adapter_summary": "NVIDIA GeForce RTX 5090 Laptop GPU (DiscreteGPU) via Vulkan",
+ "measured_at": "2026-09-22T18:27:39.715591+00:00"
+}

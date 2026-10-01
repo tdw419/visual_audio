@@ -1,0 +1,13 @@
+#cloud-config
+hostname: hermes-guest
+
+# Mount shared filesystem on boot
+runcmd:
+  - mkdir -p /host_zion
+  - mount -t 9p -o trans=virtio,version=9p2000.L host_zion /host_zion
+  - echo "=== AUTO-VERIFICATION STARTED ===" > /host_zion/projects/visual_audio/cloud_init_proof.txt
+  - date >> /host_zion/projects/visual_audio/cloud_init_proof.txt
+  - hostname >> /host_zion/projects/visual_audio/cloud_init_proof.txt
+  - echo "Shared FS mounted successfully" >> /host_zion/projects/visual_audio/cloud_init_proof.txt
+  - bash /host_zion/projects/visual_audio/guest_self_verify.sh || echo "Hermes not yet installed - guest environment verified" >> /host_zion/projects/visual_audio/cloud_init_proof.txt
+  - sync

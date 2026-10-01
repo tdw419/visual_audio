@@ -1,0 +1,248 @@
+# Snapshot of `bash bm001_landing_plan.sh`, taken 2026-09-20 (night) with HEAD at
+# 60ced60c. Five earlier copies came the same day -- at 77b23730, at d114c2e9, at
+# 136773f4, at 8d88e288 and at b7d18793 -- and each was superseded for a reason
+# spelled out in the Reading below rather than here.
+# This copy is the first with the intersection: the files the ladder's prose names
+# and the commit does not carry, bucketed by class and then cut by which decision
+# each of them actually belongs to.
+# A record, not the tool: the tree moves, so re-run the script for live numbers.
+# The snapshot is excluded from everything the script counts and lists -- the
+# untracked LIST, the tracked corpus the ignored section greps, the
+# differing-from-HEAD listing -- each exclusion having been earned today by a
+# count that moved because the previous count had been written down. It is NOT
+# excluded from doc_ref_audit.py's sweep, and the difference is measured in the
+# Reading: the file count and the decision split survive this file's existence,
+# the citation count does not.
+#
+# `in-git` is HEAD's count, so both asymmetries are on the page at once: files
+# this box has that HEAD does not, and, in the last line, the reverse.
+#
+# This body reproduces the run that wrote it: two consecutive runs at this commit
+# gave identical bytes, 125 lines, and rewriting this file around them moved no
+# listing.
+
+class     files          bytes  what it is
+-------   -----  -------------  ---------
+source       58         197795  the tree the receipts cite: rung1-5 asm/code, scripts, docs
+evidence      0              0  landed records a reviewer checks the claims against
+data         18           6014  generated tables/JSON -- per row, is it a record or a product?
+artifact     17       86207836  build products and captures: every gate re-derives these
+vendor        1        9260807  THIRD PARTY, outside git today: vendor in, or pin + fetch step
+other         4          16477  no rule matched -- worth a look before the ratification
+
+Per directory: what HEAD already carries vs what only this box has
+dir             in-git  untracked of-src  consequence for a clean checkout
+rung2                2          7      5  2 of 9 in git
+rung3                0          2      2  WHOLLY OUTSIDE GIT -- `git archive` does not create it
+rung4               11         13      5  11 of 24 in git
+rung5               14         35     25  14 of 49 in git
+rung6               72          8      1  72 of 80 in git
+rung6_5             93          0      0  landed; nothing here waits on the ratification
+rung7                0         20     13  WHOLLY OUTSIDE GIT -- `git archive` does not create it
+rung8               12          1      0  12 of 13 in git
+rung9               80          6      2  80 of 86 in git
+(top)                5          6      5  5 of 11 in git
+                                                       (of-src total: 58)
+Every file HEAD tracks under the ladder is present on this box.
+Tracked files whose bytes here differ from HEAD (1):
+  rung4/rung4_medium.png                         here 66572 B, HEAD 66625 B
+
+Gate entry points this commit cannot run -- untracked files named run_* or
+*probe*. A reviewer who lands nothing cannot re-derive those rows at all.
+  run_gate.sh
+  rung5/boot_probe.sh
+  rung5/probe_deint.py
+  rung5/probe_dump.py
+  rung5/probe_dump_run.py
+  rung5/probe_layout.py
+  rung5/probe_marker.py
+  rung5/probe_observed.py
+  rung5/probe_witness.py
+  rung5/run_gate5_persist_probe.sh
+  rung5/run_probe_stub.py
+  rung7/boot_probe.sh
+  rung7/throughput_probe.py
+  rung9/bm905_console_probe.py
+  rung9/bm905_uinput_probe.py
+
+Biggest five untracked files (the byte-weight of the decision):
+    67108864  rung4/probe2_medium.png
+    18235937  rung7/tc_medium.png
+     9260807  rung7/core.gz
+       69659  rung5/rung5_medium.png
+       69555  rung5/rung5_pb.png
+
+Vendor inputs (by existence, not by git status -- one of them is IGNORED,
+ so `git status` never shows it and a clean checkout silently lacks it):
+  rung7/core.gz                  9260807 B  sha256 7f1e370dd4e489fd...  untracked, not ignored
+  rung7/TinyCore-current.iso    28135424 B  sha256 c465424052643dc9...  IGNORED by .gitignore:68:*.iso
+
+The ignored population -- what `git status` cannot show at all. Every count
+above is the untracked-and-NOT-ignored set; these are the files .gitignore
+hides from it, which is how the .iso above stopped being a curiosity and
+became the visible tip of a much larger set:
+  667 files, 1790052236 B ignored under the ladder
+    a tracked file spells its name:   172 files, 962308442 B
+    no tracked file spells its name:  495 files, 827743794 B
+    Spelled-out is not produced: a script that composes a filename from a
+    variable hides its own outputs from this test, so the second line is a
+    cleanup candidate list and not a verdict. Every closed gate re-derives
+    its own products either way, which is what a pristine tree is for.
+
+  The rules that hide them (count, then .gitignore source:pattern):
+        142 .gitignore:147:logs/
+        100 .gitignore:49:*.log
+         81 tools/bare_metal_poc/rung4/.gitignore:6:dbg_*
+         56 .gitignore:72:*.bin
+         43 .gitignore:2:__pycache__/
+         37 tools/bare_metal_poc/rung5/.gitignore:8:serial_*
+         30 tools/bare_metal_poc/rung6_5/.gitignore:21:/captures/
+         29 tools/bare_metal_poc/rung5/.gitignore:4:*.bin
+  Largest, and whether any tracked file spells the name:
+        67108864 B  spelled    rung6_5/bm651_nombox.raw
+        67108864 B  spelled    rung6_5/bm651_noecho.raw
+        67108864 B  spelled    rung6_5/bm651_halt.raw
+        67108864 B  spelled    rung6_5/bm651_green.raw
+        67108864 B  unspelled  rung5/rung5_va.raw
+
+Cited by the prose, absent from the commit (doc_ref_audit.py check 4,
+bucketed by the classes above). Every file here is a promise a clean
+checkout cannot keep AND a name some record spells, so "drop it as scratch"
+is not available for these:
+class      files  cites          bytes  what it means for the promise
+source        30    115          87686  code or prose nobody can read from a clean checkout
+data           7      9           4179  a table or JSON a receipt points at
+artifact      47     77      140027108  a build product -- regenerable, if the build is in git
+vendor         2     41       37396231  third-party bytes; needs a pin and a fetch step
+other          1      1            525  no rule; look at it
+TOTAL         87    243      177515729
+
+  Which decision each of them belongs to, because the three are not one backlog:
+        29  among the 98 files TASK_BM001 is asked about: land these and the promise holds
+        50  in the ignored set: a different decision -- un-ignore, or pin and fetch
+         8  outside tools/bare_metal_poc/: no commit that lands the ladder produces these
+              .builder_queue/BM905_MANUAL_LANE_STATE.md
+              output/bm905_gate_result.json
+              output/bm905_heal_window.py
+              output/bm905_n1_codec.log
+              output/bm905_n2_guest_dd_proof_v2.log
+              output/bm905_n4_gate_full_v4.log
+              output/bm905_n5_partition_proof.log
+              output/bm905_testify_evidence.jsonl
+  Counts are per file, cites per citation; a bare name that answers to
+  several files counts once for each, which is what an under-qualified
+  citation costs. A handful of these sit outside the ladder entirely
+  (records belonging to a different lane), and they are listed because
+  the audit sweeps what this ladder cites, not who owns the file.
+
+No rule matched these -- an extension the classifier does not know:
+            34  rung6/fixtures/bm903_medium_px_corrupt.crc
+          8239  rung7/iso2
+          8204  rung7/iso3
+             0  rung7/kernel
+
+Total untracked-and-not-ignored: 98 files
+Read-only run: nothing staged, no file written. The decision is Jericho
+(ROADMAP TASK_BM001); the check that a landed tree still works is
+reproduce_prereqs.sh plus the five closed rows it hands over to
+(rung6/evidence/cleanroom/pristine_rows_table.txt is what they gave).
+
+# Reading, all of it measured here rather than inferred:
+#
+#   * 289 files under the ladder are in HEAD; 98 are not, 58 of them source.
+#   * rung6_5 is fully landed (93 in git, 0 waiting). rung3 and rung7 have ZERO
+#     tracked files, so `git archive HEAD` does not create those directories at
+#     all -- the two `mkdir`s in the clean-tree recipe are not a nicety, they are
+#     the absence of a rung.
+#   * 15 gate entry points are outside the commit, rung 1's run_gate.sh among
+#     them, so a reviewer who lands nothing cannot re-derive those rows. Two of
+#     the 15 are rung9/bm905_*.py -- another lane's, mid-flight, listed here
+#     because the tool counts the tree and not the author.
+#   * Of rung7's 20 untracked files exactly one is load-bearing for the closed
+#     rows: core.gz. The pristine tree had a rung7/ holding nothing else and ran
+#     BM903, BM602, BM653, BM651 and BM802 green (see
+#     rung6/evidence/cleanroom/pristine_rows_table.txt). The other 19 matter to
+#     rung 7's own gate, which no commit can currently re-run.
+#   * Since the b7d18793 copy HEAD has gained NO files. Six commits landed under
+#     the ladder in between (64e5342e, fce83269, 292d6c28, 75f5a0af, e582d63d,
+#     60ced60c) and every one of them edits a file HEAD already tracked, which is
+#     why the untracked side reads 98 here exactly as it read there, and why the
+#     differing-from-HEAD listing fell from 3 files to 1: the two tools and the
+#     ROADMAP stopped being dirt by being committed. The one entry left,
+#     rung4/rung4_medium.png, is dirty because rung 4's gate passed -- run_gate4.sh
+#     ends with the 64 KB build under the comment "restore the standing artifact
+#     set" while HEAD tracks the 256 KB one, and both were re-derived from HEAD's
+#     own tracked asm and matched exactly (a840b7ee for 256 KB, 3c8ec00c for 64
+#     KB), so the dirt is designed rather than lost. Re-encoding that medium into
+#     git is a TASK_BM001 decision, so it stays dirty on purpose. The other file
+#     in that class, rung9/bm902_diff_receipt.txt, stamps its own date: re-running
+#     BM902's gate moved one line and no claim (host-only, 0.4 s, GATE PASS, every
+#     pin byte-identical), landed at 01385e44. Either way a clean `git status`
+#     cannot be the test that landing is finished.
+#   * The ignored population is 667 files and 1,790,052,236 B here, against the
+#     98 files and 86.2 MB the class table above counts -- nearly seven times the
+#     files, twenty times the bytes. An hour earlier the same section read 668 and
+#     1,790,064,977, and the difference is one interpreter cache: 22,017 B of
+#     __pycache__ left behind by an ad-hoc `import doc_ref_audit` during
+#     development, needed by nothing, deleted before this copy. That is the whole
+#     of the drift, and it is why the 44/43 count of __pycache__ entries under the
+#     `__pycache__/` rule is not comparable between the two copies. The script
+#     itself writes nothing -- running it twice in a row here gave identical bytes
+#     -- so the number moves when the tree moves and not because it was read.
+#   * NEW, and the reason this copy supersedes the last: the intersection. The
+#     audit knows which files the prose cites and HEAD lacks; this script knows
+#     what each of them is. Together: 87 files, 177,515,729 B, of which source is
+#     30 files, artifact 47, data 7, vendor 2 and other 1. Two things fall out of
+#     that. The first is a cross-check that nobody planned -- the vendor bucket is
+#     exactly 37,396,231 B, which is core.gz plus the ignored TinyCore ISO to the
+#     byte, so the audit and the classifier are demonstrably looking at the same
+#     files. The second is the cut the class table cannot make, and it is the one
+#     the ratifier needs: of the 87 only 29 are among the 98 TASK_BM001 is asked
+#     about, 50 are in the ignored population (a different decision), and 8 sit
+#     outside tools/bare_metal_poc/ entirely -- rung9/RECEIPT_BM905_INPUT_MAILBOX.md
+#     pointing at another lane's output/bm905_* logs and
+#     .builder_queue/BM905_MANUAL_LANE_STATE.md, which no commit that lands the
+#     ladder can deliver whatever it decides. TASK_BM001's reach over the promises
+#     made over it is therefore under a third, and the rest of that reach is
+#     governed by the un-ignore-and-fetch decision the previous bullet introduced.
+#   * The section refuses to report a zero it did not measure, which was tested
+#     both ways rather than assumed: with the audit path pointed at a nonexistent
+#     file the script prints ERROR and exits 1 and the table never appears; with a
+#     stub audit that runs and cites nothing it prints one explicit line, "none --
+#     no citation in the swept prose points at a file the commit lacks", instead of
+#     an empty table a reader would mistake for a pass.
+#   * And the fourth instance of this tool's own record moving its own numbers,
+#     which is the reason to read the last two bullets as classes rather than as
+#     totals. Deleting this file before the audit runs makes check 4 read 87 files
+#     and 240 citations instead of 241 -- the one difference is this snapshot's own
+#     mention of run_gate.sh, a file already in the list. Committing the ROADMAP
+#     paragraph that describes the intersection then moved the same count again,
+#     241 to 244, without adding a single file. So: 87 files, and the 29/50/8 split that
+#     comes with them, are the figures that survive this file existing; the
+#     citation column is a tally of how much prose names something, and prose is
+#     what changes. Rewriting this record moved that column once more, 244 down to
+#     243, and the body above is the run taken afterwards -- which is the fixed
+#     point: re-running the script on the finished file prints the same 125 lines
+#     back, so the record is self-consistent even though it is not self-ignoring.
+#   * ADDENDUM, taken later the same evening at 12789220, and its first finding
+#     is against the sentence just above. That "125 lines" was never the body's
+#     size: this file's non-comment body counts 127 lines today (115 once the
+#     blanks go), and the run taken at this commit counts 129. So the fixed point
+#     two sentences above did not reproduce its own record, and it certainly does
+#     not reproduce across commits: the table differs -- rung6
+#     72 -> 74 in HEAD and (top) 5 -> 6, because two more of this lane's records
+#     landed after this file was taken. Check 4 went the same way, 87 files and
+#     243 citations to 88 and 256, and the one added file is rung2/stage1.asm,
+#     which the lower-rungs record names as a source the commit lacks -- so the
+#     claim two bullets back, that 87 and the 29/50/8 split survive this file
+#     existing, was right about *this* file (deleting it still changes neither
+#     count: 88/256 either way, re-measured) and wrong about the day, because a
+#     sibling record is what moved them. The split now reads 30/50/8.
+#     The interpreter cache came back too: 23,877 B of __pycache__ from a later
+#     ad-hoc import of the same module, deleted again before these numbers, which
+#     is why this copy's 667/1,790,052,236 B is the figure to re-run against and
+#     668 is what an un-swept box shows.
+#     Nothing above is rewritten: it is the run at 60ced60c and it reads true
+#     there. What the addendum settles is the property this row kept claiming for
+#     its own records and kept losing -- a snapshot is proof of the commit it was
+#     taken at, and the only live claim in it is the command.

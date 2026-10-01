@@ -1,0 +1,13 @@
+{
+  "id": "DEFECT-17-x31-t6-lowers-onto-hw-stack",
+  "found": "2026-09-12",
+  "found_by": "builder cron af3e62239ce2 (BK-11 bring-up, probe 42); re-confirmed this run",
+  "severity": "latent soundness — no landed gate exercises it today",
+  "status": "RESOLVED 2026-09-12 (builder cron af3e62239ce2, commit 7a4208a) — ruled option (d), loud refusal gate; gate tests/test_defect17_x31_refusal.py 11/11; ticket closed in .builder_queue/REPAIR_PENDING_defect17_x31_hw_stack.md § CLOSED; receipt systems/RECEIPT_DEFECT17_X31_REFUSAL.md. Retired from the monitor's queue count by moving to .builder_queue/resolved/ (the monitor globs *.json in .builder_queue/ only).",
+  "claim": "`li t6, 90` (RV x31) lowers to `LDI r31 0x5a`; glyph r31 is the HARDWARE CALL-STACK POINTER, so the following RET pops garbage off a destroyed stack. Under the identity map RV x31 has no separate glyph register: r0..r30 are all RV value registers and r31 is the call stack.",
+  "receipt": "output/bk11_defect17_red.txt (probe .builder_queue/bk11_defect17_probe.py)",
+  "evidence": "DEFECT-17 RED: `li t6` lowered onto glyph r31 (HW call stack pointer): ['LDI r31 1087            ; initialize hardware call stack pointer', 'JMP :ccpDDTnk.o', 'LDI r31 0x5a', 'RET']",
+  "why_not_mechanical": "Fixing it requires a home for RV x31: either a fixed spill word with LD/ST at every rd/rs1/rs2 == 31 emitter site, or reserving a glyph register and relocating its current RV owner (non-identity map). Both change the register-map contract that landed identity-map/WGSL-parity receipts depend on.",
+  "note": "Probe moved out of tests/ this run so it stops failing the arc regression glob (it is a documented RED receipt, not a gate).",
+  "see": ".builder_queue/REPAIR_PENDING_defect17_x31_hw_stack.md"
+}

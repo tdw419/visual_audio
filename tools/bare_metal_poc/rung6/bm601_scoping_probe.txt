@@ -1,0 +1,14 @@
+fixture: bm903_medium_px.raw  payload 13,631,488 B = 3,407,872 codewords, EXPECTED_CRC=393950AA (from bm903_px_layout.inc)
+  ok    A clean medium: no symbol touched, corrected=0, parity-only=0, crc=393950AA == the committed constant
+  ok    B single flipped pixel channel (1 symbol): scale 1, actually corrupted 1 symbols (never >1 per codeword) -> payload restored byte-identical, corrected=1, post-decode crc=393950AA
+  ok    C one bad 512 B sector, plane 2: scale 512, actually corrupted 512 symbols (never >1 per codeword) -> payload restored byte-identical, corrected=512, post-decode crc=393950AA
+  ok    D one bad 4 KiB chunk = the guest read unit: scale 4096, actually corrupted 4096 symbols (never >1 per codeword) -> payload restored byte-identical, corrected=4096, post-decode crc=393950AA
+  ok    E eight bad chunks, all in one plane: scale 32768, actually corrupted 32768 symbols (never >1 per codeword) -> payload restored byte-identical, corrected=32768, post-decode crc=393950AA
+  ok    F 512 scattered single-channel flips: scale 512, actually corrupted 512 symbols (never >1 per codeword) -> payload restored byte-identical, corrected=512, post-decode crc=393950AA
+  ok    G RED: two symbols in one codeword: 8192 corrupted; decoder 'fixes' 4096 and lands wrong -> crc=CE9C0E29 != 393950AA: the existing gate refuses it, exactly as BM903 L6 does today
+  ok    H RED: the blind spot, built on purpose: 256 wrong bytes, all three syndromes zero, corrected=0 (decoder is blind by algebra) -> crc=E1CA03F5 != 393950AA: the CRC stays between decode and handoff
+  ok    I vectorised == the asm dispatch, symbol for symbol: 200,000 codewords with 3,000 injected faults: corrected 3000 vs 3000, parity-only 0 vs 0, outputs identical
+  ok    J budget: corrector 244 B assembled clean vs 4848 B unused in the 8,192 B stage2 image (container size is a declared knob: layout stage2_sectors); medium 26,641 -> 46,609 sectors = 23,863,808 B (22.76 MiB, +75%); reads/group 4 -> 7, i.e. 5,824 chunk reads; parity 10,223,616 B = +75.0% of payload; 3 x 4,096 B buffers at 0x38000 (free above the 16 KiB sink); host decode 331 MiB/s (0.04 s for the full payload)
+
+BM601 SCOPING TALLY: 0 red
+every leg behaved as claimed -> the numbers in BM601_ECC_SCOPING.md are measured, not projected

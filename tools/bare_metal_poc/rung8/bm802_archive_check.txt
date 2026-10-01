@@ -1,0 +1,59 @@
+core.gz: 9,260,807 B on the medium, unpacks to 13,340,984 B with a clean CRC (846 file entries); 24 legs re-checked here, host-side, no boots spent
+
+ payload off      boot       out B   out Δ  fs bytes changed  where / what the archive says
+     4308992 SENSITIVE           -       -                 -  not a gzip deflate member
+     4702208 SENSITIVE  13,340,939     -45        11,499,767  usr/lib/libstdc++.so.6.0.25+667456 @1,072,560, usr/lib/libstdc++.so.6.0.25+667457 @1,072,561, usr/lib/libstdc++.so.6.0.25+667458 @1,072,562 (+11,499,764 more)
+                                                              archive: CRC mismatch
+     5095424 SENSITIVE  13,341,000     +16        10,339,357  usr/bin/sudo+70405 @2,166,737, usr/bin/sudo+70406 @2,166,738, usr/bin/sudo+70407 @2,166,739 (+10,339,354 more)
+                                                              archive: CRC mismatch
+     5488640     INERT  13,340,984      +0                 4  lib/libresolv-2.28.so+18953 @3,000,597, lib/libresolv-2.28.so+18954 @3,000,598, lib/libresolv-2.28.so+18955 @3,000,599 (+1 more)
+                                                              archive: CRC mismatch
+     5881856 SENSITIVE  13,340,989      +5         9,145,255  lib/libpthread-2.28.so+46666 @3,818,706, lib/libpthread-2.28.so+46667 @3,818,707, lib/libpthread-2.28.so+46668 @3,818,708 (+9,145,252 more)
+                                                              archive: CRC mismatch
+     6275072     INERT  13,340,984      +0                 1  lib/modules/4.19.10-tinycore/kernel/drivers/hid/hid-sensor-hub.ko.gz+3407 @4,522,739
+                                                              archive: CRC mismatch
+     6668288     INERT  13,340,984      +0                 2  lib/modules/4.19.10-tinycore/kernel/drivers/mmc/core/mmc_block.ko.gz+637 @4,933,601, lib/modules/4.19.10-tinycore/kernel/drivers/mmc/core/mmc_block.ko.gz+638 @4,933,602
+                                                              archive: CRC mismatch
+     7061504     INERT  13,340,984      +0                 2  lib/modules/4.19.10-tinycore/kernel/drivers/block/loop.ko.gz+5551 @5,340,887, lib/modules/4.19.10-tinycore/kernel/drivers/block/loop.ko.gz+5552 @5,340,888
+                                                              archive: CRC mismatch
+     7454720     INERT  13,340,984      +0                 1  lib/modules/4.19.10-tinycore/kernel/drivers/net/macvtap.ko.gz+2002 @5,745,562
+                                                              archive: CRC mismatch
+     7847936     INERT  13,340,984      +0                 2  lib/modules/4.19.10-tinycore/kernel/drivers/net/ethernet/smsc/smsc911x.ko.gz+3602 @6,147,730, lib/modules/4.19.10-tinycore/kernel/drivers/net/ethernet/smsc/smsc911x.ko.gz+3603 @6,147,731
+                                                              archive: CRC mismatch
+     8241152     INERT  13,340,984      +0                 4  lib/modules/4.19.10-tinycore/kernel/drivers/net/ethernet/broadcom/bnx2x/bnx2x.ko.gz+229760 @6,542,672, lib/modules/4.19.10-tinycore/kernel/drivers/net/ethernet/broadcom/bnx2x/bnx2x.ko.gz+229761 @6,542,673, lib/modules/4.19.10-tinycore/kernel/drivers/net/ethernet/broadcom/bnx2x/bnx2x.ko.gz+229762 @6,542,674 (+1 more)
+                                                              archive: CRC mismatch
+     8634368     INERT  13,340,984      +0                 2  lib/modules/4.19.10-tinycore/kernel/drivers/net/ethernet/ethoc.ko.gz+1654 @6,942,302, lib/modules/4.19.10-tinycore/kernel/drivers/net/ethernet/ethoc.ko.gz+1655 @6,942,303
+                                                              archive: CRC mismatch
+     9027584     INERT  13,340,984      +0                 2  lib/modules/4.19.10-tinycore/kernel/drivers/net/ethernet/intel/e1000e/e1000e.ko.gz+60307 @7,338,163, lib/modules/4.19.10-tinycore/kernel/drivers/net/ethernet/intel/e1000e/e1000e.ko.gz+60308 @7,338,164
+                                                              archive: CRC mismatch
+     9420800     INERT  13,340,984      +0                 2  lib/modules/4.19.10-tinycore/kernel/drivers/net/ethernet/qualcomm/emac/qcom-emac.ko.gz+11833 @7,734,997, lib/modules/4.19.10-tinycore/kernel/drivers/net/ethernet/qualcomm/emac/qcom-emac.ko.gz+11834 @7,734,998
+                                                              archive: CRC mismatch
+     9814016     INERT  13,340,984      +0                 1  lib/modules/4.19.10-tinycore/kernel/drivers/net/ethernet/qlogic/qla3xxx.ko.gz+1777 @8,133,053
+                                                              archive: CRC mismatch
+    10207232     INERT  13,340,984      +0                 2  lib/modules/4.19.10-tinycore/kernel/drivers/net/ethernet/samsung/sxgbe/samsung-sxgbe.ko.gz+6012 @8,528,808, lib/modules/4.19.10-tinycore/kernel/drivers/net/ethernet/samsung/sxgbe/samsung-sxgbe.ko.gz+6013 @8,528,809
+                                                              archive: CRC mismatch
+    10600448     INERT  13,340,984      +0                 2  lib/modules/4.19.10-tinycore/kernel/drivers/net/ethernet/mellanox/mlxsw/mlxsw_switchx2.ko.gz+10778 @8,926,530, lib/modules/4.19.10-tinycore/kernel/drivers/net/ethernet/mellanox/mlxsw/mlxsw_switchx2.ko.gz+10779 @8,926,531
+                                                              archive: CRC mismatch
+    10993664     INERT  13,340,984      +0                 1  lib/modules/4.19.10-tinycore/kernel/drivers/net/ethernet/emulex/benet/be2net.ko.gz+41842 @9,323,798
+                                                              archive: CRC mismatch
+    11386880     INERT  13,340,984      +0                 1  lib/modules/4.19.10-tinycore/kernel/drivers/net/bonding/bonding.ko.gz+12040 @9,722,132
+                                                              archive: CRC mismatch
+    11780096     INERT  13,340,984      +0                 2  lib/modules/4.19.10-tinycore/kernel/drivers/crypto/qat/qat_common/intel_qat.ko.gz+35818 @10,129,046, lib/modules/4.19.10-tinycore/kernel/drivers/crypto/qat/qat_common/intel_qat.ko.gz+35819 @10,129,047
+                                                              archive: CRC mismatch
+    12173312     INERT  13,340,984      +0                 2  lib/modules/4.19.10-tinycore/kernel/lib/zstd/zstd_compress.ko.gz+52914 @10,537,122, lib/modules/4.19.10-tinycore/kernel/lib/zstd/zstd_compress.ko.gz+52915 @10,537,123
+                                                              archive: CRC mismatch
+    12566528 SENSITIVE  13,340,971     -13         1,903,363  lib/libc-2.28.so+536915 @11,262,087, lib/libc-2.28.so+536916 @11,262,088, lib/libc-2.28.so+536917 @11,262,089 (+1,903,360 more)
+                                                              archive: CRC mismatch
+    12959744 SENSITIVE  13,340,965     -19         1,123,019  lib/libm-2.28.so+168169 @12,133,677, lib/libm-2.28.so+168170 @12,133,678, lib/libm-2.28.so+168171 @12,133,679 (+1,123,016 more)
+                                                              archive: CRC mismatch
+    13352960 SENSITIVE  13,341,001     +17           344,092  bin/busybox+173188 @12,971,832, bin/busybox+173189 @12,971,833, bin/busybox+173190 @12,971,834 (+344,089 more)
+                                                              archive: CRC mismatch
+
+INERT legs (17): 1 to 4 of the 13,340,984 extracted bytes differ from the intended filesystem and the unpacked length is unchanged; the archive itself says "CRC mismatch x17". First changed byte: 16 inside *.ko.gz (compressed modules this boot never loads); the rest in lib/libresolv-2.28.so.
+SENSITIVE legs (7): 344,092 to 11,499,767 bytes differ (one leg, the gzip magic, never inflates at all); "CRC mismatch x6; not a gzip deflate member x1". First changed byte: 0 inside *.ko.gz (compressed modules this boot never loads); the rest in bin/busybox, lib/libc-2.28.so, lib/libm-2.28.so, lib/libpthread-2.28.so, usr/bin/sudo, usr/lib/libstdc++.so.6.0.25.
+
+The split is the finding: whether a core.gz fault stops the box tracks how far the corruption cascades through the DEFLATE stream, and which file the damage lands in -- not whether it damages the filesystem. All 24 legs damage it by construction.
+So of the 17 INERT boots: 16 ran on a corrupted but never-loaded *.ko.gz, and 1 ran to the end of their scripts on a corrupted live file (lib/libresolv-2.28.so).
+And the gate signed every one of them: the medium CRC covers the bytes on the medium, while the archive trailer is a second check over the unpacked result that nothing downstream consults.
+rc=0 means no INERT initrd boot was intact at the archive layer: on this ladder INERT certifies "serial stayed quiet", never "the data survived".
+What this does NOT show: which unpacker ran in the guest and what it did with the trailer. The boot reaching stage 5 does prove the guest path finished on an archive whose CRC32 does not match; whether it checked and ignored or never checked at all is unmeasured here. Past HANDOFF BUILT the ladder has one signal (silence), so no diagnosis text was available to distinguish them.

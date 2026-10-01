@@ -1,0 +1,4 @@
+A = region(shape=(4, 4), initial=1)
+B = conv2d(A, [[0, 0, 0], [0, 1, 0], [0, 0, 0]])
+total = reduce(B, sum)
+print(total)

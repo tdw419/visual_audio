@@ -1,0 +1,92 @@
+; scheduler_working_manual.glyph - Manually build PCBs with correct addresses
+; Both processes start with known PCs
+
+VECTOR 1 :scheduler_isr
+
+:boot
+; Initialize SP to 0
+SET 0
+STORE (3, 0)
+
+; Manually build both PCBs with correct PC addresses
+; Layout: PCB at (base, 240) = [PC.x, PC.y, 0, 255]
+; PCB at (base, 241) = [Acc, 0, 0, 255]
+; PCB at (base, 242) = [SP, 0, 0, 255]
+; PCB at (base, 243) = [ZF, 0, 0, 255]
+
+; --- P0 PCB at (20, 240) ---
+; p0_start will be assembled at (14, 1)
+SET 14
+SET_ADDR_HIGH   ; Acc = 14 << 8
+SET 1
+SET_ADDR_LOW    ; Acc = 14*256 + 1 = 3585
+SET_ADDR_HIGH   ; Pack into R=14, G=1, B=0, A=255
+SET 0
+SET_ADDR_LOW    ; Acc = 3585
+
+; Can't write directly to packed pixel. Use CTX_SAVE approach but hack it:
+; Actually, simplest: CALL into each process entry, then CTX_SAVE
+; But CTX_SAVE peeks stack which has the CALL return address
+
+; BETTER: Fix CTX_SAVE to take PC from current PC, not stack
+; For now, use CALL hack: RET after CTX_SAVE returns to wrong place
+
+; Alternative: Initialize processes in place, no CALL
+; P0 starts at boot PC
+CTX_SAVE (20, 240)  ; Save current state as P0
+
+; Now need to initialize P1 but CTX_SAVE will save wrong PC
+; Hack: JMP to p1_init which does CTX_SAVE with p1_start on stack
+CALL :p1_init
+
+; Set PID = 0 and enable interrupts
+SET 0
+STORE (100, 0)
+SEI
+
+; Jump to P0 (restore its PCB)
+CTX_LOAD (20, 240)
+
+; --- PROCESS 0 ---
+:p0_start
+LOAD (50, 0)
+ADD 10
+STORE (50, 0)
+JMP :p0_start
+
+; --- PROCESS 1 ---
+:p1_start
+LOAD (60, 0)
+ADD 1
+STORE (60, 0)
+JMP :p1_start
+
+:p1_init
+; CTX_SAVE will peek stack which has p1_start (correct!)
+CTX_SAVE (30, 240)
+RET
+
+; --- SCHEDULER MICROKERNEL ---
+:scheduler_isr
+; Interrupt pushed return address to stack. POP it before CTX_LOAD.
+POP
+
+LOAD (100, 0)
+SUB 0
+JZ :switch_to_p1
+
+:switch_to_p0
+; P1 was running. Save P1, Load P0.
+CTX_SAVE (30, 240)
+CTX_LOAD (20, 240)
+SET 0
+STORE (100, 0)
+RET
+
+:switch_to_p1
+; P0 was running. Save P0, Load P1.
+CTX_SAVE (20, 240)
+CTX_LOAD (30, 240)
+SET 1
+STORE (100, 0)
+RET

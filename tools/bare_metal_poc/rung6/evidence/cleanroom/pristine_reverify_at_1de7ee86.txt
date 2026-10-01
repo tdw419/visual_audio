@@ -1,0 +1,127 @@
+# The closed rows, run again in a tree `git archive` handed us, at a commit named in the file
+
+Made 2026-09-20, 23:20:54Z-23:48:08Z, by `tools/bare_metal_poc/pristine_reverify.sh`
+(one command, 13 legs, scratch tree outside the repo). It exists because
+`pristine_rows_table.txt` beside this file proves a clean checkout at `c0ad33a1`,
+and a record of a proof is not the proof: 54 commits had landed since, 26 of them
+under `tools/bare_metal_poc/`, by the time this ran.
+
+    HEAD_SHA  1de7ee86abda553e77d89d9542b3b8234d700555   (named in the driver's
+                                                         first log line; the tree
+                                                         is archived from the sha,
+                                                         not from "HEAD", because
+                                                         another lane can commit
+                                                         mid-run)
+    scratch   /home/jericho/tmp/bm000_reverify_2, 50,959 MB free on its device
+    tree      291 files: 290 from the named commit + rung7/core.gz, the one input
+              no commit carries (sha256 7f1e370d..., checked before the copy)
+
+## Run 1, at 1175b2ef, went RED twice and the ladder was not wrong either time
+
+Recorded because a suppressed first run would have made the second look easier
+than it was. Started 22:39, finished 23:13, `RUN_STATUS=RED`:
+
+- `bm802_pin_bitest` was declared a negative leg and marked expect-non-zero. It is
+  not one: it prints `[BITES]` and exits 0 when the AssertionError fires, and exits
+  1 only if a wrong pin slips through. The driver's own comment inverted its
+  verdict. The mechanism has since been deleted rather than corrected -- no leg in
+  the list needs an expected-sign column.
+- `bm653` exited 1 at 554 s with `run_bm653_e2e.sh: line 155: echo: write error:
+  No space left on device`, in its regression leg, on the filesystem that held the
+  scratch tree (2.5 GB free at the start of that leg). Every boot leg before it had
+  gone through: `IDENTITY: GREEN 49 RED 0`, seven boots, the fork's size leg. So the
+  box ran out, not the ladder.
+
+Both are now the driver's business: it refuses to start under 4 GB on the scratch
+device, says the device and the free space in its opening line, scans each leg's log
+for the phrase and reports `ENV-FAIL` rather than `FAIL` when it finds it, and the
+scratch tree for run 2 was placed on a filesystem with room.
+
+## Run 2, all 13 legs, one at a time
+
+`RUN_STATUS=GREEN` at 23:48:08Z, 27 min 14 s wall for the whole ladder. Timestamps
+from the driver's own log, so the non-overlap is checkable rather than asserted:
+
+| leg | wall | what the gate itself said |
+|---|---|---|
+| prereq | 34 s | `PREREQ_STATUS=GREEN` -- the ancestor build products, re-derived |
+| bm903 pass 1 | 190 s | `BM903 E2E TALLY: 42 pass, 0 red`, mutant at offset `0x244` |
+| bm903 pass 2 | 190 s | `BM903 E2E TALLY: 42 pass, 0 red`, same |
+| bm902 | 1 s | `GATE PASS: BM902 stage2 handoff (L1-L3 green, L4/L5 RED demonstrated, x2 identical)` |
+| bm802_fixture | 1 s | `BM802 FIXTURE TALLY: 0 red` |
+| bm802_pin_bitest | 0 s | `[BITES] moved pin -> AssertionError: fixture stage1 sha256 f0e7d7e1... != the pinned aaaa...` |
+| bm802_header | 0 s | rc 0, no marker line of its own |
+| bm802_archive | 4 s | rc 0 |
+| bm802_preflight | 298 s | 12 bounded-boot rows, `rc=0` |
+| bm602 pass 1 | 223 s | `GREEN 15 RED 0 skipped 0`, `IDENTITY: GREEN 32 RED 0`, `BM602_RUN_STATUS=GREEN` |
+| bm602 pass 2 | 187 s | same three markers |
+| bm651 | 144 s | `GATE651 PASS (144 s wall, 18 predictions fixed before the first boot, 7 boots)` |
+| bm653 | 361 s | `2 of 2 passes clean`, `IDENTITY: GREEN 49 RED 0`, `BM653_RUN_STATUS=GREEN` |
+
+The closed rows are ×2 where their own gate is ×2 (BM903, BM602, BM653 runs both
+passes itself). Rungs 1-5 and 7 are not in this table; `lower_rungs_pristine.txt`
+beside it covers the lower half.
+
+Leg wall times are not stable across runs and were never claimed to be: BM903's pass
+1 cost 102 s in run 1 and 190 s here, BM651 147 s and 144 s, BM653's clean pair 361
+s against the 613 s `pristine_rows_table.txt` recorded. One BM653 boot,
+`exec_image_repaired`, logged `wall=56.6s` in HEAD's landed evidence and
+`wall=13.8s` here -- the same verdict, the same `boots=3`, the same predicted ECC
+and PAR counters, a quarter of the time. Nothing here measures why -- the boot
+emitted the same banner and the same 3 boots either way -- so it is recorded as
+variance and not as a cause. Verdicts and pins moved none of these; see the next
+section for the one thing that did.
+
+## The pristine tree did not stay pristine, and the six files it moved say something
+
+The driver now re-archives the same commit after the legs and diffs the two trees;
+at the run recorded above that step was done by hand, with the same command,
+against this run's scratch tree, and re-running it after the script grew the step
+returned exactly these six.
+
+    rung6/bm602_fixtures.json
+    rung6_5/evidence/bm653/e2e_pass_1.txt
+    rung6_5/evidence/bm653/e2e_pass_2.txt
+    rung6_5/evidence/bm653/transcripts/exec_green.serial
+    rung6_5/evidence/bm653/transcripts/exec_image_repaired.serial
+    rung9/bm902_diff_receipt.txt
+
+Every changed line is a duration, a spinner, or a timestamp: `bm602_fixtures.json`
+holds two `*_seconds` fields, the two `e2e_pass_*.txt` hold the per-leg `Ns` column
+(16 lines each, e.g. `p1_s4_mkimg rc=0 20s` -> `25s`), the two `.serial` transcripts
+differ in how many `-`/`\`/`|` spinner characters the boot emitted, and the BM902
+receipt moved its own `date:` from 21:58:21Z to 23:27:50Z. No verdict, no sha pin,
+no fault offset and no gate value differs -- the byte sizes of all six files are
+unchanged but for `e2e_pass_2.txt` (2 B) and the two transcripts (37 B and 12 B).
+
+That is the finding, and it generalises the one ROADMAP's TASK_BM001 bullet already
+carries about the working tree: **running the ladder's own gates is what makes a
+tree dirty, in six tracked files, and it does so in a checkout that was pristine a
+minute earlier.** A reviewer who lands the tree and then checks `git status` to see
+whether the landing worked will see dirt that is not a mistake, and BM653's gate
+overwrites its own landed evidence under `rung6_5/evidence/` while doing it.
+
+## The bounded BM802 preflight, read against the landed 363 rows
+
+`rung8/bm802_sweep_rows.txt` (363 boots, landed) holds a row for each of the 12
+ids the preflight draws, so the comparison is leg-for-leg rather than by count. On
+`verdict`, `stage`, `region`, `kind`, `gate`, `guest_crc` and `prompt`, 11 of the 12
+match their landed row exactly. The twelfth, `width-stage2-code`, repeats its
+verdict `INERT` and lands at stage 5 with no shell prompt where the landed row
+reached stage 6 -- which is exactly the divergence
+`rung8/bm802_pristine_preflight.txt` already documents for this row between the
+landed rig and a pristine tree, reproduced here rather than newly introduced.
+`bytes` (transcript length) differs on 7 of the 12 and is not a comparable field:
+the same boot emits a different number of spinner characters each time.
+
+## Reproduce
+
+    cd tools/bare_metal_poc
+    PRISTINE_DIR=/some/empty/dir setsid nohup bash pristine_reverify.sh \
+      > /some/dir.out 2>&1 &
+    tail -f /some/empty/dir/logs/driver.log        # then .../logs/RUN_STATUS
+
+Logs for both runs are on this box at `/home/jericho/tmp/bm000_reverify_2/logs`
+(run 2) and `~/tmp/pristine_run1_logs_1175b2ef` (run 1); both are scratch, so
+nothing here depends on them surviving -- the markers quoted above are in the logs
+and the numbers are in this file.

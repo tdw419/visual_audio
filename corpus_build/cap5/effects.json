@@ -1,0 +1,10 @@
+{
+  "schema": "va-syscall-corpus/1",
+  "effects": [
+    {
+      "path": "/var/tmp/gp1/cap5/env_probe.txt",
+      "bytes": 95,
+      "sha256": "ccef48f0a93211ae1082e1fc7dcd4e61723a49bee77817036d6a64b66e874c1e"
+    }
+  ]
+}

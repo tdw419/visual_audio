@@ -1,0 +1,36 @@
+{
+  "id": "TICKET_R53_day1_transpiler_auipc_jalr",
+  "opened": "2026-09-22 ~08:0x CDT",
+  "opened_by": "seat lane (during Jericho's R5.3 day-1 window \u2014 first real-use defect)",
+  "severity": "HIGH (Rust lane unusable for stack-using programs; C lane unaffected)",
+  "component": "tools/rv64i_to_glyph.py transpiler (byte_to_word_mem path)",
+  "discovered_via": "tools/glyph_cc.py Rust lane",
+  "status": "RESOLVED — fixed by lane 2026-09-22 ~09:1x CDT, commit 2f619963 (see RECEIPT_R53_day1_auipc_jalr_fix.md). Real second defect was NOT label placement: the glyph JALR lowering indexed the pointer table at rs1 alone, dropping the instruction immediate — rustc's `auipc ra,0; jalr -N(ra)` therefore read its OWN auipc entry (packed 0x3) and spun; gcc's imm=0 `jalr ra,0(a5)` masked it. Fix = fold imm into the index + seed build_pointer_table in glyph_cc runner AND round-trip replay + adopted #[naked] _start (sp). Gate green: rust fib(15) HALT a0=610 roundtrip MATCH; 65 transpiler-family tests pass.",
+  "symptom": "Any Rust program whose codegen uses `auipc ra,0x0` + `jalr off(ra)` (rustc's standard call pattern) or sp-relative sw/lw with locals/recursion FAULTS or infinite-loops on the Glyph machine. C programs through the same transpiler work (gcc emits `jal`/different patterns). Repro: 4 steps for straight-line Rust (6*7=42 PASS), fault at step 9 the moment a stack frame + recursive call appear.",
+  "measured_repro": {
+    "pass": "rust iterative fib(15) (unrolled by opt) -> a0=610",
+    "FAIL": "C-parallel: gcc C recursive fib(15) -> a0=610 PASS (same transpiler)",
+    "control": "C lane regression after experiment revert: hello_glyph a0=55 match=True"
+  },
+  "evidence": {
+    "glyph_output_snippet": "at the _start call site, 'auipc ra,0x0; jalr -40(ra)' transpiles to: LDI r1 0x6c; LDI r30 0x2000; ADD r30 r1; LDI r29 2; SHR r30 r29; LD r30 r30; CALLR r30 \u2014 i.e. the call TARGET is loaded FROM MEMORY (LD r30 r30) after a shift, instead of being computed register-immediate. Prologue 'sw ra,12(sp)' similarly becomes SHR+ST chains.",
+    "suspicion": "byte_to_word_mem addressing: addresses are being materialized then shifted (SHR by 2) and routed through LD/ST even for immediate/register operations; the LD path reads the wrong word address, yielding a garbage CALLR target. gcc codegen (jal with direct targets, different sp addressing) avoids the broken pattern.",
+    "artifact_saved": "/tmp/rust_own_start_rec.rs and /tmp/dbg4/ transpile dump (regenerate via glyph_cc; tmp is volatile \u2014 ticket text above is the durable record)"
+  },
+  "direction_for_lane": {
+    "root_cause_target": "glyph_cc.py: transpile_and_run/_exec_artifact must seed the pointer table like output/go5_shell.py:25 does (build_pointer_table(text_bytes, text_vaddr, coords_map) -> write memory[(PTR_TABLE_BASE>>2)+wi] = packed) before executing. Fix at the runner level, NOT by special-casing rustc.",
+    "gate": "rust recursive fib(15) via glyph_cc -> a0=610, halted=True, roundtrip match; AND with table-seeding reverted the C lane regression stays green (fn-ptr 42, recursive fib 610, add8 36, hello_glyph 55); all 57 transpiler tests + 7 glyph_cc legs stay green. RED leg: current repro faults at step 9 (with AND without manual seeding \u2014 both measured).",
+    "policy": "rule-1: no rate claims needed; rule-4: RED leg = the faulting repro above, shown before fix.",
+    "note": "sp-init gap in _RUST_WRAP (glyph_cc.py:75) is a SECOND, smaller defect (C crt0 sets li sp,0x4000; Rust wrapper does not) \u2014 fix together, one commit, one receipt."
+  },
+  "r53_context": "Opened on day 1 of the 30-day use test. The C lane (glyph_cc program.c) is unaffected and remains usable for real work; the Rust lane is ticketed. This is the use-test working as designed: real use surfaced what the rung gates didn't.",
+  "root_cause_CONFIRMED": "glyph_cc.py's transpile_and_run/_exec_artifact path never calls build_pointer_table() \u2014 the JALR translation emits LDI r30 TBL_BASE; ADD r30 rs1; SHR r30 r29; LD r30 r30; CALLR r30 (rv64i_to_glyph.py:1239-1255) which reads the pointer table from memory, but glyph_cc never seeds that memory. The LD returns unseeded (zero) word -> CALLR to glyph PC 0 -> the observed fault/loop at step 9. Reference implementations output/go5_shell.py:25 and go5_probe4.py:26 DO seed the table via build_pointer_table(...) before running; the R2.3 runner path omitted that step.",
+  "why_C_lane_worked": "NOT luck, and NOT pattern-dependent: the C lane worked through the same unseeded-table JALR path only for tests whose calls the runner resolved differently. Measured 2026-09-22: C fn-pointer indirect call (jalr ra,0(a5) idiom) PASSES (a0=42), C recursion passes (a0=610) \u2014 these run through GlyphCPUv2 with a different entry path that seeds the table. Rust linkage (_RUST_WRAP appended _start section placement) hits the unseeded path. Precise split of which entry path seeds vs not is the lane's first task \u2014 the asymmetry is measured but not yet fully attributed.",
+  "also_filed_note": "Second independent defect (small): _RUST_WRAP (glyph_cc.py:75) never initializes sp \u2014 C crt0 does 'li sp,0x4000', the Rust wrapper does not. Any Rust program needing stack fails even with the table seeded. Fix both in one commit + one receipt.",
+  "probing_result_20260922": {
+    "table_seeding_probe": "Seeding the pointer table manually (build_pointer_table(text_bytes, text_vaddr, assemble_meta) -> 32 entries -> memory[0x800+wi] = packed) did NOT fix the repro: still faulted at step 9. The LD DID read the correct packed PC (memory[0x81b]=0x10029 = meta(':pc_0000006c')=(41,1) packed). So unseeded-table is REAL (glyph_cc never seeds) but seeded alone is INSUFFICIENT \u2014 a second fault follows the call into fib's prologue: POP r30 faults at instruction col 39, apparently mid-BLT-sequence (entry :_start=(col 32,row 1) lands at the CMP of a pushed-compare sequence, POP on unbalanced stack).",
+    "coordinates": "Coordinate systems verified consistent: meta coords are instruction columns (stride 1 per glyph instr), executor pc is pixel coords (4 px per instr, pixels shape 32x256x3). JMP :_start -> pixel 128 = col 32. No displacement bug.",
+    "implication_for_lane": "The fix is TWO parts, not one: (1) seed the pointer table in glyph_cc's runner path (necessary), (2) diagnose the post-call fault: _start entry appears to land inside a BLT PUSH/CMP/POP sequence suggesting the label->instruction-column mapping or the listing-vs-assembler alignment is off for multi-line-expanded handlers (BLT expands to 13 glyph instrs). Check assemble_glyph_to_pixels' label placement for labels that follow expanded instruction sequences.",
+    "honest_status": "necessary condition found and measured; sufficient fix NOT found by seat lane \u2014 handed to lane with the gate below"
+  }
+}

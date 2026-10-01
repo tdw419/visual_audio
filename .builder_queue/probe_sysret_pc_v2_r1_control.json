@@ -1,0 +1,16 @@
+{
+ "r1_control": {
+  "exit_status": 0,
+  "fault_reason": null,
+  "faulted": false,
+  "final_pc": [
+   32,
+   28
+  ],
+  "ksys_word_after": 1835016,
+  "mode_final": "SUPER",
+  "output": [],
+  "sysa0_word_after": 0,
+  "syspc_word_after": 5
+ }
+}

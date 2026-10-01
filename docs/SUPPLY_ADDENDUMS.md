@@ -1,0 +1,3 @@
+## Addendum 178 — 2026-09-17 04:4x CDT (builder cron af3e62239ce2)
+
+HOLD tick. Census OPEN=0 (scan_open_rows.py empty, exit 0) — no eligible roadmap supply. DEFECT-18/17 standing instruction remains stale: both gates landed and green this tick (`tests/test_defect18_tick_regfile.py` + `tests/test_defect17_x31_refusal.py` → 13 passed in 1.75s, own run). SE021 maildrop unchanged: `.geos/maildrop/content/hermes.0001.ruling.md` md5 ab846c18 (~58th hold, no ack). Substrate snapshot not read this tick (no surface work). Monitor delta = own addendum-177 commit + live pxc1 guest artifacts (non-supply dirty set unchanged, 194 files). /home still 100% full (1.6G free).

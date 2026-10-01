@@ -1,0 +1,34 @@
+probe(defect22): isolation-clean, dot-position instrument refuted, owner named by faulthandler
+
+At HEAD c2750bd (tracked_dirty=0), /usr/bin/python3 (py3.12, pytest 8.3.5).
+Ticket .builder_queue/DEFECT-22_arc_legA_instability.json stays OPEN — narrowed, not closed.
+
+EVIDENCE (own runs this tick, no delegate claims):
+- per-file isolation over the 52-file arc leg A via the landed SUITE-ISO-1 harness
+  (tools/suite_iso_harness.py, --timeout 300 --workers 8):
+  52/52 PASS, 325 collected == the leg-A collected count, no FAIL/CRASH/TIMEOUT
+  -> the run-2 SIGSEGV is NOT file-local                          output/defect22_iso_sweep1.json
+- 3 x full arc leg A, verbose (so a crash names its own test), load recorded:
+  3/3 green, 324 passed / 1 skipped, 138.68-140.64 s, 0 crashes
+                                                       output/defect22_legA_verbose_rerun_summary.txt
+- instrument refutation, out of tree (200 trivial tests, deliberate SIGSEGV inside #150):
+  149 completions actually happened, only 135 dots reached the file (block-buffered
+  stdout is lost when the process dies by signal) -> the ticket's "~44% + 23 dots"
+  reading is a lagging lower bound, not a position; run 2's owner is the
+  faulthandler-named tests/test_gh22_device_driver_abi.py::test_gh22_driver_abi_image_bakes
+  (item #264/325), not the dot-implied #198 (tests/test_gh6_syscalls.py)
+                                                       .builder_queue/probe_defect22_dot_lag.py
+
+LEDGER (observations, NOT a rate): 194844c 5 runs / 2 disturbed (gh12 sampling red;
+SIGSEGV); c2750bd 4 runs / 0 disturbed. Total n=9, 2 disturbed.
+Correction: run 1's 159.70 s vs ~140 s green is explained by its own failed gh12 leg
+(six LLM drafts + 5000-step no-halt checks), not by host load.
+
+STILL OPEN / NOT FIXED: mechanism undiagnosed — innermost frame is a two-line
+`x % INSTR_WIDTH` check, every frame is pure Python with no C-extension frame named,
+host memory was never the constraint (62 GB RAM, 47 GB free). Isolation is
+context-free by construction, so it cannot see the shared-process context the crash
+needs. No new supply either: roadmap has 0 open rows and BK-1..BK-14 + OBS-1 are
+exhausted, so nothing was promoted (inventing scope is not the loop's call).
+
+receipt: systems/RECEIPT_DEFECT22_ISOLATION_AND_DOT_LAG.md

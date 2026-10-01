@@ -1,0 +1,89 @@
+{
+ "results": {
+  "C1_no_translation_rewrite_faults": {
+   "exit_status": 1,
+   "fault_addr": 33796,
+   "fault_reason": "pte_invalid pte=0x0 vaddr=0x8404 mode=USER op=ST site=glyph_isa_v2",
+   "faulted": true,
+   "final_pc": [
+    0,
+    30
+   ],
+   "halt_reason": null,
+   "kf_word_after": 1966080,
+   "mode_final": "SUPER",
+   "output": [],
+   "program": ":__entry\nLDI r15 8211\nLDI r14 1536\nST r15 r14\nLDI r5 1966088\nLDI r6 8449\nST r6 r5\nLDI r2 5120\nLD r3 r2\nHALT\n",
+   "redirect_pixels": [
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "C2_tick12_R1_rotguard": {
+   "exit_status": 1,
+   "fault_addr": 20480,
+   "fault_reason": "pte_invalid pte=0x0 vaddr=0x5000 mode=USER op=LD site=glyph_isa_v2",
+   "faulted": true,
+   "final_pc": [
+    0,
+    30
+   ],
+   "halt_reason": null,
+   "kf_word_after": 1966080,
+   "mode_final": "SUPER",
+   "output": [],
+   "program": ":__entry\nLDI r15 8211\nLDI r14 1536\nST r15 r14\nLDI r2 5120\nLD r3 r2\nHALT\n",
+   "redirect_pixels": [
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "V1_vector_word_paged_rewrite_redirect": {
+   "exit_status": 1,
+   "fault_addr": 32772,
+   "fault_reason": "paged_paddr_fence op=ST paddr=8193 vaddr=0x8404 mode=USER site=glyph_isa_v2",
+   "faulted": true,
+   "final_pc": [
+    0,
+    30
+   ],
+   "halt_reason": null,
+   "kf_word_after": 1966080,
+   "mode_final": "SUPER",
+   "output": [],
+   "program": ":__entry\nLDI r15 8211\nLDI r14 1536\nST r15 r14\nLDI r5 1966088\nLDI r6 8449\nST r6 r5\nLDI r2 5120\nLD r3 r2\nHALT\n",
+   "redirect_pixels": [
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "V2_vector_word_plus_trampoline_compose": {
+   "exit_status": 1,
+   "fault_addr": 32772,
+   "fault_reason": "paged_paddr_fence op=ST paddr=8193 vaddr=0x8404 mode=USER site=glyph_isa_v2",
+   "faulted": true,
+   "final_pc": [
+    0,
+    30
+   ],
+   "halt_reason": null,
+   "kf_word_after": 1966080,
+   "mode_final": "SUPER",
+   "output": [],
+   "program": ":__entry\nLDI r15 8211\nLDI r14 1536\nST r15 r14\nLDI r5 1966088\nLDI r6 8449\nST r6 r5\nLDI r5 16208720\nLDI r6 3232\nST r6 r5\nLDI r5 6\nLDI r6 3233\nST r6 r5\nLDI r5 52\nLDI r6 3234\nST r6 r5\nLDI r5 0\nLDI r6 3235\nST r6 r5\nLDI r2 5120\nLD r3 r2\nHALT\n",
+   "redirect_pixels": [
+    0,
+    0,
+    0,
+    0
+   ]
+  }
+ },
+ "results_md5": "cb178fe31c8bfeb4cad8383b46241043"
+}

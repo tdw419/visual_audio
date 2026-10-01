@@ -1,0 +1,11 @@
+{
+  "floor_us": {
+    "step": 98.6,
+    "get_state": 56.8,
+    "step_p10": 84.4,
+    "step_p90": 456.2
+  },
+  "reps": 30,
+  "adapter_summary": "NVIDIA GeForce RTX 5090 Laptop GPU (DiscreteGPU) via Vulkan",
+  "measured_at": "2026-09-21T15:40:07.021271+00:00"
+}

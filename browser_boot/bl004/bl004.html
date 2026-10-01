@@ -1,0 +1,110 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>BL004 — boot disk assembled from WAV Range fetches</title>
+<style>
+  body { background:#111; color:#ddd; font:14px monospace; margin:0; padding:8px; }
+  #serial { border-top:1px solid #444; margin-top:8px; padding-top:8px;
+            white-space:pre-wrap; max-height:70vh; overflow:auto; color:#9cf; }
+  h1 { font-size:14px; margin:0 0 6px; color:#fc0; }
+</style>
+</head>
+<body>
+<h1>BL004 — disk assembled purely from HTTP Range fetches against a .wav file</h1>
+<div id="serial"></div>
+
+<script src="libv86.js"></script>
+<script>
+"use strict";
+window.__serialBuf = "";
+window.__booted = false;
+window.__started = Date.now();
+window.__fetchDone = false;
+window.__sectorTimingsMs = [];
+window.__diskSha256 = null;
+
+var serialEl = document.getElementById("serial");
+var USERSPACE_MARKERS = [/BL002_ROOT_MOUNTED(?!.*BL002_ROOT_MOUNT_FAILED)/];
+var FAILURE_MARKERS = [/BL002_ROOT_MOUNT_FAILED/, /can't access tty/];
+
+function pushSerial(text) {
+  window.__serialBuf += text;
+  serialEl.textContent = window.__serialBuf.slice(-12000);
+  serialEl.scrollTop = serialEl.scrollHeight;
+  if (!window.__booted) {
+    for (var i = 0; i < FAILURE_MARKERS.length; i++) {
+      if (FAILURE_MARKERS[i].test(window.__serialBuf)) window.__bootFailed = true;
+    }
+    for (var i = 0; i < USERSPACE_MARKERS.length; i++) {
+      if (USERSPACE_MARKERS[i].test(window.__serialBuf)) {
+        window.__booted = true;
+        window.__bootMs = Date.now() - window.__started;
+        console.log("BL004_USERSPACE_REACHED after " + window.__bootMs + "ms");
+        break;
+      }
+    }
+  }
+}
+
+async function sha256hex(buf) {
+  const digest = await crypto.subtle.digest("SHA-256", buf);
+  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+// Fetch a disk image by decoding a real .wav file's Range-fetched byte
+// ranges. WAV-native: no decodeAudioData/audio decoding needed because our
+// container's data chunk is raw bytes (see wav_sector_container.py) — the
+// "decode" step here is entirely: HTTP Range GET against a .wav URL, slice
+// the response, done. Sequential (not parallel) so per-sector timings below
+// are individually meaningful, and so Chrome's network log shows the real
+// per-request cost, not overlapped ones.
+async function assembleDiskFromWav(wavUrl, manifestUrl) {
+  const manifest = await (await fetch(manifestUrl)).json();
+  const { header_size, sector_size, n_sectors, original_size } = manifest;
+  const out = new Uint8Array(original_size);
+  for (let i = 0; i < n_sectors; i++) {
+    const start = header_size + i * sector_size;
+    const end = Math.min(start + sector_size, header_size + original_size) - 1;
+    const t0 = performance.now();
+    const resp = await fetch(wavUrl, { headers: { Range: `bytes=${start}-${end}` } });
+    if (resp.status !== 206) throw new Error(`sector ${i}: expected 206, got ${resp.status}`);
+    const chunk = new Uint8Array(await resp.arrayBuffer());
+    const t1 = performance.now();
+    window.__sectorTimingsMs.push(t1 - t0);
+    out.set(chunk, i * sector_size);
+  }
+  return out.buffer;
+}
+
+(async () => {
+  console.log("BL004_FETCH_START");
+  const diskBuf = await assembleDiskFromWav("alpine.wav", "alpine.manifest.json");
+  window.__diskSha256 = await sha256hex(diskBuf);
+  window.__fetchDone = true;
+  const timings = window.__sectorTimingsMs;
+  const avg = timings.reduce((a, b) => a + b, 0) / timings.length;
+  console.log("BL004_FETCH_DONE sectors=" + timings.length + " avg_ms=" + avg.toFixed(3)
+              + " sha256=" + window.__diskSha256);
+
+  const emulator = new V86({
+    wasm_path: "v86.wasm",
+    memory_size: 128 * 1024 * 1024,
+    vga_memory_size: 8 * 1024 * 1024,
+    bios: { url: "seabios.bin" },
+    vga_bios: { url: "vgabios.bin" },
+    bzimage: { url: "vmlinuz-lts" },
+    initrd: { url: "initramfs32.cpio.gz" },
+    cmdline: "console=ttyS0 rdinit=/init noapic nolapic acpi=off nosmp",
+    hda: { buffer: diskBuf },
+    autostart: true,
+    disable_keyboard: true,
+    disable_mouse: true,
+  });
+  window.__emulator = emulator;
+  emulator.add_listener("serial0-output-byte", (b) => pushSerial(String.fromCharCode(b)));
+  emulator.add_listener("emulator-ready", () => console.log("BL004_EMULATOR_READY"));
+})();
+</script>
+</body>
+</html>

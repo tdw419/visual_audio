@@ -1,0 +1,31 @@
+{
+  "id": "DEFECT-27",
+  "title": "tests/test_syscall_handlers.py fixtures use a memory model the engine no longer has: ST/LD address RAM, the test reads/writes pixel space",
+  "found_by": "builder cron af3e62239ce2 (SUITE-FIX-1 cluster (3), 2026-09-13)",
+  "base_commit": "4bcfe15",
+  "status": "RESOLVED 2026-09-13 - RULING option 1 applied (0x11 copies PIXEL space; engine untouched). tests/test_syscall_handlers.py re-authored to pixel-space fixtures/readback; gate pytest tests/test_crc_patch.py tests/test_sbi_firmware.py tests/test_syscall_handlers.py -q 2 failed/7 passed rc1 -> 9 passed rc0; non-vacuity via output/defect27_orch_probe.txt (P1 unseeded r6=-1 vs VAC2-seeded r6=0; P2/P2b copy legs RED with the destination write dropped, seeding intact; P3 [SYSCALL] present in 7/7 legs). Engine md5 c685ad3513db9991ccb27249aec1079e unchanged. Receipt systems/RECEIPT_DEFECT27_STORE_CODE_PIXEL_SPACE.md; row SUITE-FIX-1 cluster (3).",
+  "measured": {
+    "gate": "/usr/bin/python3 -m pytest tests/test_crc_patch.py tests/test_sbi_firmware.py tests/test_syscall_handlers.py -q",
+    "before": "6 failed, 3 passed",
+    "after_engine_handlers": "2 failed, 7 passed",
+    "still_red": [
+      "tests/test_syscall_handlers.py::TestStoreCodeSyscall::test_store_code_basic_copy (IndexError at :165, cpu.output empty because the setup ST faulted the program)",
+      "tests/test_syscall_handlers.py::TestStoreCodeSyscall::test_store_code_multi_byte (Expected 0x0000AA, got 0x000000 at :214)"
+    ],
+    "passing_vacuously": [
+      "test_boot_linux_valid_vac2_container, test_boot_linux_cognitive_payload_flag, test_store_code_overlapping_regions — they assert registers[6]/registers[4] == 0 and the engine's own handler print is ABSENT from their runs (measured with contextlib.redirect_stdout), i.e. the program faults at its stale-order ST before the SYSCALL is ever reached"
+    ],
+    "probes": [
+      "output/probe_suite_fix1_c3_st_semantics.py — ST is <addr_reg> <value_reg> (documented at tools/glyph_isa_v2.py:298-305, dispatch :690-693); ST/LD address the RAM word array (self.memory), while _mem_read/_mem_write(image, addr) address image pixels (tools/glyph_isa_v2.py:503-516), so a fixture written with ST at 0x50/0x64/0xC8 cannot be read back with _mem_read(image, ...)",
+      "output/probe_suite_fix1_c3_syscall_path.py — the new 0x10 handler runs and its return value lands in rd (registers[3] == -1 for the invalid-signature program); the three 'passing' legs show 'handler printed: False'"
+    ]
+  },
+  "why_not_fixed_in_this_tick": "The two legs disagree with each other about the space the syscall copies into: basic_copy reads the result back with LD/PRT (RAM), multi_byte asserts five values with cpu._mem_read(image, ...) (pixels). No measurement can settle which the ABI intends, so the choice is a design question, not a test edit.",
+  "options_cheapest_first": [
+    "(1) Re-author the test's fixture setup/readback to pixel space with cpu._mem_write(image, addr, val) — the same API multi_byte already reads back with; keeps the syscall ABI as the spec; ~10 line edits; gate = 9/9 legs green + non-vacuity (disable the 0x11 branch -> the copy legs must go RED).",
+    "(2) Rule that 0x11 copies RAM words (self.memory) instead: basic_copy's LD/PRT then works, but multi_byte's five image-space assertions must be re-authored; the engine changes instead of the test.",
+    "(3) Alias the test's addresses between RAM and image at bake time so both APIs agree — most invasive, touches the memory model.",
+    "(4) Re-author the whole file against the measured image geometry (fixtures placed outside the program's pixel span) — largest, but removes the whole class."
+  ],
+  "files": ["tests/test_syscall_handlers.py", "tools/glyph_isa_v2.py (0x11 branch only, if option 2 is ruled)"]
+}

@@ -1,0 +1,134 @@
+{
+ "results": {
+  "C1_no_timer_arm_spin_only": {
+   "exit_status": 0,
+   "fault_addr": 0,
+   "fault_reason": null,
+   "faulted": false,
+   "final_pc": [
+    8,
+    1
+   ],
+   "halt_reason": null,
+   "kf_word_after": 1966080,
+   "ktick_word_after": 1966088,
+   "mode_final": "USER",
+   "output": [],
+   "program_tail": [
+    "LDI r5 1966088",
+    "LDI r6 8207",
+    "ST r6 r5",
+    "LDI r31 52",
+    "LDI r30 15",
+    "JMPR r30"
+   ],
+   "redirect_pixels": [
+    16208720,
+    6,
+    52,
+    0
+   ],
+   "tcount_word_after": 0,
+   "tickpc_word_after": 0,
+   "treload_word_after": 0
+  },
+  "C2_no_translation_rewrite_faults": {
+   "exit_status": 1,
+   "fault_addr": 32832,
+   "fault_reason": "pte_invalid pte=0x0 vaddr=0x8040 mode=USER op=ST site=glyph_isa_v2",
+   "faulted": true,
+   "final_pc": [
+    0,
+    30
+   ],
+   "halt_reason": null,
+   "kf_word_after": 1966080,
+   "ktick_word_after": 0,
+   "mode_final": "SUPER",
+   "output": [],
+   "program_tail": [
+    "LDI r6 3234",
+    "ST r6 r5",
+    "LDI r5 0",
+    "LDI r6 3235",
+    "ST r6 r5",
+    "HALT"
+   ],
+   "redirect_pixels": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "tcount_word_after": 0,
+   "tickpc_word_after": 0,
+   "treload_word_after": 0
+  },
+  "C3_unpaged_out_of_tile_timer_ST_traps": {
+   "exit_status": 1,
+   "fault_addr": 32832,
+   "fault_reason": null,
+   "faulted": true,
+   "final_pc": [
+    0,
+    30
+   ],
+   "halt_reason": null,
+   "kf_word_after": 1966080,
+   "ktick_word_after": 0,
+   "mode_final": "SUPER",
+   "output": [],
+   "program_tail": [
+    ":__entry",
+    "LDI r5 2",
+    "LDI r6 8208",
+    "ST r6 r5",
+    "HALT"
+   ],
+   "redirect_pixels": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "tcount_word_after": 0,
+   "tickpc_word_after": 0,
+   "treload_word_after": 0
+  },
+  "T1_tick_redirect_preemptive": {
+   "exit_status": 0,
+   "fault_addr": 0,
+   "fault_reason": null,
+   "faulted": false,
+   "final_pc": [
+    36,
+    30
+   ],
+   "halt_reason": "opcode-None pixel at (36,30): rgb=(np.uint8(0), np.uint8(0), np.uint8(0)) is not a known opcode color",
+   "kf_word_after": 1966080,
+   "ktick_word_after": 1966088,
+   "mode_final": "SUPER",
+   "output": [
+    8207
+   ],
+   "program_tail": [
+    "LDI r5 1966088",
+    "LDI r6 8207",
+    "ST r6 r5",
+    "LDI r31 52",
+    "LDI r30 15",
+    "JMPR r30"
+   ],
+   "redirect_pixels": [
+    16208720,
+    6,
+    52,
+    0
+   ],
+   "tcount_word_after": 0,
+   "tickpc_word_after": 65542,
+   "treload_word_after": 0
+  }
+ },
+ "results_md5": "0ed5acf14928b57448287bf243cf8e1f"
+}

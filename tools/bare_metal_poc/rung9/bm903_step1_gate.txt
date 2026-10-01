@@ -1,0 +1,84 @@
+# BM903 step 1 gate run — 2026-09-19T22:25:26Z — bash run_bm903_step1.sh
+----------------------------------------------------------------
+S0  input pins (nothing downstream is trusted past this line)
+  [PASS] pin ../rung7/core.gz
+  [PASS] pin bm902_zp.bin
+  [PASS] pin vmlinuz64.extracted
+  [PASS] pin oracle_cmdline_leg0.bin
+  [PASS] pin oracle_zp_leg0.bin
+  [PASS] pin bm902_cmdline.bin
+----------------------------------------------------------------
+S1  assemble stage2 + stage1, lay out the raw medium
+  [PASS] bm903_consts.py
+  [PASS] bm903_mkimg.py (nasm -f bin x2, medium written)
+  [PASS] nasm clean (no warnings)
+  [PASS] medium 26495 sectors == layout
+----------------------------------------------------------------
+S2  boot the medium, stop on the kernel's first instruction, capture
+  STOP rsi=0x13ab0 rip=0x100000
+  RAX=0x100000 RBX=0x0 RCX=0x0 RDX=0x0
+  RSI=0x13ab0 RDI=0x0 RBP=0x0 RSP=0x1f784
+  EFLAGS=0x46 CS=0x10 SS=0x18 DS=0x18 ES=0x18
+  CR0=0x11 CR3=0x0 CR4=0x0
+  CMDPTR=0x1f800
+leg 1: CAPTURED rip=0x100000 rsi=0x13ab0 rsp=0x1f784 cr0=0x11 eflags=0x46
+done OK
+  [PASS] capture rc=0 (both legs stopped at 0x100000 with HdrS at $rsi)
+  [PASS] leg 0 serial shows stage2 EXECUTED through 'HANDOFF BUILT'
+      BM903-S1
+      BM903-S1 JUMP STAGE2
+      BM903-S2 ENTER
+      BM903-S2 HDR BAND READ
+      BM903-S2 PMODE
+      BM903-S2 A20 OK
+      BM903-S2 KERNEL LOADED
+      BM903-S2 INITRD LOADED
+      BM903-S2 HANDOFF BUILT
+  [PASS] leg 1 serial shows stage2 EXECUTED through 'HANDOFF BUILT'
+      BM903-S1
+      BM903-S1 JUMP STAGE2
+      BM903-S2 ENTER
+      BM903-S2 HDR BAND READ
+      BM903-S2 PMODE
+      BM903-S2 A20 OK
+      BM903-S2 KERNEL LOADED
+      BM903-S2 INITRD LOADED
+      BM903-S2 HANDOFF BUILT
+----------------------------------------------------------------
+S3  executed-vs-constructed differential (L1/L2/L2b/L3)
+      L1 PASS: 4 zeropage byte(s) differ from bm902_zp.bin, all inside the whitelist union (517 offsets): 0x21b, 0x21c, 0x21d, 0x21e
+      L2 PASS: cmdline byte-identical all 512 B (82 chars)
+      L2b PASS: ramdisk_image=0x10000000 ramdisk_size=0x8d4f07 == bm903_layout.json (constructed, not copied)
+      L3 PASS: all 25 registers match the oracle, including rsp=0x1f784 (BM902 whitelisted it)
+      BM903 DIFFER PASS: L1+L2+L2b+L3 green
+  [PASS] leg 0 differ green
+      L1 PASS: 4 zeropage byte(s) differ from bm902_zp.bin, all inside the whitelist union (517 offsets): 0x21b, 0x21c, 0x21d, 0x21e
+      L2 PASS: cmdline byte-identical all 512 B (82 chars)
+      L2b PASS: ramdisk_image=0x10000000 ramdisk_size=0x8d4f07 == bm903_layout.json (constructed, not copied)
+      L3 PASS: all 25 registers match the oracle, including rsp=0x1f784 (BM902 whitelisted it)
+      BM903 DIFFER PASS: L1+L2+L2b+L3 green
+  [PASS] leg 1 differ green
+----------------------------------------------------------------
+S4  two independent boots agree byte-for-byte
+  [PASS] bm903_zp_leg0.bin == bm903_zp_leg1.bin
+  [PASS] bm903_cmdline_leg0.bin == bm903_cmdline_leg1.bin
+  [PASS] bm903_regs_leg0.json == bm903_regs_leg1.json
+----------------------------------------------------------------
+S5  RED leg — flip one zeropage byte OUTSIDE the whitelist
+  mutant: 0x244 0x00 -> 0x01 (outside every whitelist row)
+      L2 PASS: cmdline byte-identical all 512 B (82 chars)
+      L2b PASS: ramdisk_image=0x10000000 ramdisk_size=0x8d4f07 == bm903_layout.json (constructed, not copied)
+      L3 PASS: all 25 registers match the oracle, including rsp=0x1f784 (BM902 whitelisted it)
+      L1 FAIL: 1 zeropage diff(s) vs bm902_zp.bin outside whitelist: 0x244
+      RED LEG OK: differ exited non-zero as required
+  [PASS] mutant caught: differ exits non-zero naming 0x244
+----------------------------------------------------------------
+S6  control — a byte INSIDE the whitelist must NOT be flagged
+      L1 PASS: 5 zeropage byte(s) differ from bm902_zp.bin, all inside the whitelist union (517 offsets): 0x210, 0x21b, 0x21c, 0x21d, 0x21e
+  [PASS] whitelisted change still green (S5's failure is specificity, not noise)
+----------------------------------------------------------------
+STEP 1 TALLY: 20 pass, 0 red
+BM903 STEP 1 GREEN: our executed stage2 constructs the BM902 handoff
+(diff: 4 bytes, all the constructed initrd pair, all whitelisted);
+the pixel medium (step 2) and the serial anchor (step 3) are still OPEN.
+# exit=0

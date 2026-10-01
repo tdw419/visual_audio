@@ -1,0 +1,11 @@
+{
+ "guest_path": "/var/tmp/gp4_1789617660/nonce1.txt",
+ "size": 17,
+ "recon_sha256": "ff8567d7ddd5b17fc2c12844502052e278985609fd94b3972eb12a3d8c1ef9d1",
+ "expected_sha256": "ff8567d7ddd5b17fc2c12844502052e278985609fd94b3972eb12a3d8c1ef9d1",
+ "match": true,
+ "frames_read": [
+  57
+ ],
+ "note": "ok"
+}

@@ -1,0 +1,20 @@
+OUTPUT = test_simple_qemu.elf
+
+all: $(OUTPUT)
+
+$(OUTPUT): test_simple_kernel.S
+	riscv64-linux-gnu-as -o $(OUTPUT).o test_simple_kernel.S
+	riscv64-linux-gnu-ld -Ttext=0x80000000 -o $(OUTPUT) $(OUTPUT).o
+	rm $(OUTPUT).o
+
+clean:
+	rm -f $(OUTPUT) $(OUTPUT).o
+
+run-qemu:
+	qemu-system-riscv64 -M virt -bios none -kernel $(OUTPUT) -nographic
+
+test: $(OUTPUT)
+	@echo "Testing QEMU trace around add instruction"
+	python3 tools/simple_qemu_trace.py $(OUTPUT) --pc 0x80000004 --before 2 --after 2
+
+.PHONY: all clean run-qemu test

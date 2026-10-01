@@ -1,0 +1,154 @@
+{
+  "id": "DEFECT-23",
+  "title": "paged walk accepts a data word as a PTE and materialises 134.8M words of zero RAM for two stores",
+  "filed": "2026-09-13T14:3x-05:00",
+  "filed_by": "builder cron af3e62239ce2",
+  "base_commit": "2e54fe7",
+  "type": "soundness + resource defect (silent, GB-scale, no fault)",
+  "status": "CLOSED 2026-09-14 \u2014 both options landed. Option 1 @ c7995a7 (2026-09-13). Option 2 (seat-confirmed pfn ceiling 65536, RULING_defect23_pfn_ceiling.md + f217992) landed @ 5b62955: guard at the paged-ST memory.extend site (tools/glyph_isa_v2.py:764, twin glyph_dispatch/src/glyph/glyph_isa_v2.py byte-identical), fault reuses existing semantics with fault_reason evidence string, faulting store abandoned. Orchestrator re-verification on the merged tree (cron af3e62239ce2): tests/test_defect23_pfn_ceiling.py 3/3 (L1 containment-first falsifier pfn=526602, L2 legitimate pfn=100 growth, L3 in-RAM untouched); cluster re-run test_defect23_pt_identity + test_glyph_isa_v2 + test_run_containment + test_gh18_syscall_abi + test_rv64i_to_glyph_bio = 29 passed / 1 deselected (live_smoke), exit 0. Honest boundary (unchanged): containment only \u2014 the low-byte-only PTE validity test stands, a byte run with low byte 0x07 still mis-decodes as a PTE; the ceiling bounds the damage at 64 MiB. NOT re-verified by the orchestrator: the full arc this tick (the landing commit's own 43/43 cluster receipt accepted; WGSL twin not on this path).",
+  "severity": "the cause of leg A's 2652.9 MB peak, of the two open memory tickets' pressure, and a silently-accepted bogus translation (same discipline as ENG-1 / INTEGRITY_FAIL / 'REFUSAL: RV x31')",
+  "measured": {
+    "image": "syscall_abi_kernel_image(build_default_atlas(), mode='paged_dispatch', timer_quantum=35)",
+    "driver": "GlyphRunner(out, ram_words=16384).run(max_instructions=60000, trace=True)",
+    "engine_memory_words_baseline_mode": 16384,
+    "engine_memory_words_admit_mode": 16384,
+    "engine_memory_words_paged_dispatch": 134810550,
+    "nonzero_words_in_final_memory": 27,
+    "engine_list_mb": 1078.48,
+    "receipt_copy_list_mb": 1189.08,
+    "vmhwm_mb_at_peak": 2289.3,
+    "rss_mb_retained_by_receipt": 1261.5,
+    "growth_events": [
+      {
+        "step": 298,
+        "pc_pixels": [
+          20,
+          23
+        ],
+        "mode": "USER",
+        "before_words": 16384,
+        "after_words": 17304265,
+        "grew_words": 17287881,
+        "implied_paddr": 17304009,
+        "implied_pfn": 67593,
+        "ram_word_used_as_pte": {
+          "index": 1538,
+          "value_hex": "0x01080907",
+          "low8": "0x07 (PTE_V|PTE_W|PTE_U)"
+        }
+      },
+      {
+        "step": 371,
+        "pc_pixels": [
+          24,
+          22
+        ],
+        "mode": "SUPER",
+        "before_words": 17304265,
+        "after_words": 134810550,
+        "grew_words": 117506285,
+        "implied_paddr": 134810294,
+        "implied_pfn": 526602,
+        "ram_word_used_as_pte": {
+          "index": 1539,
+          "value_hex": "0x08090A07",
+          "low8": "0x07 (PTE_V|PTE_W|PTE_U)"
+        }
+      }
+    ]
+  },
+  "mechanism": {
+    "file": "tools/glyph_isa_v2.py",
+    "store_walk": "lines 696-743",
+    "load_walk": "lines 625-678",
+    "validity_test": "line 710: fault iff not(pte & PTE_V) or not(pte & PTE_W) or (USER and not(pte & PTE_U)) -- i.e. the LOW BYTE only",
+    "pt_base": "line 696: pt_base = memory[PAGE_TABLE_ADDR >> 2]; pte_idx = pt_base + ((vaddr >> 8) & 0xFF); pt_base = 1536 here",
+    "growth": "lines 740-743: paddr = pfn * PAGE_WORDS + offset (pfn = pte >> 8, PAGE_WORDS = 256); if paddr >= len(memory): memory.extend([0] * (paddr + PAGE_WORDS - len(memory)))",
+    "accepted_garbage": "RAM words 1538/1539 belong to the PT window and carry byte-run data whose low byte is 0x07; the walker cannot tell them from PTEs, and there is NO bound on pfn (24-bit field -> up to ~4.3e9 words).",
+    "existing_mitigation_that_does_not_cover_this": "lines 632-636 document the hazard ('bake-time text garbage under the PT window') and mitigate it by RAM-before-image ORDERING only; ordering does not help when the garbage is itself in RAM and passes the flag test."
+  },
+  "scope": "one arc consumer uses this mode: tests/test_gh18_syscall_abi.py:403 (test_gh18_syscall_table_window_reserved). Not claimed for baseline/admit (0.13-0.14 MB receipts) or for the production path.",
+  "consequences": [
+    "leg A's whole-run pytest VmHWM 2684.3 MB and the file's isolated 2652.9 MB are this test's two stores (base 231 + 1078 + 1189 MB ~= 2.50 GB)",
+    "the 4 GiB worker-scope pressure behind .builder_queue/REPAIR_PENDING_worker_cgroup_memory_limit.md and .builder_queue/REPAIR_PENDING_suite_iso2_memory_containment.md is caused by this mode, so those tickets may be dissolved rather than configured around",
+    "any parity/lockstep claim over a paged image is unsound in the same way ENG-1 was: the engine accepts a translation the image never intended, silently, and the difference is visible only as GBs of zeros (or as a GPU twin that would NOT materialise them)"
+  ],
+  "artifacts": [
+    "systems/RECEIPT_DEFECT22_GH18_PAGED_MEMORY.md",
+    ".builder_queue/probe_gh18_alloc_site.py / _2 / _3 / _4 / _5 (scripts)",
+    "output/probe_gh18_alloc_site_2026091314.json",
+    "output/probe_gh18_alloc_site2_2026091314.json",
+    "output/probe_gh18_alloc_site3_2026091314.json",
+    "output/probe_gh18_alloc_site4_2026091314.json",
+    "output/probe_gh18_alloc_site5_2026091314.json"
+  ],
+  "design_question": ".builder_queue/REPAIR_PENDING_defect23_paged_flat_memory.md (four options, cheapest first)",
+  "not_proven": [
+    "why slots 1538/1539 hold those byte patterns (kernel program writes? bake layout? image stamp?) - not measured",
+    "whether the two stores' targets matter to any assertion (the test passes either way)",
+    "no fix applied; no gate written; n=1 per stage (seed 2026091314)"
+  ],
+  "writer_named": {
+    "by": "builder cron af3e62239ce2, 2026-09-13 14:2x CDT",
+    "kind": "runtime (NOT bake-stamped; slots read 0 pre-step in baseline/admit/paged_dispatch)",
+    "site": "tools/glyph_gpt/baker.py:5210-5225 (:__g18_ptloop, mode paged_dispatch)",
+    "pc": [
+      16,
+      11
+    ],
+    "mode": "MODE_SUPER",
+    "steps": [
+      181,
+      195,
+      209,
+      223,
+      237,
+      251,
+      265,
+      279
+    ],
+    "mechanism": "MOV written as ADD with uninitialised r14 -> r14(n) = ((r14(n-1) << 8) | 7) + n, r14(-1)=0x150001; all 8 observed PTE values reproduced exactly",
+    "probe": ".builder_queue/probe_defect23_pt_slot_writer.py"
+  },
+  "option1_fix_candidate": {
+    "classification_change": "typo-class bake defect, NOT an engine memory-model or fault-policy question (the loop contradicts its own documented contract, baker.py:5198-5209)",
+    "branch": "defect23-ptloop-init (worktree /home/jericho/zion/worktrees/defect23-ptloop)",
+    "commit": "6d8ab81",
+    "diff": "+12 lines in tools/glyph_gpt/baker.py (LDI r14 0 + comment), +134 lines new gate tests/test_defect23_pt_identity.py",
+    "gate": "python3 -m pytest tests/test_defect23_pt_identity.py -q -> RED 2 failed/1 passed pre-fix, GREEN 3 passed with fix",
+    "measured": {
+      "gh18_peak_kb_pre_fix": 2350292,
+      "gh18_peak_kb_post_fix": 243204,
+      "wall_s_pre_fix": 9.04,
+      "wall_s_post_fix": 3.85,
+      "instrument": "/usr/bin/time -v"
+    },
+    "landed_on_main_branch": false,
+    "awaiting": "Jericho sign-off to land 6d8ab81",
+    "not_proven": [
+      "WGSL twin not re-derived",
+      "non-identity maps untested",
+      "engine low-byte-only PTE validity test untouched (option 2 still open)",
+      "only the one named arc consumer re-run"
+    ]
+  },
+  "related_options_note": "option 2 (pfn ceiling + named fault) and option 3 (sparse memory) change classification: with the arming loop fixed, option 2 has no known live trigger but still guards the class; option 3 remains a worktree-isolated round.",
+  "landing": {
+    "commit": "c7995a7",
+    "branch_landed_from": "defect23-ptloop @ 6d8ab81 (cherry-pick, not merge)",
+    "authority": ".builder_queue/RULING_defect23_option1_landing.md (mechanism-class vs policy-class rule; reversible with `git revert c7995a7`)",
+    "gate_on_merged_tree": "pytest tests/test_defect23_pt_identity.py tests/test_gh18_syscall_abi.py -q -> 17 passed in 3.62s, exit 0, peak RSS 244,956 kB (pre-fix 2,351,292 kB)",
+    "arc_on_merged_tree": "SEED=2026091315 bash tools/arc_lega.sh via suite_sweep.sh -b 12G -w 4 -> rc=0, crashes=0, 325 passed / 1 skipped / 1 deselected in 126.46s, scope peak 816 MB (pre-fix arc at 9bd8dd2, seed 2026091305: same 325/1/1 verdict, scope peak 2,970 MB inside a 4.0 GiB scope = 72.5% of cap)",
+    "not_proven_by_landing": "option 2's class guard; the WGSL twin; non-identity maps; and 816 MB is one seeded order's peak, not proof leg A is OOM-proof at rest",
+    "red_leg_encountered_during_landing": "test_gh18_admit_syscall_via_ingest_end_to_end timed out at 120 s under GPU saturation and passed in four other runs of the same code - filed as DEFECT-24, not a blocker for this landing"
+  },
+  "status_history": [
+    {
+      "at": "2026-09-13T19:4xZ",
+      "by": "builder cron af3e62239ce2",
+      "from": "OPEN - design sign-off needed before a fix (engine memory model / fault policy is Jericho's seat)",
+      "to": "OPTION 1 LANDED 2026-09-13 @ c7995a7 (baker.py +12: `LDI r14 0` before `ADD r14 r13`, + new gate tests/test_defect23_pt_identity.py). OPEN for OPTION 2 ONLY - the engine's low-byte-only PTE validity test (tools/glyph_isa_v2.py:710) and the unbounded pfn extension (:740-743) are untouched and still pick a fault policy, which is Jericho's seat.",
+      "evidence": ".builder_queue/RULING_defect23_option1_landing.md"
+    }
+  ]
+}

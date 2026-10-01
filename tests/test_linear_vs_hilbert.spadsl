@@ -1,0 +1,26 @@
+# Test: Linear vs Hilbert Layout Comparison
+# This test demonstrates that both layouts produce identical results
+# for the same operations, proving that layout is transparent to correctness.
+
+# Linear layout baseline
+A_lin = region(shape=(4, 4), initial=1, layout="linear")
+B_lin = shift(A_lin, offset=2)
+C_lin = A_lin + B_lin
+total_lin = reduce(C_lin, sum)
+print(total_lin)  # Should be 32 (16 elements, each = 1+1=2)
+
+# Hilbert layout - should produce same result
+A_hil = region(shape=(4, 4), initial=1, layout="hilbert")
+B_hil = shift(A_hil, offset=2)
+C_hil = A_hil + B_hil
+total_hil = reduce(C_hil, sum)
+print(total_hil)  # Should also be 32
+
+# Conv2D identity kernel - both layouts should preserve sum
+D_lin = conv2d(A_lin, [[0, 0, 0], [0, 1, 0], [0, 0, 0]])
+total_conv_lin = reduce(D_lin, sum)
+print(total_conv_lin)  # Should be 16
+
+D_hil = conv2d(A_hil, [[0, 0, 0], [0, 1, 0], [0, 0, 0]])
+total_conv_hil = reduce(D_hil, sum)
+print(total_conv_hil)  # Should be 16

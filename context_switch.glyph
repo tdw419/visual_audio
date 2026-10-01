@@ -1,0 +1,46 @@
+# Cooperative context switch demo.
+#
+# Real limitation this design works around (see SPATIAL_COORDINATOR_SPEC.md
+# "Context switch" section): the Glyph ISA has no opcode to read the current
+# PC into a register, and JMP/CALL/JZ targets are assemble-time immediates —
+# there is no register-indirect jump. So an arbitrary mid-instruction PC
+# cannot be saved to memory and later resumed from. What CAN be built with
+# CALL/RET as-is: a window as a small stateful "tick" routine. The
+# supervisor CALLs its fixed entry point (a real immediate CALL — legal),
+# the window reads its own persistent counter from WCB memory, advances it,
+# writes it back, and RETs (popping the address CALL auto-pushed). State
+# genuinely survives across separate dispatches; only "resume mid-body"
+# does not.
+
+:supervisor
+LDI r31 250            ; stack pointer for CALL/RET (image address space)
+LDI r5 100              ; WCB base address (cpu.memory)
+LDI r6 8
+ADD r6 r5                ; r6 = counter address = WCB base + 8
+
+LDI r9 0
+ST r6 r9                  ; counter starts at 0
+
+CALL :window_tick          ; dispatch 1
+LD r1 r6
+PRT r1                      ; expect 1
+
+CALL :window_tick          ; dispatch 2
+LD r1 r6
+PRT r1                      ; expect 2
+
+CALL :window_tick          ; dispatch 3
+LD r1 r6
+PRT r1                      ; expect 3
+
+HALT
+
+:window_tick
+LDI r2 100
+LDI r3 8
+ADD r3 r2                ; r3 = counter address (recomputed independently of supervisor's r6)
+LD r4 r3                  ; r4 = current counter
+LDI r7 1
+ADD r4 r7                  ; increment
+ST r3 r4                    ; write back — this is the window's persisted state
+RET

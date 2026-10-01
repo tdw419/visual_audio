@@ -1,0 +1,24 @@
+{
+  "ticket": "REPAIR_stale_NEXT_line_triggers_claim_pending",
+  "title": "Monitor repair: ledger-fallback scan (glyph_build_chain_monitor.py:354-364) regex-matches the FIRST '^NEXT:' anywhere in PRODUCT_LANE_STATE.md — a stale 2026-09-25 NEXT line (:3913) now drives CLAIM_PENDING on a queue-empty tree",
+  "status": "CLOSED 2026-09-28 ~15:2x CDT — landed as commit (monitor newest-entry anchor + test_l9; RED-first live-instrument legs in commit body)",
+  "blocker": null,
+  "defect_status": null,
+  "worktree": "main tree (HEAD dddfb39b + this commit)",
+  "attempt": 2,
+  "gate": "FIX APPLIED AND MEASURED: live monitor with fix stashed -> head=dddfb39b tracked_dirty=0 state=CLAIM_PENDING queue=0 supply=claim: (round-9+ supply items 18-23 from the seat lane (RED, the phantom reproduced verbatim); fix restored -> tracked_dirty=2 (map churn, exempt channel pending regen) state=DIRTY_ACTIVE... -> after regen settle: no phantom. tests/test_monitor_fingerprint_hygiene.py 9/9 GREEN (new L9: source pin + live instrument + deterministic mechanism leg); L9 proven RED (FAILED :424) with the monitor fix stashed, GREEN with it restored.",
+  "evidence": [
+    "RED leg at landing time (live instrument, fix stashed): state=CLAIM_PENDING queue=0 supply=claim: (round-9+ supply items 18-23 from the seat lane — the exact phantom.",
+    "GREEN: fix restored, 9/9 hygiene legs pass, supply=ok.",
+    "Mechanism reproduction (pre-fix, monitor's exact regex on HEAD ledger): whole-file first match at offset 268495 — deep in the stale 2026-09-25 entry; newest-entry-scoped scan returns None."
+  ],
+  "candidate_fixes": [
+    "LAND (cheapest, ticket-named): anchor the NEXT scan to the MOST RECENT ledger entry — _ledger.find('### ', 5) bounds the scan scope; cross-check stays textual.",
+    "not-taken: skip a NEXT line whose named items are all landed in QUEUE_STATE.json (heavier cross-check; the anchor closes the observed class).",
+    "not-taken: retire prose-NEXT parsing entirely (structural; larger blast radius than this defect warrants today)."
+  ],
+  "untrusted_probes": [],
+  "notes": [
+    "Named 2026-09-28 ~15:1x CDT by builder af3e62239ce2 at the tick that landed dddfb39b; closed same day by builder af3e62239ce2. Gate channel NOT weakened: the fallback still fires CLAIM_PENDING for a genuinely current NEXT line (the 'queue empty' exclusion retained); only stale-entry NEXT text is excluded."
+  ]
+}

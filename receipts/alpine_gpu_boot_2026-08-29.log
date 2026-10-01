@@ -1,0 +1,229 @@
+Unable to find extension: VK_EXT_physical_device_drm
+Detected skylake derivative running on mesa i915. Clears to srgb textures will use manual shader clears.
+  kernel 0x80200000-0x815e3000  initrd 0x82800000  dtb 0x82200000 (1719B)
+
+OpenSBI v1.7
+   ____                    _____ ____ _____
+  / __ \                  / ____|  _ \_   _|
+ | |  | |_ __   ___ _ __ | (___ | |_) || |
+ | |  | | '_ \ / _ \ '_ \ \___ \|  _ < | |
+ | |__| | |_) |  __/ | | |____) | |_) || |_
+  \____/| .__/ \___|_| |_|_____/|____/_____|
+        | |
+        |_|
+
+Platform Name               : visual-audio,gpu-riscv-pixel-machine
+Platform Features           : medeleg
+Platform HART Count         : 1
+Platform IPI Device         : aclint-mswi
+Platform Timer Device       : aclint-mtimer @ 10000000Hz
+Platform Console Device     : uart8250
+Platform HSM Device         : ---
+Platform PMU Device         : ---
+Platform Reboot Device      : ---
+Platform Shutdown Device    : ---
+Platform Suspend Device     : ---
+Platform CPPC Device        : ---
+Firmware Base               : 0x80000000
+Firmware Size               : 317 KB
+Firmware RW Offset          : 0x40000
+Firmware RW Size            : 61 KB
+Firmware Heap Offset        : 0x46000
+Firmware Heap Size          : 37 KB (total), 2 KB (reserved), 11 KB (used), 23 KB (free)
+Firmware Scratch Size       : 4096 B (total), 400 B (used), 3696 B (free)
+Runtime SBI Version         : 3.0
+Standard SBI Extensions     : ipi,pmu,sse,hsm,rfnc,fwft,time,base,legacy,dbcn,dbtr
+Experimental SBI Extensions : none
+
+Domain0 Name                : root
+Domain0 Boot HART           : 0
+Domain0 HARTs               : 0*
+Domain0 Region00            : 0x0000000010000000-0x0000000010000fff M: (I,R,W) S/U: (R,W)
+Domain0 Region01            : 0x0000000011000000-0x000000001100ffff M: (I,R,W) S/U: ()
+Domain0 Region02            : 0x0000000080040000-0x000000008004ffff M: (R,W) S/U: ()
+Domain0 Region03            : 0x0000000080000000-0x000000008003ffff M: (R,X) S/U: ()
+Domain0 Region04            : 0x0000000000000000-0xffffffffffffffff M: () S/U: (R,W,X)
+Domain0 Next Address        : 0x0000000080200000
+Domain0 Next Arg1           : 0x0000000082200000
+Domain0 Next Mode           : S-mode
+Domain0 SysReset            : yes
+Domain0 SysSuspend          : yes
+
+Boot HART ID                : 0
+Boot HART Domain            : root
+Boot HART Priv Version      : v1.12
+Boot HART Base ISA          : rv64imac
+Boot HART ISA Extensions    : smaia,smstateen,sscofpmf,sstc,zicntr,zihpm,smcntrpmf,sdtrig,ssstateen
+Boot HART PMP Count         : 64
+Boot HART PMP Granularity   : 2 bits
+Boot HART PMP Address Bits  : 54
+Boot HART MHPM Info         : 29 (0xfffffff8)
+Boot HART Debug Triggers    : 32 triggers
+Boot HART MIDELEG           : 0x0000000000002222
+Boot HART MEDELEG           : 0x000000000004b109
+[    0.000000] Linux version 6.12.31-0-lts (buildozer@build-3-22-riscv64) (cc (Alpine 14.2.0) 14.2.0, GNU ld (GNU Binutils) 2.44) #1-Alpine SMP PREEMPT_DYNAMIC 2025-05-29 15:39:32
+[    0.000000] random: crng init done
+[    0.000000] Machine model: visual-audio,gpu-riscv-pixel-machine
+[    0.000000] SBI specification v3.0 detected
+[    0.000000] SBI implementation ID=0x1 Version=0x10007
+[    0.000000] SBI TIME extension detected
+[    0.000000] SBI IPI extension detected
+[    0.000000] SBI RFENCE extension detected
+[    0.000000] SBI DBCN extension detected
+[    0.000000] earlycon: uart8250 at MMIO 0x0000000010000000 (options '')
+[    0.000000] printk: legacy bootconsole [uart8250] enabled
+[    0.000000] efi: UEFI not found.
+[    0.000000] OF: reserved mem: 0x0000000080000000..0x000000008003ffff (256 KiB) nomap non-reusable mmode_resv1@80000000
+[    0.000000] OF: reserved mem: 0x0000000080040000..0x000000008004ffff (64 KiB) nomap non-reusable mmode_resv0@80040000
+[    0.000000] OF: reserved mem: 0x0000000080000000..0x000000008004ffff (320 KiB) nomap non-reusable opensbi@80000000
+[    0.000000] OF: reserved mem: 0x0000000082800000..0x0000000082d0b5e0 (5165 KiB) map non-reusable initrd@82800000
+[    0.000000] OF: reserved mem: 0x0000000081600000..0x0000000081dfffff (8192 KiB) nomap non-reusable disk@81600000
+[    0.000000] OF: reserved mem: OVERLAP DETECTED!
+[    0.000000] mmode_resv1@80000000 (0x0000000080000000--0x0000000080040000) overlaps with opensbi@80000000 (0x0000000080000000--0x0000000080050000)
+[    0.000000] OF: reserved mem: OVERLAP DETECTED!
+[    0.000000] opensbi@80000000 (0x0000000080000000--0x0000000080050000) overlaps with mmode_resv0@80040000 (0x0000000080040000--0x0000000080050000)
+[    0.000000] Zone ranges:
+[    0.000000]   DMA32    [mem 0x0000000080000000-0x0000000083ffffff]
+[    0.000000]   Normal   empty
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000080000000-0x000000008004ffff]
+[    0.000000]   node   0: [mem 0x0000000080050000-0x00000000815fffff]
+[    0.000000]   node   0: [mem 0x0000000081600000-0x0000000081dfffff]
+[    0.000000]   node   0: [mem 0x0000000081e00000-0x0000000083ffffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000080000000-0x0000000083ffffff]
+[    0.000000] SBI HSM extension detected
+[    0.000000] Falling back to deprecated "riscv,isa"
+[    0.000000] riscv: base ISA extensions acdfim
+[    0.000000] riscv: ELF capabilities acdfim
+[    0.000000] percpu: Embedded 22 pages/cpu s49880 r8192 d32040 u90112
+[    0.000000] Kernel command line: earlycon=uart8250,mmio,0x10000000 console=ttyS0 cma=0
+[    0.000000] Dentry cache hash table entries: 4096 (order: 3, 32768 bytes, linear)
+[    0.000000] Inode-cache hash table entries: 2048 (order: 2, 16384 bytes, linear)
+[    0.000000] Built 1 zonelists, mobility grouping on.  Total pages: 16384
+[    0.000000] mem auto-init: stack:off, heap alloc:off, heap free:off
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=1, Nodes=1
+[    0.000000] Dynamic Preempt: full
+[    0.000000] rcu: Preemptible hierarchical RCU implementation.
+[    0.000000] rcu: 	RCU restricting CPUs from NR_CPUS=4 to nr_cpu_ids=1.
+[    0.000000] 	Trampoline variant of Tasks RCU enabled.
+[    0.000000] 	Tracing variant of Tasks RCU enabled.
+[    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 100 jiffies.
+[    0.000000] rcu: Adjusting geometry for rcu_fanout_leaf=16, nr_cpu_ids=1
+[    0.000000] RCU Tasks: Setting shift to 0 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=1.
+[    0.000000] RCU Tasks Trace: Setting shift to 0 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=1.
+[    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
+[    0.000000] riscv-intc: 64 local interrupts mapped
+[    0.000000] riscv: providing IPIs using SBI IPI extension
+[    0.000000] rcu: srcu_init: Setting srcu_struct sizes based on contention.
+[    0.000000] clocksource: riscv_clocksource: mask: 0xffffffffffffffff max_cycles: 0x24e6a1710, max_idle_ns: 440795202120 ns
+[    0.000042] sched_clock: 64 bits at 10MHz, resolution 100ns, wraps every 4398046511100ns
+[    0.014573] Console: colour dummy device 80x25
+[    0.017760] Calibrating delay loop (skipped), value calculated using timer frequency.. 20.00 BogoMIPS (lpj=10000)
+[    0.020774] pid_max: default: 32768 minimum: 301
+[    0.041869] LSM: initializing lsm=capability
+[    0.053164] Mount-cache hash table entries: 512 (order: 0, 4096 bytes, linear)
+[    0.055672] Mountpoint-cache hash table entries: 512 (order: 0, 4096 bytes, linear)
+[    0.207260] riscv: ELF compat mode supported
+[    0.208762] ASID allocator using 16 bits (65536 entries)
+[    0.220412] rcu: Hierarchical SRCU implementation.
+[    0.222021] rcu: 	Max phase no-delay instances is 400.
+[    0.250574] EFI services will not be available.
+[    0.260449] smp: Bringing up secondary CPUs ...
+[    0.262132] smp: Brought up 1 node, 1 CPU
+[    0.269785] Memory: 28940K/65536K available (8169K kernel code, 5257K rwdata, 4096K rodata, 2239K init, 573K bss, 35352K reserved, 0K cma-reserved)
+[    0.291460] devtmpfs: initialized
+[    0.401224] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 1911260446275000 ns
+[    0.404257] futex hash table entries: 256 (order: 2, 16384 bytes, linear)
+[    0.425840] pinctrl core: initialized pinctrl subsystem
+[    0.470289] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+[    0.501380] DMA: preallocated 128 KiB GFP_KERNEL pool for atomic allocations
+[    0.504025] DMA: preallocated 128 KiB GFP_KERNEL|GFP_DMA32 pool for atomic allocations
+[    0.541064] thermal_sys: Registered thermal governor 'step_wise'
+[    0.541509] thermal_sys: Registered thermal governor 'user_space'
+[    0.545393] cpuidle: using governor menu
+[    0.573109] cpu0: Ratio of byte access time to unaligned word access is 9.44, unaligned accesses are fast
+[    0.693163] HugeTLB: registered 1.00 GiB page size, pre-allocated 0 pages
+[    0.695092] HugeTLB: 0 KiB vmemmap can be freed for a 1.00 GiB page
+[    0.697125] HugeTLB: registered 2.00 MiB page size, pre-allocated 0 pages
+[    0.699054] HugeTLB: 0 KiB vmemmap can be freed for a 2.00 MiB page
+[    0.861816] SCSI subsystem initialized
+[    0.878480] usbcore: registered new interface driver usbfs
+[    0.883408] usbcore: registered new interface driver hub
+[    0.887513] usbcore: registered new device driver usb
+[    0.903701] pps_core: LinuxPPS API ver. 1 registered
+[    0.905660] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    0.999386] vgaarb: loaded
+[    1.009562] clocksource: Switched to clocksource riscv_clocksource
+[    1.048740] VFS: Disk quotas dquot_6.6.0
+[    1.053812] VFS: Dquot-cache hash table entries: 512 (order 0, 4096 bytes)
+[    1.890073] NET: Registered PF_INET protocol family
+[    1.900727] IP idents hash table entries: 2048 (order: 2, 16384 bytes, linear)
+[    2.011811] tcp_listen_portaddr_hash hash table entries: 256 (order: 0, 4096 bytes, linear)
+[    2.015839] Table-perturb hash table entries: 65536 (order: 6, 262144 bytes, linear)
+[    2.019133] TCP established hash table entries: 512 (order: 0, 4096 bytes, linear)
+[    2.025760] TCP bind hash table entries: 512 (order: 2, 16384 bytes, linear)
+[    2.030160] TCP: Hash tables configured (established 512 bind 512)
+[    2.045199] MPTCP token hash table entries: 256 (order: 0, 6144 bytes, linear)
+[    2.052160] UDP hash table entries: 256 (order: 1, 8192 bytes, linear)
+[    2.056900] UDP-Lite hash table entries: 256 (order: 1, 8192 bytes, linear)
+[    2.068785] NET: Registered PF_UNIX/PF_LOCAL protocol family
+[    2.073173] PCI: CLS 0 bytes, default 64
+[    2.118197] Unpacking initramfs...
+[    2.336268] Initialise system trusted keyrings
+[    2.387251] workingset: timestamp_bits=46 max_order=13 bucket_order=0
+[    2.397034] zbud: loaded
+[   33.608146] Freeing initrd memory: 5164K
+[   44.143753] NET: Registered PF_ALG protocol family
+[   44.145917] Key type asymmetric registered
+[   44.147933] Asymmetric key parser 'x509' registered
+[   44.155123] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 250)
+[   44.999185] Serial: 8250/16550 driver, 4 ports, IRQ sharing disabled
+[   45.636207] of_serial 10000000.serial: error -ENXIO: IRQ index 0 not found
+[   45.689935] printk: legacy console [ttyS0] disabled
+[   45.859217] 10000000.serial: ttyS0 at MMIO 0x10000000 (irq = 0, base_baud = 230400) is a 16550A
+[   45.882156] printk: legacy console [ttyS0] enabled
+[   45.882156] printk: legacy console [ttyS0] enabled
+[   45.886832] printk: legacy bootconsole [uart8250] disabled
+[   45.886832] printk: legacy bootconsole [uart8250] disabled
+[   47.091241] usbcore: registered new interface driver uas
+[   47.120903] usbcore: registered new interface driver usb-storage
+[   47.183859] i2c_dev: i2c /dev entries driver
+[   47.485060] riscv-pmu-sbi: SBI PMU extension is available
+[   47.504240] riscv-pmu-sbi: 16 firmware and 31 hardware counters
+[   47.507762] riscv-pmu-sbi: Perf sampling/filtering is not supported as sscof extension is not available
+[   47.628140] NET: Registered PF_INET6 protocol family
+[   47.715111] Segment Routing with IPv6
+[   47.720795] In-situ OAM (IOAM) with IPv6
+[   52.983209] registered taskstats version 1
+[   53.000184] Loading compiled-in X.509 certificates
+[   53.724800] Loaded X.509 cert 'alpinelinux.org: Alpine Linux kernel key: 6b9af90fcec91b5a5b53e42935a606b791ef508f'
+[   55.004716] Key type .fscrypt registered
+[   55.006778] Key type fscrypt-provisioning registered
+[   55.048020] clk: Disabling unused clocks
+[   55.051927] PM: genpd: Disabling unused power domains
+[   55.103677] /dev/root: Can't open blockdev
+[   55.111193] VFS: Cannot open root device "" or unknown-block(0,0): error -6
+[   55.116943] Please append a correct "root=" boot option; here are the available partitions:
+[   55.119975] List of all bdev filesystems:
+[   55.121261]  ext3
+[   55.122016]  ext2
+[   55.123190]  ext4
+[   55.124974]  f2fs
+[   55.126164] 
+[   55.128189] Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(0,0)
+[   55.129545] CPU: 0 UID: 0 PID: 1 Comm: swapper/0 Not tainted 6.12.31-0-lts #1-Alpine
+[   55.131253] Hardware name: visual-audio,gpu-riscv-pixel-machine (DT)
+[   55.132426] Call Trace:
+[   55.133323] [<ffffffff80006310>] dump_backtrace+0x1c/0x24
+[   55.135047] [<ffffffff807e8416>] show_stack+0x2c/0x38
+[   55.136730] [<ffffffff807f2d20>] dump_stack_lvl+0x50/0x72
+[   55.138453] [<ffffffff807f2d56>] dump_stack+0x14/0x1c
+[   55.140134] [<ffffffff807e8694>] panic+0x108/0x2ec
+[   55.141809] [<ffffffff80801c00>] mount_root_generic+0x1da/0x28a
+[   55.143634] [<ffffffff80801e0a>] mount_root+0x15a/0x172
+[   55.145382] [<ffffffff80802022>] prepare_namespace+0x200/0x256
+[   55.147209] [<ffffffff808015f8>] kernel_init_freeable+0x268/0x27e
+[   55.149022] [<ffffffff807f45e6>] kernel_init+0x1e/0x11c
+[   55.150825] [<ffffffff807fc64a>] ret_from_fork+0xe/0x18
+[   55.152781] ---[ end Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(0,0) ]---

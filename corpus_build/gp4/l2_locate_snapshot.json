@@ -1,0 +1,32 @@
+{
+ "guest_path": "/var/tmp/gp4_1789617660/proc_snapshot.txt",
+ "size": 374,
+ "extents": 1,
+ "frames": [
+  57
+ ],
+ "spans": [
+  {
+   "disk_bytes": [
+    3779645440,
+    3779649536
+   ],
+   "start": {
+    "frame": 57,
+    "x": 1024,
+    "y": 1315,
+    "channel": "R",
+    "intra_byte": 21549056
+   },
+   "end": {
+    "frame": 57,
+    "x": 2047,
+    "y": 1315,
+    "channel": "A",
+    "intra_byte": 21553151
+   },
+   "blocks": 1,
+   "logical_first": 0
+  }
+ ]
+}

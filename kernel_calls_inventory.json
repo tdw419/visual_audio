@@ -1,0 +1,20 @@
+{
+  "fs.img": [],
+  "xv6.img": [
+    "call syscall+0x58",
+    "call syscall",
+    "call syscalls",
+    "call syscall+0x40"
+  ],
+  "xv6-riscv.img": [
+    "call syscall+0x5c",
+    "call syscall",
+    "call syscalls",
+    "call syscall+0x7c"
+  ],
+  "hello.img": [
+    "RISC-V ecall"
+  ],
+  "serial_boot.img": [],
+  "xv6-riscv-fs.img": []
+}

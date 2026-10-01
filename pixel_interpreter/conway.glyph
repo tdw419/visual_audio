@@ -1,0 +1,193 @@
+; Conway's Game of Life - 16x16 grid
+; Memory layout:
+; y=0: CPU state
+; y=1-80: Code
+; y=81-96: Current grid (16x16 rows), live=255, dead=0
+; y=97-112: Next grid (16x16 rows)
+
+; Initialize with glider at (2, 81)
+SET 255
+STORE (3, 81)   ; (2,81) = live
+STORE (4, 82)
+STORE (2, 83)
+STORE (3, 83)
+STORE (4, 83)
+
+; Main loop
+:loop_main
+
+; Outer loop: iterate y from 0 to 15
+SET 0
+STORE (200, 0)  ; outer_y counter
+
+:loop_y
+LOAD (200, 0)
+SUB 15
+JZ :swap_grids  ; Done with all rows
+
+; Inner loop: iterate x from 0 to 15
+SET 0
+STORE (201, 0)  ; inner_x counter
+
+:loop_x
+LOAD (201, 0)
+SUB 15
+JZ :next_y  ; Done with this row
+
+; Process cell at (inner_x, outer_y)
+; Compute grid coordinate: (inner_x, outer_y + 81)
+SET_ADDR_HIGH 201
+SET_ADDR_LOW 0
+INDIRECT_LOAD
+SET_ADDR_HIGH 0
+SET_ADDR_LOW 81
+ADD ; y coordinate in accumulator
+
+; Store packed base coordinate
+STORE (210, 0)  ; base_x
+STORE (211, 0)  ; base_y
+
+; Initialize neighbor count
+SET 0
+STORE (212, 0)  ; neighbor_count
+
+; Count neighbors - offset table
+SET -1
+STORE (220, 0)  ; dx offsets
+STORE (221, 0)  ; dy offsets
+SET 0
+STORE (222, 0)
+STORE (223, 0)
+SET 1
+STORE (224, 0)
+STORE (225, 0)
+
+; Offset table: (dx, dy) for 8 neighbors
+; (-1,-1), (-1,0), (-1,1), (0,-1), (0,1), (1,-1), (1,0), (1,1)
+SET 255  ; -1 in uint8
+STORE (220, 0)  ; dx1
+STORE (220, 0)  ; dy1
+STORE (220, 0)  ; dx2
+STORE (0, 221)
+STORE (220, 0)  ; dx3
+STORE (1, 221)
+STORE (0, 220)  ; dx4
+STORE (255, 221)
+STORE (0, 220)  ; dx5
+STORE (1, 221)
+STORE (1, 220)   ; dx6
+STORE (255, 221)
+STORE (1, 220)   ; dx7
+STORE (0, 221)
+STORE (1, 220)   ; dx8
+STORE (1, 221)
+
+; For each neighbor offset
+SET 0
+STORE (230, 0)  ; offset_index
+
+:neighbor_loop
+LOAD (230, 0)
+SUB 8
+JZ :apply_rules
+
+; Load base_x and base_y
+LOAD (210, 0)
+STORE (240, 0)  ; current_x
+LOAD (211, 0)
+STORE (241, 0)  ; current_y
+
+; Add offset (this is complex without multiply/divide)
+; Need to compute: dx = offset_table[2*idx], dy = offset_table[2*idx+1]
+; Implementing linear indexing manually
+
+; For simplicity: unroll all 8 neighbor checks
+; This is verbose but works with current ISA
+
+JMP :neighbor_1
+
+:neighbor_1  ; (-1, -1)
+LOAD (210, 0)
+SUB 1
+STORE (240, 0)
+LOAD (211, 0)
+SUB 1
+STORE (241, 0)
+JMP :check_neighbor
+
+:check_neighbor
+; Check if neighbor is alive
+SET_ADDR_HIGH 240
+SET_ADDR_LOW 241
+INDIRECT_LOAD
+; Acc now has neighbor value (255 or 0)
+ADD 0  ; Check if non-zero
+JZ :next_neighbor
+
+LOAD (212, 0)
+ADD 1
+STORE (212, 0)  ; neighbor_count++
+
+:next_neighbor
+LOAD (230, 0)
+ADD 1
+STORE (230, 0)
+JMP :neighbor_loop
+
+; Apply Game of Life rules
+:apply_rules
+; Check if current cell is alive
+SET_ADDR_HIGH 210
+SET_ADDR_LOW 211
+INDIRECT_LOAD  ; Acc = current_cell (255 or 0)
+
+SUB 255  ; Check if alive
+JZ :alive_rules
+
+:dead_rules
+; Dead cell: 3 neighbors -> alive
+LOAD (212, 0)
+SUB 3
+JZ :become_alive
+JMP :die
+
+:alive_rules
+; Alive cell: 2 or 3 neighbors -> stay alive
+LOAD (212, 0)
+SUB 2
+JZ :stay_alive
+SUB 1  ; Check if 3
+JZ :stay_alive
+JMP :die
+
+:become_alive
+SET 255
+STORE (210 + 16, 211)  ; Store in next grid (y + 16)
+JMP :next_cell
+
+:stay_alive
+SET 255
+STORE (210 + 16, 211)  ; Store in next grid
+JMP :next_cell
+
+:die
+SET 0
+STORE (210 + 16, 211)  ; Store in next grid
+
+:next_cell
+LOAD (201, 0)
+ADD 1
+STORE (201, 0)
+JMP :loop_x
+
+:next_y
+LOAD (200, 0)
+ADD 1
+STORE (200, 0)
+JMP :loop_y
+
+:swap_grids
+; Swap current and next grids
+; This would need a COPY instruction or loop
+; For now: just halt after one generation
+HALT

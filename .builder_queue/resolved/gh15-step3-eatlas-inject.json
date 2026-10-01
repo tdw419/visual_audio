@@ -1,0 +1,8 @@
+{
+  "id": "gh15-step3-eatlas-inject",
+  "created": "2026-09-10T15:45:00-05:00",
+  "resolved": "2026-09-10T17:20:00-05:00",
+  "resolution_commit": "5989e2f",
+  "resolution": "PARALLEL_ST write-through pixel mirror in both engine twins (tools/glyph_isa_v2.py + glyph_dispatch/src/glyph/glyph_isa_v2.py). Root cause: 087f29b moved PARALLEL_ST to word-RAM-only, but the Python engine fetches instructions from image pixels — the GH-9 loader kernel's exec-window patch landed in RAM the fetch never reads, so the tile executed HALT padding (result 0, clean status). Fix mirrors each stored word into the image pixel at the same linear index when in bounds (GH-8b write-through pattern, _fs_pix_write precedent). SpaDSL region semantics unchanged. RCA: RCA_GH9LOADER_PATCH_IMAGE_MIRROR.md (also covers 3 latent reds: test_gh9_loader x2, test_gh11_drives_gh9). Verified: RED at clean HEAD (4 legs), GREEN after (GH15-GH24 arc 85/85, GH16-GH24 78/78, GH-18 invariant 14/14, pre-commit differential suites 37/37).",
+  "status": "resolved"
+}

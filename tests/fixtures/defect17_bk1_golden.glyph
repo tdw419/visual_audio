@@ -1,0 +1,127 @@
+# Transpiled from RV32I/RV64I by rv64i_to_glyph.py
+:__entry
+LDI r31 895            ; initialize hardware call stack pointer
+JMP :_start
+
+:_start
+:pc_00000000
+LDI r2 0x1000
+:pc_00000004
+LDI r29 0xfffffbb0
+ADD r2 r29
+:pc_00000008
+LDI r5 0x1000
+:pc_0000000c
+LDI r29 0xfffffbb8
+ADD r5 r29
+:pc_00000010
+LDI r30 0x0
+ADD r30 r5
+LDI r29 2
+SHR r30 r29
+LD r10 r30
+:pc_00000014
+LDI r30 0x4
+ADD r30 r5
+LDI r29 2
+SHR r30 r29
+LD r11 r30
+:pc_00000018
+LDI r30 0x8
+ADD r30 r5
+LDI r29 2
+SHR r30 r29
+LD r12 r30
+:pc_0000001c
+LDI r1 0x20
+CALL :main
+:pc_00000020
+LDI r6 0x1000
+:pc_00000024
+LDI r29 0xfffffbc8
+ADD r6 r29
+:pc_00000028
+LDI r30 0x0
+ADD r30 r6
+LDI r29 2
+SHR r30 r29
+ST r30 r10
+:pc_0000002c
+LDI r7 0x1000
+:pc_00000030
+LDI r29 0xfffffafc
+ADD r7 r29
+:pc_00000034
+LDI r28 0xfeed0000
+:pc_00000038
+LDI r29 0x9
+ADD r28 r29
+:pc_0000003c
+LDI r30 0x0
+ADD r30 r7
+LDI r29 2
+SHR r30 r29
+ST r30 r28
+:pc_00000040
+HALT
+:main
+:pc_00000044
+LDI r30 0x4
+ADD r30 r11
+LDI r29 2
+SHR r30 r29
+LD r14 r30
+:pc_00000048
+PUSH r28
+PUSH r29
+PUSH r30
+LDI r30 0x0
+ADD r30 r14
+LDI r28 3
+AND r28 r30
+LDI r29 3
+SHL r28 r29
+LDI r29 2
+SHR r30 r29
+LD r15 r30
+SHR r15 r28
+LDI r29 0xff
+AND r15 r29
+POP r30
+POP r29
+POP r28
+:pc_0000004c
+PUSH r28
+PUSH r29
+PUSH r30
+LDI r30 0x1
+ADD r30 r14
+LDI r28 3
+AND r28 r30
+LDI r29 3
+SHL r28 r29
+LDI r29 2
+SHR r30 r29
+LD r14 r30
+SHR r14 r28
+LDI r29 0xff
+AND r14 r29
+POP r30
+POP r29
+POP r28
+:pc_00000050
+LDI r10 0
+ADD r10 r15
+ADD r10 r14
+:pc_00000054
+LDI r29 24
+SHL r10 r29
+:pc_00000058
+LDI r29 8
+SHL r15 r29
+:pc_0000005c
+OR r15 r14
+:pc_00000060
+OR r10 r15
+:pc_00000064
+RET

@@ -1,0 +1,20 @@
+{
+  "ticket_id": "se017-glyph-app-echo",
+  "roadmap_item": "TASK_SE017",
+  "step": "Glyph native app #1 (Echo): a .glyph program writes a message to a file via SYSCALL 0x03 (FILE_WRITE), reads it back via SYSCALL 0x04 (FILE_READ), prints it via PRT — proving the SUITE-FIX-1 syscall handlers under real application execution",
+  "created": "2026-09-14T21:08:38-05:00",
+  "created_by": "Hermes oversight session, Jericho-authorized this session (verbatim: 'File it.' against the 3-row ladder: SE017 Echo, SE018 Voice, SE019 label-resolver promotion; strict sequence, one ticket at a time, SE018 ticket drops only after SE017 retires)",
+  "failing_command": "tests/test_glyph_app_echo.py does not exist yet - this ticket authorizes creating it (RED first: failing-test output before the fix)",
+  "context": {
+    "authorization": "Jericho approved the 3-row ladder this session ('File it.'); SE017/SE018/SE019 rows landed in ROADMAP.md Phase 11 this session; SE018 and SE019 remain roadmap rows only until SE017 retires",
+    "worked_example": "experiments/glyph_native_app_demo.py (commit ec5980a) is the end-to-end template: assemble -> GlyphCPUv2 execute -> cpu.output check; copy its assembler/execute plumbing, replace the program body",
+    "isa_quirks": "CMP writes the equality flag to r0; JZ jumps when r0 != 0 (jump-if-matched, NOT jump-if-register-zero). Jump targets are absolute instruction-cell coords; off-by-one lands silently on the neighboring instruction; walk-off burns the budget as black-pixel NOPs, no fault. GlyphAssemblerV2 parses NO :label syntax; PRT appends to cpu.output (a list), never stdout. Full list: skill glyph-cpu-isa-quirks (§1, §4)",
+    "syscall_abi": "SYSCALL marshals a7=number, a0=r10=arg1, a1=r11=arg2, a2=r12=arg3 (verify against _handle_syscall in tools/glyph_isa_v2.py line ~1170 before coding; demo uses PRT/SYSCALL form). 0x03 FILE_WRITE: r1=path_addr, r2=data_addr, r3=len. 0x04 FILE_READ: r1=path_addr, r2=data_addr, r3=max_len; returns byte count in return register. Paths are NUL-terminated in memory (_read_path). Byte data at data_addr; write to /tmp under a unique name, cleanup in test teardown",
+    "gate_requirements": "RED gate tests/test_glyph_app_echo.py: (1) executing the app's pixels creates the file on disk with expected bytes; (2) cpu.output contains the message after FILE_READ + PRT; (3) a SECOND execute of the same .glyph reads the file left by the first run (persistent state across runs, this is the ladder's point); (4) regression tests/test_glyph_isa_v2.py stays green",
+    "adversarial_first": true
+  },
+  "attempt": 1,
+  "max_attempts": 3,
+  "gate": "tests/test_glyph_app_echo.py green + tests/test_glyph_isa_v2.py regression green + feat(se017) commit + ROADMAP.md TASK_SE017 row updated to complete with receipt; THEN retire this ticket to .builder_queue/resolved/",
+  "receipt_discipline": "failing-test output before the fix, passing run after; receipts are command output not narrative"
+}

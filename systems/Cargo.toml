@@ -1,0 +1,27 @@
+[workspace]
+members = [
+    "virtio_pixel_rs_v3_shared",
+    "virtio_pixel_rs_v3_x86",
+    "virtio_pixel_rs_v3_riscv",
+    "v4_bootloader_x86",
+    "geos_pixel", "geos_pixel_v5", "geos_pixel_nbd",
+]
+
+[workspace.dependencies]
+uefi = { version = "0.27", features = ["global_allocator"] }
+log = "0.4"
+virtio_pixel_rs_v3_shared = { path = "virtio_pixel_rs_v3_shared" }
+
+[workspace.metadata.cargo-udeps]
+ignored = ["log"]
+
+resolver = "2"
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1
+opt-level = "z"
+
+[profile.dev]
+panic = "abort"

@@ -1,0 +1,26 @@
+[package]
+name = "virtio_pixel_rs_v3_x86"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+uefi = { version = "0.39.0", features = ["panic_handler", "logger", "alloc", "global_allocator"] }
+virtio_pixel_rs_v3_shared = { path = "../virtio_pixel_rs_v3_shared" }
+
+[features]
+logging = []
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1
+opt-level = "z"
+
+[[bin]]
+name = "bootloader_uefi_x86"
+path = "src/bootloader_uefi.rs"
+test = false
+bench = false

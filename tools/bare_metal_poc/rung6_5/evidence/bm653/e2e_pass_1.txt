@@ -1,0 +1,24 @@
+STATIC 1/5  codec: rung 6's medium + one padding group turned into a target
+  [PASS] p1_s1_codec  rc=0  2s
+STATIC 2/5  loader fork: named deltas onto rung6's own text
+  [PASS] p1_s2_construct  rc=0  0s
+STATIC 3/5  images: BM651's four variants rebuilt to its landed evidence, + the scribbler
+  [PASS] p1_s3_img2  rc=0  0s
+STATIC 4/5  media + PREDICTIONS: 7 fixtures, each with its host replay before any boot
+  [PASS] p1_s4_mkimg  rc=0  20s
+STATIC 5/5  size: the leg's code cost, measured on the fork that shipped
+  [PASS] p1_s5_size  rc=0  0s
+  [PASS] p1_refs  rc=0  0s
+BOOTS 1-3: the two that must reach tc@box, then the corrector-off control
+  [PASS] boot exec_green  rc=0  12s  exec_green: GREEN  wall=11.8s boots=1 combo=px predicted ECC=00000000 PAR=00000000 verdict=PASS exec=OK
+  [PASS] boot exec_image_repaired  rc=0  56s  exec_image_repaired: GREEN  wall=56.6s boots=2 combo=px predicted ECC=00000100 PAR=00000000 verdict=PASS exec=OK
+  [PASS] boot exec_beeoff_control  rc=0  2s  exec_beeoff_control: GREEN  wall=1.3s boots=1 combo=beeoff predicted ECC=00000000 PAR=00000000 verdict=FAIL exec=None
+BOOTS 4-7: two more refusals, the hung image, and the scribbler
+  [PASS] boot exec_two_symbol_in_image  rc=0  1s  exec_two_symbol_in_image: GREEN  wall=1.3s boots=1 combo=px predicted ECC=00000001 PAR=00000000 verdict=FAIL exec=None
+  [PASS] boot exec_blind_spot_in_image  rc=0  1s  exec_blind_spot_in_image: GREEN  wall=1.3s boots=1 combo=px predicted ECC=00000000 PAR=00000000 verdict=FAIL exec=None
+  [PASS] boot exec_halt  rc=0  46s  exec_halt: GREEN  wall=45.0s boots=1 combo=halt predicted ECC=00000000 PAR=00000000 verdict=PASS exec=HALT
+  [PASS] boot exec_scribbler  rc=0  1s  exec_scribbler: GREEN  wall=1.3s boots=1 combo=scr predicted ECC=00000000 PAR=00000000 verdict=PASS exec=OK
+IDENTITY: transcripts against the clean boot + the executed handoff dumps
+  [PASS] identity  rc=0  17s  IDENTITY: GREEN 49  RED 0
+REGRESSION: the un-forked rung-6 loader still boots its own medium
+  [PASS] bm602 clean  rc=0  12s

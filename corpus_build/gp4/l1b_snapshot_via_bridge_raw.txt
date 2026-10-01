@@ -1,0 +1,18 @@
+📖 Reading guest file: /var/tmp/gp4_1789617660/proc_snapshot.txt
+
+✅ Success
+
+Content:
+== GP4 SELF-OBSERVATION 1789617660 ==
+Name:	grep
+Umask:	0002
+Pid:	51958
+PPid:	51955
+TracerPid:	0
+Threads:	1
+-- fd --
+total 0
+lrwx------ 1 jericho jericho 64 Sep 17 04:01 0 -> /dev/null
+l-wx------ 1 jericho jericho 64 Sep 17 04:01 1 -> pipe:[208843]
+l-wx------ 1 jericho jericho 64 Sep 17 04:01 2 -> /dev/null
+lr-x------ 1 jericho jericho 64 Sep 17 04:01 3 -> /proc/51959/fd

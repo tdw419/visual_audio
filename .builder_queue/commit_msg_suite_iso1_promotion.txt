@@ -1,0 +1,22 @@
+docs(roadmap): promote SUITE-ISO-1 — per-file isolation harness (follow-on leg declared by RULING_testcol1_sweep_scope.md)
+
+Roadmap had 0 open rows after TEST-COL-1 closed (039ce3b, re-verified this tick: row 351's status cell
+ends "✅ done"; the census's "NO STATUS TOKEN" flag is a classifier artifact, not open work) and the
+BK-1..BK-14 backlog table stays fully promoted, so the eligible source is the ruling's own follow-on leg.
+
+RULING_testcol1_sweep_scope.md § Sweep boundary (line 39) declares "a per-file timeout harness over
+tools/ + systems/ so that coverage is recovered without letting one file hang the sweep" and explicitly
+kept it out of leg 1. Promoted under the standing rule: prereqs committed green (TEST-COL-1 039ce3b;
+the 3 hangers named in pytest.ini), concrete machine-checkable gate clauses (4 legs, incl. two synthetic
+non-vacuity legs), no product design judgment (the per-file timeout VALUE is a reported parameter, not a
+design choice).
+
+Why it is the top eligible item and not just bookkeeping: this tick's arc re-verification
+(systems/RECEIPT_ARC_LEGA_INTERMITTENT_194844c.md) needed MANUAL per-module re-runs to show that a gh12
+red and a segfault inside test_gh22 were context-dependent rather than file-local — the harness is the
+reproducer that turns DEFECT-22's dot-position inference into a named file, and it makes "the suite is
+green" provable in one bounded command (today: tests/ reaches 4% in ~4 min; tools/ + systems/ cannot be
+collected at all).
+
+Brief written and committed with this promotion: .builder_queue/brief_suite_iso1_harness.md
+Delegation target: agy (TIMEOUT=45m bash ~/.hermes/scripts/agy_implement.sh "<brief>"), next tick.

@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+"""Append BK-41 RESOLUTION tail to its GLYPH_BACKLOG.md row (af3e, 65c1c46b)."""
+from pathlib import Path
+
+p = Path("systems/GLYPH_BACKLOG.md")
+src = p.read_text()
+anchor = "`.builder_queue/RESEARCH_ksys_pc_self_arm.md` (2026-09-27, builder af3e62239ce2) |"
+assert src.count(anchor) == 1, f"anchor count {src.count(anchor)}"
+resolution = (
+    " **RESOLUTION (2026-09-30, builder af3e62239ce2, commit 65c1c46b via worktree"
+    " bk41/config-block, merged fast-forward to mainline): the kernel-write-only"
+    " BOX_MMIO CONFIG block LANDED per DIRECTIVE_BK41_CONFIG_BLOCK.md (seat-lane"
+    " provisional, 'you lead' 2026-09-30 12:41) — the :968 SUPER MMIO-window"
+    " exemption ST arm AND the SUPER post-USER PARALLEL_ST arm now refuse stores"
+    " to `_BK41_LOCKED_WORDS` = {KFAULT_PC 8193, KSYS_PC 8194, BOX0/1/2_LO+HI,"
+    " KTICK_PC 8207, TIMER_COUNT 8208, TIMER_RELOAD 8209} (BK-76 Option A per arm:"
+    " drop, fault mmio_exemption_refused, stop, NO vector), gated on the landed"
+    " BK-76 ever_user latch + SUPER + _tile_confinement. MEASURED SCOPE AMENDMENT"
+    " (directive rule 4, xv6-nano oracle, BK41_DESIGN_NOTES.md): MODE_LATCH 8192"
+    " and TILE words 8280..8283 EXCLUDED from the lock — the landed S6/S11"
+    " schedulers lawfully re-arm them post-USER every context switch (instrumented:"
+    " S11 writes 8192+8280 post-USER; the run only halts cleanly WITH those"
+    " stores); SYS_A0/A1 (8205/8206) + INPUT ring stay guest-writable (BK-76 §0)."
+    " Gate tests/test_bk41_ksys_fence.py 10/10 (L1 hostile-gadget control, L2"
+    " disarm, L3 self-arm, L4 boot-phase lawful, L5 non-vacuity, L6 family,"
+    " L7a/b refusal + L7c scope, L8 boundary + locked-set structural asserts)."
+    " RED-first at landing (engine stashed): L7a/L7b sentinel 4242 LANDED at"
+    " TIMER_COUNT clean (exit 0, faulted=False) — the exact pre-fix shapes; stash"
+    " pop -> 10/10. L5 GATE-DEFECT caught by the leg's own run + receipted"
+    " (GATE ROT-CHECK in BK41_DESIGN_NOTES.md): the BK-76 EX-L5 neuter style"
+    " (early-return inside the refusal body) is structurally DEAD against this"
+    " consult shape — both sites own an unconditional `return False` after the"
+    " refuse call, so a no-op'd refusal still drops the store and freezes PC"
+    " (measured ~460 refuse-fire replays/500 steps, sentinel unreachable);"
+    " BK-76's EX-L5 never exposed it only because its hand-built CPU never sets"
+    " _tile_confinement. Landed L5 neuters the CONDITION (empty _BK41_LOCKED_WORDS"
+    " in a TEMP-COPY module; BK-76's vector lock asserted surviving) and"
+    " reproduces the pre-fix shape exactly (steps=6, tcount=4242, clean exit)."
+    " Family on the committed tree: BK-41 10/10, BK-76 8/8, BK-39 11/11,"
+    " BK-48-twin 6/6, BK-66 7/7 + invariants 3/3, xv6-nano 13/13, xv6-boot"
+    " 5p/2s, item-29 10/10 post-landing (test_n1 drift guard RED by design"
+    " pre-commit, green at 65c1c46b), pre-commit differential 38/38 + Pillar 2.3"
+    " parity 8/8. Engine copies triple-synced md5 f5c581e16e0db63f761d1faa37363179"
+    " x2; WGSL twin UNTOUCHED (config-block twin parity = separate sequenced-commit"
+    " scope, BK-76 precedent). Numbers structural, rule-1 floors do not attach."
+    " NOT proved / still open: BK-40 syscall DATA-handler dest loops (separate"
+    " row, RED shapes measured there), BK-42/43 _read_path, BK-45 VFS dests,"
+    " BK-50 door posture row (now decided-in-part: the config words this landing"
+    " locks are kernel-write-only at the two SUPER arms, but the twin's walk_st"
+    " door remains open).** |"
+)
+p.write_text(src.replace(anchor, anchor + resolution))
+print("appended; row length now", len(src) + len(resolution))

@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/home/jericho/projects/zion/projects/visual_audio/tools/pixel_container/locate_in_container.py", line 280, in <module>
+    cmd_verify(args, meta)
+  File "/home/jericho/projects/zion/projects/visual_audio/tools/pixel_container/locate_in_container.py", line 218, in cmd_verify
+    want = next((h for h, n in (ln.split() for ln in Path(want[5:]).read_text().splitlines() if ln.strip())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jericho/projects/zion/projects/visual_audio/tools/pixel_container/locate_in_container.py", line 218, in <genexpr>
+    want = next((h for h, n in (ln.split() for ln in Path(want[5:]).read_text().splitlines() if ln.strip())
+                       ^^^^
+ValueError: not enough values to unpack (expected 2, got 1)

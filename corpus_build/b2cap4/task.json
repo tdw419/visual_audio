@@ -1,0 +1,13 @@
+{
+  "schema": "va-syscall-corpus/1",
+  "captured_utc": "2026-09-17T04:32:00Z",
+  "slug": "tar_gz_roundtrip",
+  "task_prompt": "Run exactly: bash /var/tmp/run_cap4.sh",
+  "dispatch": "guest_bridge.py hermes_run",
+  "guest": {
+    "kernel": "6.8.0-136-generic",
+    "strace": "6.8"
+  },
+  "workload": "tar czf of a nested dir tree + listing + extract to new dir (archive/recursive-getdents surface)",
+  "hermes_reply": "script executed via guest channel; see trace.log for ground truth"
+}

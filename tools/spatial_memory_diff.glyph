@@ -1,0 +1,44 @@
+# spatial_memory_diff: Compare two memory regions and output differences.
+# Native Geometry OS Glyph Assembly (.glyph)
+#
+# Registers (set by caller before jump):
+#   r1 = Base address of reference memory region A (e.g., QEMU golden)
+#   r2 = Base address of target memory region B (e.g., GPU emulator run)
+#   r3 = Length of regions to compare (word count)
+#   r4 = Base address of output diff buffer (writes 0 if same, or the XOR difference/status if modified)
+#
+# Scratch:
+#   r5 = Current offset index
+#   r6 = Value from Region A
+#   r7 = Value from Region B
+#   r8 = Difference value
+#   r9 = Constant 0
+#   r10 = Constant 1
+#
+# Modifies: r1, r2, r4, r3 (decrements), r5 (increments)
+
+:spatial_memory_diff
+LDI r9 0
+LDI r10 1
+LDI r5 0
+
+:diff_loop
+CMP r3 r9              ; Check if remaining length == 0
+JZ :diff_done          ; If so, end loop
+
+LD r6 r1               ; Load word from Region A
+LD r7 r2               ; Load word from Region B
+
+XOR r8 r6 r7           ; Compute bitwise difference
+ST r4 r8               ; Store difference in output buffer
+
+ADD r1 r10             ; Advance Region A pointer
+ADD r2 r10             ; Advance Region B pointer
+ADD r4 r10             ; Advance output buffer pointer
+SUB r3 r10             ; Decrement counter
+ADD r5 r10             ; Increment index
+
+JMP :diff_loop
+
+:diff_done
+HALT

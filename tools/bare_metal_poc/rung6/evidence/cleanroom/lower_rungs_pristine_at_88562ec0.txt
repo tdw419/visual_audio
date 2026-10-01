@@ -1,0 +1,71 @@
+# The lower rungs from `git archive`, re-paid as one command, at a commit named below
+
+Made 2026-09-21, 00:24:49Z-00:31:15Z, by `bash pristine_reverify.sh lower` -- the
+same driver that produced `pristine_reverify_at_1de7ee86.txt`, in its other mode.
+It exists because `lower_rungs_pristine.txt` beside this file is a *hand-run*
+recipe at `f14b5518`, and by the time this ran 54 commits had landed, 25 of them
+under `tools/bare_metal_poc/` (both counts from `git rev-list --count f14b5518..<sha>`,
+the second with that pathspec).
+
+    HEAD_SHA  88562ec01e88d220bbed915f811c83547cd764fb
+    scratch   /home/jericho/tmp/bm000_lower_192449 (45,414 MB free on its device)
+    tree      291 files from that sha, then 9 copied in -- see the copy list, which
+              is the finding: those 9 are what a clean checkout lacks
+    status    RUN_STATUS=GREEN  mode lower  legs 5  skips 0   (6 min 26 s)
+
+## Leg 0 is the finding, and it still bites
+
+    r2_from_commit  rc=0  0s  [BITES] rung 2 from the commit alone dies at nasm, as recorded
+
+`rung2/run_gate2.sh` is tracked; `stage1.asm`, `stage2.asm`, `rung2_codec.py` and
+`RECEIPT_RUNG2.md` are not, so in the tree the commit defines the gate's first
+command fails on a missing input. The leg exits 0 when that happens and goes RED
+if the commit ever grows the sources, because then the claim in
+`lower_rungs_pristine.txt` is stale and this line is the thing that says so.
+
+## Then the same tree, given what it lacks
+
+Copied in, named individually so a landing that removes one is visible here:
+`run_gate.sh` `boot.asm` `pxc1_boot_codec.py` `pxc1_nbd_plugin.py` `RECEIPT.md`
+(rung 1, five root files) and `rung2/stage1.asm` `rung2/stage2.asm`
+`rung2/rung2_codec.py` `rung2/RECEIPT_RUNG2.md`. Nothing else: no build products,
+no pins, no vendor blob, and rung 3 has no gate to run, tracked or not.
+
+| leg | wall | what the gate itself said | vs `lower_rungs_pristine.txt` |
+|---|---|---|---|
+| r1_gate | 34 s | `=== GATE PASS ===`, `CKSUM=5F3B EXEC` green, `5E99` redA, `redB: 0 serial bytes`, `regreen: byte-identical to green` | same markers, 35 s there |
+| r2_gate | 43 s | `=== GATE PASS ===`, `STAGE2 CKSUM=4541`, `SUM=4640` refused, `absence: 0 of 129`, `regreen: byte-identical` | same four, same 43 s |
+| r4_gate | 156 s | `green64k ... CRC=E1AE9612 ... CKSUM=77B5`, `redA ... FAIL CRC=5A5F772A`, `green256k ... CRC=758F5EC8 ... CKSUM=ECB8`, `regreen` | same four lines, 157 s there |
+| r5_gate | 153 s | `=== GATE5 PASS ===`, `CRC=329CD470`, `IMG2 CRC=7880D4BA`, `WRITE=OK`, `CKSUM=43E6`, redA `IMG2 FAIL CRC=B3AEA74F` | same, 153 s there |
+
+Rung 1 is the one row here that runs a host server, over a socket path shared by
+every tree on this box (`/tmp/pxc1_nbd.sock`), so the driver refuses the leg while
+another `nbdkit` is alive and says SKIP out loud rather than running it twice or
+quietly dropping it. None was alive; the leg ran and `skips 0` is the measured
+result, not the default.
+
+## The dirt step ran here too, and it agrees with the other half of the ladder
+
+After the legs the driver re-archives the same sha and diffs the two trees:
+
+    tracked files the run rewrote: 1
+      rung4/rung4_medium.png        here 66,572 B, the sha 66,625 B
+
+That is the 64 KB build `run_gate4.sh` leaves behind where HEAD carries the 256 KB
+one -- the same pair of sizes, and the same file, that the landing plan flagged as
+designed dirt. It is worth stating which direction this cuts: the working tree
+read *clean* when this run started, and one green gate later it does not. So a
+tree that passes `git status` is not evidence that nobody ran anything, and a tree
+that fails it is not evidence that somebody broke something.
+
+## Reproduce
+
+    cd tools/bare_metal_poc
+    PRISTINE_DIR=/some/empty/dir setsid nohup bash pristine_reverify.sh lower \
+      > /some/dir.out 2>&1 &
+
+No boot of the PXC1 guest is involved; the four gates use their own tiny images
+and TCG, as everywhere else on this ladder.
+
+One pass each, as in the record this re-pays: its x2 closures live in their own
+receipts, and what is being re-checked here is the tree, not repeatability.

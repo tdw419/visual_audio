@@ -1,0 +1,47 @@
+{
+ "r2": {
+  "R2a_host_written_pte": {
+   "exit_status": 0,
+   "fault_reason": null,
+   "faulted": false,
+   "final_pc": [
+    40,
+    30
+   ],
+   "mode_final": "USER",
+   "output": [
+    77,
+    52
+   ],
+   "sysa0_word_after": 52,
+   "syspc_word_after": 1966088
+  },
+  "R2b_stamp_fate": {
+   "img_pte_vpn12": 1807,
+   "img_pte_vpn32": 8199,
+   "img_tag": 5264455,
+   "ram_pte_vpn12": 0,
+   "ram_pte_vpn32": 0,
+   "ram_tag": 0
+  },
+  "R2c_host_pte_pfn0_wrong_frame": {
+   "exit_status": 0,
+   "fault_reason": null,
+   "faulted": false,
+   "final_pc": [
+    40,
+    30
+   ],
+   "mode_final": "USER",
+   "output": [
+    77,
+    52
+   ],
+   "ram_word0_clobbered": 0,
+   "ram_word1_clobbered": 0,
+   "sysa0_word_after": 52,
+   "syspc_word_after": 1966088
+  }
+ },
+ "r2_md5": "3bf3ed639e2683000f7e70f9ece9c795"
+}

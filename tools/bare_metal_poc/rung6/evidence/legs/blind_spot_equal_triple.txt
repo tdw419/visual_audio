@@ -1,0 +1,15 @@
+  [ok]   walk done  -- tail='PAR=00000000\r\nBM903-S2 GATE2 CRC=8E53C9D5 EXP=393950AA\r\nBM903-S2 GATE2=FAIL -- NO HANDOFF JUMP\r\n'
+  [ok]   ECC/PAR line printed
+  [ok]   gate line printed
+  [ok]   counters BEFORE the gate line  -- ECC at byte 107, CRC at 143
+  [ok]   exactly one verdict  -- 1 found
+  [ok]   gate line BEFORE the verdict  -- CRC at 143, verdict at 185
+  [ok]   verdict matches the prediction  -- wire=FAIL, predicted=FAIL
+  [ok]   ECC= matches the replay  -- wire 00000000, predicted 00000000
+  [ok]   PAR= matches the replay  -- wire 00000000, predicted 00000000
+  [ok]   computed CRC matches the replay  -- wire 8E53C9D5, predicted 8E53C9D5
+  [ok]   expected CRC is the baked constant  -- wire 393950AA, .inc 393950AA
+  [ok]   handoff iff the gate passed  -- HANDOFF BUILT=False, verdict=FAIL
+  [ok]   no anchor from a refused medium
+blind_spot_equal_triple: GREEN  wall=1.3s boots=1 predicted ECC=00000000 PAR=00000000 verdict=FAIL
+    trace (last boot, 0.25 s polling): s2 enter@0.3s walk done@1.3s verdict@1.3s

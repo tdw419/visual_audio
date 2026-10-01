@@ -1,0 +1,131 @@
+# Auto-generated glyph assembly from xv6 'ls' pattern
+# Generated: N/A
+
+# This program reproduces the memory access pattern observed in 'ls'
+
+# Memory regions (from pattern analysis)
+# File descriptors: 0x80002000 - 0x80004000
+# Directory entries: 0x80004000 - 0x80005000
+# Output buffer: 0x80005000 - 0x80006000
+
+# Load directory root
+# Pattern shows 17 files accessed
+LOAD  0x80004000, r1      # Directory entry pointer
+
+# Initialize output buffer
+SET   r2, 0x80005000      # Output buffer address
+
+# Process each file entry
+# This reproduces the memory access pattern from the trace
+
+# File 1: .
+STORE  r2, .    # Store filename
+STORE  r2+14, 1 # Store inode
+STORE  r2+19, 1  # Store size
+ADD    r2, r2, 24            # Advance to next line
+
+# File 2: ..
+STORE  r2, ..    # Store filename
+STORE  r2+14, 1 # Store inode
+STORE  r2+19, 512  # Store size
+ADD    r2, r2, 24            # Advance to next line
+
+# File 3: README
+STORE  r2, README    # Store filename
+STORE  r2+14, 1 # Store inode
+STORE  r2+19, 2046  # Store size
+ADD    r2, r2, 24            # Advance to next line
+
+# File 4: cat
+STORE  r2, cat    # Store filename
+STORE  r2+14, 1 # Store inode
+STORE  r2+19, 12472  # Store size
+ADD    r2, r2, 24            # Advance to next line
+
+# File 5: echo
+STORE  r2, echo    # Store filename
+STORE  r2+14, 1 # Store inode
+STORE  r2+19, 13004  # Store size
+ADD    r2, r2, 24            # Advance to next line
+
+# File 6: grep
+STORE  r2, grep    # Store filename
+STORE  r2+14, 1 # Store inode
+STORE  r2+19, 13856  # Store size
+ADD    r2, r2, 24            # Advance to next line
+
+# File 7: init
+STORE  r2, init    # Store filename
+STORE  r2+14, 1 # Store inode
+STORE  r2+19, 12492  # Store size
+ADD    r2, r2, 24            # Advance to next line
+
+# File 8: kill
+STORE  r2, kill    # Store filename
+STORE  r2+14, 1 # Store inode
+STORE  r2+19, 12628  # Store size
+ADD    r2, r2, 24            # Advance to next line
+
+# File 9: ln
+STORE  r2, ln    # Store filename
+STORE  r2+14, 1 # Store inode
+STORE  r2+19, 12980  # Store size
+ADD    r2, r2, 24            # Advance to next line
+
+# File 10: ls
+STORE  r2, ls    # Store filename
+STORE  r2+14, 1 # Store inode
+STORE  r2+19, 14176  # Store size
+ADD    r2, r2, 24            # Advance to next line
+
+# File 11: mkdir
+STORE  r2, mkdir    # Store filename
+STORE  r2+14, 1 # Store inode
+STORE  r2+19, 12856  # Store size
+ADD    r2, r2, 24            # Advance to next line
+
+# File 12: rm
+STORE  r2, rm    # Store filename
+STORE  r2+14, 1 # Store inode
+STORE  r2+19, 13116  # Store size
+ADD    r2, r2, 24            # Advance to next line
+
+# File 13: sh
+STORE  r2, sh    # Store filename
+STORE  r2+14, 1 # Store inode
+STORE  r2+19, 21952  # Store size
+ADD    r2, r2, 24            # Advance to next line
+
+# File 14: stressfs
+STORE  r2, stressfs    # Store filename
+STORE  r2+14, 1 # Store inode
+STORE  r2+19, 12548  # Store size
+ADD    r2, r2, 24            # Advance to next line
+
+# File 15: usertests
+STORE  r2, usertests    # Store filename
+STORE  r2+14, 1 # Store inode
+STORE  r2+19, 15552  # Store size
+ADD    r2, r2, 24            # Advance to next line
+
+# File 16: wc
+STORE  r2, wc    # Store filename
+STORE  r2+14, 1 # Store inode
+STORE  r2+19, 13104  # Store size
+ADD    r2, r2, 24            # Advance to next line
+
+# File 17: zombie
+STORE  r2, zombie    # Store filename
+STORE  r2+14, 1 # Store inode
+STORE  r2+19, 12636  # Store size
+ADD    r2, r2, 24            # Advance to next line
+
+# Finalize output
+# Pattern shows 245 reads, 189 writes
+STORE  r2, '\n'             # Newline
+STORE  r2+1, '$'             # Prompt
+
+# Output statistics
+# Duration: 52ms
+# Instructions: 15234
+END

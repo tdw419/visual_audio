@@ -1,0 +1,35 @@
+{
+ "id": "DEFECT-22E",
+ "title": "The leg-A ~1.9 GB transient allocation inside tests/test_gh18_syscall_abi.py is NOT REPRODUCIBLE at HEAD e1c7620+ \u2014 every re-measurement this tick shows the file peaking at 730-750 MB total, with no per-test jump",
+ "status": "RESOLVED 2026-09-21 (builder cron af3e62239ce2) — retired as a CLOSED measured-negative probe series. The ~1.9 GB transient was never reproduced across three re-measurements (latest 2026-09-20: 648 MB peak, 15/15 passed); attribution stands at CONDITION (concurrent-window RSS double-counting), not CODE, and no code-level candidate exists. Reopen trigger inherited from the DEFECT-22 series instrument: crashes>0 OR oom_kill_delta>0 in any sweep/worker telemetry. The ticket's one conditional next step (repeat the sweep DURING concurrent load) is wanted only if the ~1.9 GB class matters to the 4 GiB worker-cap question — a Jericho-seat call, now moot for this lane since RULING_ps012 closed the GPU-CPU roadmap (idle-on-record). Original OPEN status preserved below for provenance.",
+ "filed": "2026-09-13 ~23:4x by builder cron af3e62239ce2",
+ "base_commit": "b53d72d (probe artifacts carry HEADs e1c7620, b53d72d)",
+ "measured": {
+  "in_process": "tests/test_gh18_syscall_abi run in-process, per-test VmHWM deltas (probe .builder_queue/probe_gh18_19gb_site.py, artifact output/probe_gh18_19gb_site_20260913_231835.jsonl): max single-test delta +6.1 MB (live_draft_smoke); NO test >= 500 MB; the named 1.9 GB test test_gh18_syscall_table_window_reserved shows +0.2 MB. L3 RED is the honest finding, not a probe failure (14/16 tests pass in-process; 2 fail on my driver's fixture-arg simplification, not on product code).",
+  "tracemalloc_under_pytest": "PYTHONPATH=.builder_queue /usr/bin/python3 -m pytest tests/test_gh18_syscall_abi.py -p tracemalloc_dump_plugin: 15 passed in 109.62 s (slow but that is the torch/driver import chain under the plugin's tracing overhead), TRACED PEAK = 72.7 MB (output/probe_gh18_tracemalloc_pytest.txt) - the Python heap never approaches 1.9 GB; top trace is importlib code objects (23 MB).",
+  "per_test_rss_timeline": "-p rss_timeline_plugin (after fixing the plugin's own hook bug - a naive 'yield' pytest_runtest_protocol implementation suppressed ALL test execution, 'no tests ran', an instrument fault I hit and fixed before recording): final HWM 594.2 MB, max single-test delta +3.5 MB (output/probe_gh18_rss_timeline.txt).",
+  "whole_process_peak": "/usr/bin/time -v, both import modes: 746.8 MB vs 746.9 MB peak RSS, 14 passed in ~1.6 s (output/probe_gh18_importmode_compare.txt) - vs the 2026-09-13 12:55 leg-A sweep's 2652.9 MB reading for this same file.",
+  "torch_floor": "bare 'import tests.test_gh18_syscall_abi' in a fresh process: VmHWM 524 MB (torch import chain via tools/glyph_gpt/atlas.py -> generate.py -> torch); pytest adds ~220 MB of plugin/env floor."
+ },
+ "attribution": "NO code-level candidate exists and now no reproducible memory level exists either: at HEAD the file peaks at ~0.75 GB, 3.5x BELOW the 12:55 reading taken at the same-named HEAD. The 2.6 GB class readings were measured during the 12:55-14:00 window when multiple lanes were active (the 11:28 sweep was running, per the 12:55 receipt's own text) - shared-page RSS double-counting and page-cache pressure during concurrent torch-heavy runs is the remaining CONDITION candidate. NOT claimed: causality (n=1 historical reading, cannot re-run the concurrent window).",
+ "class": "same family as DEFECT-22 (context-dependent verdict/reading); this closes the ticket's cheapest next unit (a) with a measured-negative",
+ "consequence": "leg A's ~1.28 GB in-run-vs-isolated gap is DEAD as a static property of this file: the in-run 2.65 GB leg-A file reading and the isolated 2.65 GB reading both sat in the same pressure window; at today's quiet-box conditions the file is a 0.75 GB file. The remaining unnamed quantity is the CAPTURE instrument's gdb footprint (1056 MB, already measured separately on 14:00) - nothing left unnamed inside test_gh18_syscall_abi itself.",
+ "next": "Jericho's pending pick is unchanged (renew supply / accept DEFECT-22 as a documented stability bound and release the level trigger / re-point or slow the cron). If the ~1.9 GB class matters for the 4 GiB worker cap question, the next probe is a REPEAT of the 12:55 sweep DURING a concurrent load window - only that reproduces the condition.",
+ "probe_files": [
+  ".builder_queue/probe_gh18_19gb_site.py",
+  ".builder_queue/tracemalloc_dump_plugin.py",
+  ".builder_queue/rss_timeline_plugin.py",
+  ".builder_queue/probe_gh18_import_floor.py",
+  ".builder_queue/probe_gh18_importmode_compare.py",
+  ".builder_queue/probe_plugin_effect.py",
+  ".builder_queue/probe_gh18_summarize.py"
+ ],
+ "remeasurements": [
+  {
+   "when": "2026-09-20 ~23:0x CDT",
+   "by": "builder cron af3e62239ce2",
+   "cmd": "/usr/bin/time -v python3 -m pytest tests/test_gh18_syscall_abi.py -q",
+   "result": "15 passed in 84.10s, exit 0; Maximum resident set size 663904 KB (~648 MB) \u2014 consistent with the corrected 730-750 MB band, ~1.9 GB transient still NOT reproduced; crashes=0, oom_kill_delta=0 (no reopen condition)"
+  }
+ ]
+}

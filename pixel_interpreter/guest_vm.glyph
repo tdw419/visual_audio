@@ -1,0 +1,122 @@
+; guest_vm.glyph
+; Minimal in-pixel nested CPU: a host .glyph fetch-decode-execute loop
+; that interprets a tiny GUEST instruction set stored as raw bytes in
+; guest RAM (row y=140), maintaining its own guest PC and guest
+; accumulator register entirely in pixel memory. This is a scaled-down
+; proof of the Tier-3 "in-pixel virtual machine" pattern: no host opcode
+; here executes guest logic directly, it's all interpreted at runtime.
+;
+; Guest ISA (2 host-cells per guest instruction: opcode, operand):
+;   1 imm   -> G_LDA:    guest_acc = imm
+;   2 count -> G_ADD:    guest_acc += count   (count sub-cycles, since
+;                         this ISA only has static-immediate ADD/SUB)
+;   4 _     -> G_SETPIX: framebuffer[guest_acc, 200] = 255
+;   255 _   -> G_HALT
+;
+; Guest program under test (bytes written into row 140 below):
+;   LDA 5; ADD 3; SETPIX; HALT   =>  expect a pixel drawn at x=8, y=200
+
+; --- scratch cell map (all in row 0) ---
+; (131,0) guest_pc      (132,0) cell_x       (133,0) cell_x+1
+; (134,0) guest_opcode  (135,0) guest_operand/counter
+; (136,0) guest_acc     (137,0) const 140 (guest code row)
+; (139,0) setpix x      (141,0) const 200 (guest screen row)
+
+:init
+SET 140
+STORE (137, 0)
+SET 200
+STORE (141, 0)
+SET 0
+STORE (131, 0)
+SET 0
+STORE (136, 0)
+
+; write guest bytecode into row 140
+SET 1
+STORE (0, 140)
+SET 5
+STORE (1, 140)
+SET 2
+STORE (2, 140)
+SET 3
+STORE (3, 140)
+SET 4
+STORE (4, 140)
+SET 0
+STORE (5, 140)
+SET 255
+STORE (6, 140)
+SET 0
+STORE (7, 140)
+
+:g_loop
+; cell_x = guest_pc * 2
+LOAD (131, 0)
+MUL 2
+STORE (132, 0)
+ADD 1
+STORE (133, 0)
+
+; fetch guest opcode at (cell_x, 140)
+LOAD_COORD (132, 137)
+INDIRECT_LOAD
+STORE (134, 0)
+
+; fetch guest operand at (cell_x+1, 140)
+LOAD_COORD (133, 137)
+INDIRECT_LOAD
+STORE (135, 0)
+
+; guest_pc += 1
+LOAD (131, 0)
+ADD 1
+STORE (131, 0)
+
+; dispatch
+LOAD (134, 0)
+SUB 1
+JZ :g_lda
+LOAD (134, 0)
+SUB 2
+JZ :g_add
+LOAD (134, 0)
+SUB 4
+JZ :g_setpix
+LOAD (134, 0)
+SUB 255
+JZ :g_halt
+JMP :g_loop
+
+:g_lda
+LOAD (135, 0)
+STORE (136, 0)
+JMP :g_loop
+
+:g_add
+; guest_acc += guest_operand, via static-immediate increment loop
+; since this host ISA has no register-to-register ADD.
+LOAD (135, 0)
+SUB 0
+JZ :g_add_done
+
+LOAD (135, 0)
+SUB 1
+STORE (135, 0)
+LOAD (136, 0)
+ADD 1
+STORE (136, 0)
+JMP :g_add
+
+:g_add_done
+JMP :g_loop
+
+:g_setpix
+LOAD (136, 0)
+STORE (139, 0)
+LOAD_COORD (139, 141)
+INDIRECT_STORE 255
+JMP :g_loop
+
+:g_halt
+HALT

@@ -1,0 +1,118 @@
+# The lower rungs from `git archive HEAD` -- measured, not assumed
+
+Made 2026-09-20, 15:48-15:59, in a scratch tree built by one command and given
+nothing else:
+
+    T=/tmp/bm001_ladder
+    git -C <repo> archive HEAD tools/bare_metal_poc | tar -x -C $T   # at f14b5518
+    cd $T/tools/bare_metal_poc
+    ( cd rung2 && bash run_gate2.sh )
+    ( cd rung4 && bash run_gate4.sh )
+    ( cd rung5 && bash run_gate5.sh )
+
+This is the other half of `pristine_rows_table.txt`. That table covers the five
+rows closed most recently; this one covers the rungs beneath them, because
+TASK_BM001's question -- what does a clean checkout get you -- is about the
+whole ladder, and because `bm001_landing_plan.sh` found 15 gate entry points
+outside the commit without saying whether any of them matter.
+
+The archive is 6.5 MB. It has no `rung3/` and no `rung7/` at all -- neither
+directory has a single tracked file -- and no root `run_gate.sh`, `boot.asm`,
+`pxc1_boot_codec.py` or `RECEIPT.md`. It needs no `reproduce_prereqs.sh` run and
+no vendor blob: these rungs build everything they measure out of their own
+`.asm` and `.py`, which is exactly the property the ancestor chain above them
+does not have.
+
+## From the commit alone, one lane at a time
+
+| rung | gate in the commit? | what the commit's tree did | wall |
+|---|---|---|---|
+| 1 | NO -- `run_gate.sh` is untracked | nothing to run | -- |
+| 2 | yes | **RED on the first command**: `nasm: fatal: unable to open input file `stage2.asm' No such file or directory` / `GATE FAIL: nasm stage2` | < 1 s |
+| 3 | no gate script exists, tracked or not | nothing to run -- its closure was a hand-run probe (`memprobe.asm`, `ANCHORS.md`, both untracked) | -- |
+| 4 | yes | **GATE PASS** | 157 s |
+| 5 | yes | **GATE5 PASS** | 153 s |
+
+    rung4: green64k : PXC1-RUNG4 GATE4=PASS CRC=E1AE9612 STAGE2 SIZE=64 KB STAGE2 CKSUM=77B5 EXEC
+           redA     : PXC1-RUNG4 GATE4=FAIL CRC=5A5F772A EXP=E1AE9612
+           green256k: PXC1-RUNG4 GATE4=PASS CRC=758F5EC8 STAGE2 SIZE=256 KB STAGE2 CKSUM=ECB8 EXEC
+           regreen  : byte-identical to green64k
+    rung5: greenA  : PXC1-RUNG5GATE4=PASS CRC=329CD470...IMG2 CRC=7880D4BA WRITE=OK ... CKSUM=43E6 EXEC
+           redA    : PXC1-RUNG5GATE4=PASS CRC=329CD470...IMG2 FAIL CRC=B3AEA74F EXP=7880D4BA
+           nonvac  : neutered check PASSES corrupted img2 (check is load-bearing)
+           regreen : boot serial identical to boot 1
+
+And the passing lines are the *same bytes* the closures recorded:
+`CRC=E1AE9612`/`77B5`, `CRC=758F5EC8`/`ECB8` appear in `rung4/RECEIPT_RUNG4.md`,
+`CRC=329CD470`/`IMG2 CRC=7880D4BA`/`CKSUM=43E6` in `rung5/RECEIPT_RUNG5.md`.
+Rung 4 and rung 5 are reproducible from the commit, to the serial line.
+
+So the honest answer is not "the lower rungs are fine". Two are. Rung 1 has no
+committed gate. And **rung 2's gate script IS in the commit and does not run
+from it**: HEAD carries `rung2/run_gate2.sh` and one of its two receipts and
+none of the four files that gate reads (`stage1.asm`, `stage2.asm`,
+`rung2_codec.py`, `RECEIPT_RUNG2.md` -- all among the 58 untracked sources).
+A commit can contain a gate that fails on its first command in the only tree it
+defines.
+
+## The second question: is rung 2's RED exactly the missing files?
+
+Copy the untracked sources into the same tree -- nothing else changed, no build
+products, no pins -- and re-run, still one lane at a time:
+
+| tree | result | wall |
+|---|---|---|
+| commit + rung 1's five root files (`run_gate.sh`, `boot.asm`, `pxc1_boot_codec.py`, `pxc1_nbd_plugin.py`, `RECEIPT.md`) | rc=0, `=== GATE PASS ===`, green/redA/redB/png-sha/regreen legs as landed, `CKSUM=5F3B` green and `5E99` redA | 35 s |
+| commit + rung 2's four files | rc=0, `=== GATE PASS ===`, `green : ... STAGE2 CKSUM=4541`, `redA : ... SUM=4640`, `absence: 0 of 129`, `regreen: byte-identical to green` | 43 s |
+
+`CKSUM=4541` and `SUM=4640` are the values in `rung2/RECEIPT_RUNG2.md`. So the
+RED was the missing files and nothing else -- both gates are green the moment
+their sources exist, and landing them buys two more reproducible rungs, not a
+red one and a green one.
+
+## What this does not say
+
+* **`of-src` is not "files the gate needs".** Rung 4 has 5 untracked sources and
+  passed anyway; rung 2 has 5 and failed. Only running distinguishes them, which
+  is what this file is.
+* **Rungs 1 and 3 are not disproofs of anything.** Rung 3 has no gate script at
+  all, so there is nothing for the commit to be missing; rung 1's gate passed
+  once its files were present, but nbdkit + its own unix socket
+  (`/tmp/pxc1_nbd.sock`) are part of what landing it would take -- it is the one
+  row here that runs a host server, and it was checked with no other nbdkit
+  process alive.
+* **TCG only, as everywhere else on this ladder.**
+* **One pass each for rungs 4 and 5**, two apiece for the copied-source re-runs
+  (rung 1 and rung 2 each ran twice in that tree, and `diff` says their summary
+  blocks are identical). Their x2 closures are in their own receipts; the claim
+  here is about the tree, not about repeatability.
+
+---
+
+## Re-paid at HEAD `1e8ebeb7`, 2026-09-21 03:35–03:42 UTC — RUN_STATUS=GREEN, 5 legs, 0 skips
+
+Same driver, `bash pristine_reverify.sh lower`, one difference from the run
+above: this is the first lower leg since the driver got its
+repository-location guards (`c59921c0`) and since rung 5's expected-marker hex
+became a per-run temp instead of the shared `/tmp/expected_marker.hex`
+(`1e8ebeb7`). Scratch: `/home/jericho/bm000_reverify_lower_1e8ebe`, 44,807 MB
+free — `/tmp` had 3.66 GB against the driver's own 4 GB floor, so `PRISTINE_DIR`
+has to be pointed at the other device on this box today; that is a box fact, not
+a ladder one, and the driver says so out loud rather than failing an hour in.
+
+    leg              rc   wall
+    r2_from_commit    0    0s   PASS  -- the finding still bites: rung 2's gate
+                                      cannot run from the commit alone
+    r1_gate           0   34s   PASS  (nbdkit idle at start; the r1 skip-guard
+                                      therefore did not fire)
+    r2_gate           0   44s   PASS
+    r4_gate           0  155s   PASS
+    r5_gate           0  153s   PASS  -- rung 5 green on the per-run marker
+    9 files copied in after the bite check, identical to the list above:
+    run_gate.sh boot.asm pxc1_boot_codec.py pxc1_nbd_plugin.py RECEIPT.md
+    rung2/stage1.asm rung2/stage2.asm rung2/rung2_codec.py rung2/RECEIPT_RUNG2.md
+
+6 min 26 s wall (03:35:52 → 03:42:18) — the same figure ROADMAP records for the
+`88562ec0` pass, to the second, which is a coincidence rather than a copy: the
+legs are timed independently, per leg, in the scratch tree's driver log. No regression from either fix.
+TCG only, one pass each for rungs 4 and 5, as above.

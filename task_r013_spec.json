@@ -1,0 +1,11 @@
+{
+  "task": "TASK_R013",
+  "status": "IN_PROGRESS",
+  "description": "Procedural generation using seed pixels. Derive noise seed from a small pixel block to generate a deterministic infinite coordinate plane.",
+  "components": [
+    "Pixel block hash generator",
+    "Perlin/Simplex noise seeder",
+    "Terrain/biome lookup mapping",
+    "Hilbert-space addressing integration via mkv_infinite_map.py"
+  ]
+}

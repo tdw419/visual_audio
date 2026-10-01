@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Geometry OS — Spatial Build Map Explorer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: radial-gradient(circle at 50% 50%, #10141f 0%, #06080c 100%);
+      color: #e0e6ed;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", monospace;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      user-select: none;
+    }
+
+    #viewport {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      cursor: grab;
+    }
+    #viewport:active { cursor: grabbing; }
+
+    /* Top HUD */
+    .hud-bar {
+      position: absolute;
+      top: 16px;
+      left: 20px;
+      right: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(14, 18, 26, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 10px 20px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      z-index: 10;
+      pointer-events: auto;
+    }
+
+    .title-block { display: flex; align-items: center; gap: 12px; }
+    .os-logo {
+      width: 24px; height: 24px;
+      background: linear-gradient(135deg, #00f0ff, #7928ca);
+      border-radius: 6px;
+      box-shadow: 0 0 12px rgba(0, 240, 255, 0.5);
+    }
+    .os-title { font-weight: 700; font-size: 14px; letter-spacing: 0.8px; text-transform: uppercase; color: #fff; }
+    .os-subtitle { font-size: 11px; color: #8892b0; font-family: monospace; }
+
+    .stats-row { display: flex; gap: 20px; font-size: 12px; font-family: monospace; }
+    .stat-pill { display: flex; align-items: center; gap: 6px; }
+    .stat-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .dot-commit { background: #376edc; box-shadow: 0 0 8px #376edc; }
+    .dot-clean  { background: #28b44b; box-shadow: 0 0 8px #28b44b; }
+    .dot-defect { background: #d73232; box-shadow: 0 0 8px #d73232; }
+    .dot-ruling { background: #a046c8; box-shadow: 0 0 8px #a046c8; }
+
+    .controls-row { display: flex; align-items: center; gap: 10px; }
+    button.btn-ctrl {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: #cbd5e1;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-family: monospace;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    button.btn-ctrl:hover {
+      background: rgba(255,255,255,0.14);
+      color: #00f0ff;
+      border-color: #00f0ff;
+    }
+
+    /* Bottom Info Drawer */
+    #drawer {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      width: 380px;
+      max-height: 520px;
+      background: rgba(14, 18, 26, 0.92);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+      z-index: 10;
+      transform: translateY(120%);
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    #drawer.open { transform: translateY(0); }
+    .drawer-header { display: flex; justify-content: space-between; align-items: center; }
+    .drawer-badge {
+      font-size: 10px; text-transform: uppercase; font-weight: 700;
+      padding: 3px 8px; border-radius: 4px; font-family: monospace;
+    }
+    .badge-commit { background: rgba(55,110,220,0.25); color: #60a5fa; border: 1px solid #376edc; }
+    .badge-clean  { background: rgba(40,180,75,0.25); color: #4ade80; border: 1px solid #28b44b; }
+    .badge-defect { background: rgba(215,50,50,0.25); color: #f87171; border: 1px solid #d73232; }
+    .badge-ruling { background: rgba(160,70,200,0.25); color: #c084fc; border: 1px solid #a046c8; }
+    .drawer-close { background: none; border: none; color: #8892b0; font-size: 18px; cursor: pointer; }
+    .drawer-title { font-size: 13px; font-weight: 600; line-height: 1.4; color: #f1f5f9; }
+    .drawer-content {
+      font-size: 11px; color: #94a3b8; font-family: monospace; line-height: 1.5;
+      max-height: 280px; overflow-y: auto; background: rgba(0,0,0,0.3);
+      padding: 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);
+    }
+
+    /* Hover Tooltip */
+    #tooltip {
+      position: absolute;
+      display: none;
+      pointer-events: none;
+      background: rgba(10, 14, 22, 0.95);
+      border: 1px solid rgba(0, 240, 255, 0.4);
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-family: monospace;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+      z-index: 20;
+      max-width: 320px;
+    }
+
+    /* Minimap */
+    #minimap-card {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(14, 18, 26, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 10px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      z-index: 10;
+    }
+    #minimap {
+      width: 128px;
+      height: 128px;
+      display: block;
+      border-radius: 4px;
+      background: #080a0e;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    #minimap-rect {
+      position: absolute;
+      border: 1px solid #00f0ff;
+      background: rgba(0, 240, 255, 0.12);
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation & Statistics Bar -->
+  <div class="hud-bar">
+    <div class="title-block">
+      <div class="os-logo"></div>
+      <div>
+        <div class="os-title">Geometry OS — Spatial Build Map</div>
+        <div class="os-subtitle">Hilbert Frontier Explorer · <span id="frontier-info">Locating frontier...</span></div>
+      </div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-pill"><div class="stat-dot dot-commit"></div> Commits: <span id="cnt-commits">-</span></div>
+      <div class="stat-pill"><div class="stat-dot dot-clean"></div> System-1 Honest: <span id="cnt-clean">-</span></div>
+      <div class="stat-pill"><div class="stat-dot dot-defect"></div> Defects Caught: <span id="cnt-defect">-</span></div>
+      <div class="stat-pill"><div class="stat-dot dot-ruling"></div> Rulings: <span id="cnt-rulings">-</span></div>
+      <div class="stat-pill">Territory: <span id="pct-claimed">-</span></div>
+    </div>
+
+    <div class="controls-row">
+      <button class="btn-ctrl" id="btn-frontier">⌖ Fly to Frontier</button>
+      <button class="btn-ctrl" id="btn-reset">⟲ Fit All</button>
+      <button class="btn-ctrl" id="btn-refresh">↻ Poll Live</button>
+    </div>
+  </div>
+
+  <!-- Interactive Pan & Zoom Canvas Viewport -->
+  <canvas id="viewport"></canvas>
+
+  <!-- Minimap Overview -->
+  <div id="minimap-card">
+    <canvas id="minimap" width="128" height="128"></canvas>
+    <div id="minimap-rect"></div>
+  </div>
+
+  <!-- Floating Hover Inspector Tooltip -->
+  <div id="tooltip"></div>
+
+  <!-- Detailed Cell Evidence Drawer -->
+  <div id="drawer">
+    <div class="drawer-header">
+      <span class="drawer-badge" id="drawer-badge">Commit</span>
+      <button class="drawer-close" id="drawer-close">&times;</button>
+    </div>
+    <div class="drawer-title" id="drawer-title">-</div>
+    <div class="drawer-content" id="drawer-content">-</div>
+    <!-- BK-58 Stage 2: cell activation -->
+    <button id="drawer-run" style="display:none; margin: 8px 16px; padding: 6px 14px;
+      background: #234; color: #9fd0ff; border: 1px solid #4af; border-radius: 4px;
+      cursor: pointer; font-size: 12px;">▶ Run / Teleoperate</button>
+    <div id="term" style="display:none; margin: 0 16px 12px; height: 180px; overflow-y: auto;
+      background: #05070a; border: 1px solid #234; border-radius: 4px; padding: 8px;
+      font-family: monospace; font-size: 11px; color: #9fe08f;"></div>
+    <input id="term-input" style="display:none; margin: 0 16px 12px; width: calc(100% - 48px);
+      box-sizing: border-box; background: #05070a; border: 1px solid #234; border-radius: 4px;
+      padding: 6px 8px; font-family: monospace; font-size: 12px; color: #cde;" spellcheck="false">
+  </div>
+
+  <script>
+    const canvas = document.getElementById("viewport");
+    const ctx = canvas.getContext("2d");
+    const minimap = document.getElementById("minimap");
+    const mmCtx = minimap.getContext("2d");
+    const mmRect = document.getElementById("minimap-rect");
+    const tooltip = document.getElementById("tooltip");
+    const drawer = document.getElementById("drawer");
+
+    let mapData = null;
+    let mapImage = new Image();
+    let imgLoaded = false;
+
+    // Viewport transform (scale, translate)
+    let zoom = 1.0;
+    let panX = 0;
+    let panY = 0;
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let hoverCell = null;
+    let selectedCell = null;
+    let pulseAngle = 0;
+    // BK-58 Stage 2 state
+    let termSock = null;
+    let termOpen = false;
+
+    const LAUNCH_CLASSES = ["glyphdbg", "speak", "ollama", "ping"];
+    function launchClassFor(cell) {
+      // commit cells -> glyphdbg; verdict cells (System-1) -> ollama;
+      // everything else carries no launch class (button hidden).
+      if (cell.type === "commit") return "glyphdbg";
+      if (["clean", "defect", "noise"].includes(cell.type)) return "ollama";
+      return null;
+    }
+
+    function termLine(text, color) {
+      const term = document.getElementById("term");
+      const div = document.createElement("div");
+      div.style.color = color || "#9fe08f";
+      div.textContent = text;   // textContent, never innerHTML: no escape path
+      term.appendChild(div);
+      term.scrollTop = term.scrollHeight;
+    }
+
+    function termSend(text) {
+      if (!termSock || termSock.readyState !== 1) { termLine("! bridge not connected", "#f66"); return; }
+      let cls = "glyphdbg", params = {};
+      if (termOpen && selectedCell) {
+        const lc = launchClassFor(selectedCell);
+        if (!lc) { termLine("! this cell carries no launch class", "#f66"); return; }
+        cls = lc;
+        if (lc === "glyphdbg") params = { program: text, max_steps: 200 };
+        else if (lc === "ollama") params = { prompt: text };
+        else params = {};
+      }
+      termSock.send(JSON.stringify({ class: cls, params }));
+    }
+
+    function termConnect(cell) {
+      const term = document.getElementById("term");
+      term.style.display = "block";
+      if (termSock && termSock.readyState === 1) { termLine("— already connected —"); termOpen = true; return; }
+      termLine("— connecting to bk58 bridge (ws://127.0.0.1:8765) —", "#8892b0");
+      const sock = new WebSocket("ws://127.0.0.1:8765");
+      termSock = sock;
+      sock.onopen = () => { termLine("— connected. Type a Glyph program (glyphdbg cells) or a prompt (verdict cells); Enter sends. —", "#8892b0"); termOpen = true; };
+      sock.onmessage = (ev) => {
+        try {
+          const r = JSON.parse(ev.data);
+          if (r.ok && Array.isArray(r.output)) termLine(r.output.join(" ") + (r.halted === false ? "  [did not halt]" : ""));
+          else if (r.ok && typeof r.response === "string") termLine(r.response);
+          else if (r.ok) termLine(JSON.stringify(r));
+          else termLine("! " + (r.error || "error") + (r.evidence_hash ? "  [" + r.evidence_hash + "]" : ""), "#f66");
+        } catch (e) { termLine("! bad frame", "#f66"); }
+      };
+      sock.onclose = () => { termLine("— bridge closed —", "#8892b0"); termOpen = false; };
+      sock.onerror = () => { termLine("! bridge unreachable (is tools/build_map_bridge.py running?)", "#f66"); };
+      // glyphdbg default demo program so the first Enter always has content
+      const input = document.getElementById("term-input");
+      if (input) {
+        input.style.display = "block";
+        if (!input.value) input.value = "LDI r5 42\nPRT r5\nHALT";
+      }
+    }
+
+    document.getElementById("drawer-run").addEventListener("click", () => {
+      const btn = document.getElementById("drawer-run");
+      const cell = selectedCell;
+      if (!cell) return;
+      const lc = launchClassFor(cell);
+      if (!lc) return;
+      btn.textContent = "▶ " + lc + " @ (" + cell.x + "," + cell.y + ")";
+      termConnect(cell);
+    });
+
+    document.getElementById("term-input").addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && termOpen) {
+        const input = document.getElementById("term-input");
+        const v = input.value;
+        if (!v.trim()) return;
+        termLine("λ " + v, "#6cf");
+        termSend(v);
+        input.value = "";
+      }
+    });
+
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      render();
+    }
+    window.addEventListener("resize", resize);
+
+    async function loadData() {
+      try {
+        const cacheBust = "?t=" + Date.now();
+        // Root-relative first (served from repo root); fall back to same-dir
+        // (file:// or tools/-relative hosting). Root-relative wins because the
+        // canonical server invocation is `python3 -m http.server 8080` at repo root.
+        async function fetchFirst(paths) {
+          for (const p of paths) {
+            try {
+              const r = await fetch(p + cacheBust);
+              if (r.ok) return p;
+            } catch (e) { /* try next */ }
+          }
+          throw new Error("no reachable path among " + paths.join(", "));
+        }
+        const jsonPath = await fetchFirst(["/build_map_data.json", "../build_map_data.json", "build_map_data.json"]);
+        const pngPath = await fetchFirst(["/build_map.png", "../build_map.png", "build_map.png"]);
+        const res = await fetch(jsonPath + cacheBust);
+        mapData = await res.json();
+
+        mapImage.src = pngPath + cacheBust;
+        mapImage.onload = () => {
+          imgLoaded = true;
+          updateHUD();
+          drawMinimap();
+          if (zoom === 1.0 && panX === 0 && panY === 0) {
+            fitAll();
+          } else {
+            render();
+          }
+        };
+      } catch (err) {
+        console.error("Failed to load build map data:", err);
+      }
+    }
+
+    function updateHUD() {
+      if (!mapData || !mapData.meta) return;
+      const m = mapData.meta;
+      document.getElementById("cnt-commits").textContent = m.commits;
+      document.getElementById("cnt-clean").textContent = m.verdicts.clean;
+      document.getElementById("cnt-defect").textContent = m.verdicts.defect;
+      document.getElementById("cnt-rulings").textContent = m.rulings;
+      const pct = ((m.cells_used / m.cells_total) * 100).toFixed(1) + "%";
+      document.getElementById("pct-claimed").textContent = `${m.cells_used} / ${m.cells_total} (${pct})`;
+      if (m.frontier_xy) {
+        document.getElementById("frontier-info").textContent = `Frontier Cell (${m.frontier_xy[0]}, ${m.frontier_xy[1]}) · ${m.frontier_commit}`;
+      }
+    }
+
+    function fitAll() {
+      if (!mapImage.width) return;
+      const margin = 120;
+      const scaleX = (canvas.width - margin * 2) / mapImage.width;
+      const scaleY = (canvas.height - margin * 2) / mapImage.height;
+      zoom = Math.min(scaleX, scaleY);
+      panX = (canvas.width - mapImage.width * zoom) / 2;
+      panY = (canvas.height - mapImage.height * zoom) / 2;
+      render();
+    }
+
+    function flyToFrontier() {
+      if (!mapData || !mapData.meta || !mapData.meta.frontier_xy) return;
+      const [fx, fy] = mapData.meta.frontier_xy;
+      const side = mapData.meta.side || 128;
+      const cellPx = 1024 / side;
+      const targetX = fx * cellPx + cellPx / 2;
+      const targetY = fy * cellPx + cellPx / 2;
+
+      zoom = 12.0;
+      panX = canvas.width / 2 - targetX * zoom;
+      panY = canvas.height / 2 - targetY * zoom;
+      render();
+    }
+
+    function drawMinimap() {
+      if (!imgLoaded) return;
+      mmCtx.clearRect(0, 0, 128, 128);
+      mmCtx.imageSmoothingEnabled = false;
+      mmCtx.drawImage(mapImage, 0, 0, 128, 128);
+    }
+
+    function updateMinimapRect() {
+      if (!imgLoaded || !mapImage.width) return;
+      const mmWidth = 128;
+      const mmScale = mmWidth / mapImage.width;
+      const vx = -panX / zoom;
+      const vy = -panY / zoom;
+      const vw = canvas.width / zoom;
+      const vh = canvas.height / zoom;
+
+      const rx = Math.max(0, vx * mmScale);
+      const ry = Math.max(0, vy * mmScale);
+      const rw = Math.min(mmWidth, vw * mmScale);
+      const rh = Math.min(mmWidth, vh * mmScale);
+
+      mmRect.style.left = (20 + rx) + "px";
+      mmRect.style.top = (window.innerHeight - 148 + ry) + "px";
+      mmRect.style.width = Math.max(8, rw) + "px";
+      mmRect.style.height = Math.max(8, rh) + "px";
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (!imgLoaded) return;
+
+      ctx.save();
+      ctx.translate(panX, panY);
+      ctx.scale(zoom, zoom);
+
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(mapImage, 0, 0);
+
+      const side = mapData?.meta?.side || 128;
+      const cellSize = 1024 / side;
+
+      // Draw grid when zoomed in
+      if (zoom >= 4.0) {
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
+        ctx.lineWidth = 0.5 / zoom;
+        for (let i = 0; i <= 1024; i += cellSize) {
+          ctx.beginPath();
+          ctx.moveTo(i, 0); ctx.lineTo(i, 1024);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(0, i); ctx.lineTo(1024, i);
+          ctx.stroke();
+        }
+      }
+
+      // Draw Selected Cell
+      if (selectedCell) {
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2.0 / zoom;
+        ctx.strokeRect(selectedCell.x * cellSize, selectedCell.y * cellSize, cellSize, cellSize);
+      }
+
+      // Draw Hover Cell
+      if (hoverCell) {
+        ctx.strokeStyle = "#00f0ff";
+        ctx.lineWidth = 1.5 / zoom;
+        ctx.strokeRect(hoverCell.x * cellSize, hoverCell.y * cellSize, cellSize, cellSize);
+      }
+
+      // Draw Frontier Pulsing Beacon
+      if (mapData?.meta?.frontier_xy) {
+        const [fx, fy] = mapData.meta.frontier_xy;
+        const cx = fx * cellSize + cellSize / 2;
+        const cy = fy * cellSize + cellSize / 2;
+        const pulse = (Math.sin(pulseAngle) + 1) / 2; // 0..1
+        const radius = cellSize * (1.2 + pulse * 1.5);
+
+        ctx.strokeStyle = `rgba(0, 240, 255, ${0.4 + (1 - pulse) * 0.6})`;
+        ctx.lineWidth = 2.0 / zoom;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle = "#00f0ff";
+        ctx.fillRect(fx * cellSize + cellSize * 0.3, fy * cellSize + cellSize * 0.3, cellSize * 0.4, cellSize * 0.4);
+      }
+
+      ctx.restore();
+      updateMinimapRect();
+    }
+
+    // Animation Loop for Frontier Beacon Pulse
+    function animate() {
+      pulseAngle += 0.08;
+      if (mapData?.meta?.frontier_xy) {
+        render();
+      }
+      requestAnimationFrame(animate);
+    }
+    requestAnimationFrame(animate);
+
+    // Mouse Interaction
+    canvas.addEventListener("mousedown", (e) => {
+      isDragging = true;
+      startX = e.clientX - panX;
+      startY = e.clientY - panY;
+    });
+
+    window.addEventListener("mouseup", () => {
+      isDragging = false;
+    });
+
+    canvas.addEventListener("mousemove", (e) => {
+      if (isDragging) {
+        panX = e.clientX - startX;
+        panY = e.clientY - startY;
+        render();
+        return;
+      }
+
+      // Pick cell under cursor
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = (e.clientX - rect.left - panX) / zoom;
+      const mouseY = (e.clientY - rect.top - panY) / zoom;
+
+      if (!mapData || !mapData.meta) return;
+      const side = mapData.meta.side || 128;
+      const cellSize = 1024 / side;
+
+      if (mouseX >= 0 && mouseX < 1024 && mouseY >= 0 && mouseY < 1024) {
+        const cx = Math.floor(mouseX / cellSize);
+        const cy = Math.floor(mouseY / cellSize);
+
+        const found = mapData.cells.find(c => c.x === cx && c.y === cy);
+        if (found) {
+          hoverCell = found;
+          tooltip.style.display = "block";
+          tooltip.style.left = (e.clientX + 16) + "px";
+          tooltip.style.top = (e.clientY + 16) + "px";
+          tooltip.innerHTML = `
+            <div style="color: ${found.color}; font-weight: bold; text-transform: uppercase;">${found.type}</div>
+            <div style="color: #cbd5e1; margin-top: 4px;">${found.title}</div>
+            <div style="color: #64748b; font-size: 10px; margin-top: 4px;">Coord: (${found.x}, ${found.y}) · Index: ${found.idx}</div>
+          `;
+          render();
+          return;
+        }
+      }
+
+      if (hoverCell) {
+        hoverCell = null;
+        tooltip.style.display = "none";
+        render();
+      }
+    });
+
+    // Zoom on cursor
+    canvas.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const zoomFactor = 1.15;
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const newZoom = e.deltaY < 0 ? zoom * zoomFactor : zoom / zoomFactor;
+      const clampedZoom = Math.min(Math.max(newZoom, 0.4), 80.0);
+
+      panX = mouseX - (mouseX - panX) * (clampedZoom / zoom);
+      panY = mouseY - (mouseY - panY) * (clampedZoom / zoom);
+      zoom = clampedZoom;
+
+      render();
+    }, { passive: false });
+
+    // Cell Click -> Open Evidence Drawer
+    canvas.addEventListener("click", () => {
+      if (hoverCell) {
+        selectedCell = hoverCell;
+        openDrawer(selectedCell);
+        render();
+      }
+    });
+
+    function openDrawer(cell) {
+      const badge = document.getElementById("drawer-badge");
+      const title = document.getElementById("drawer-title");
+      const content = document.getElementById("drawer-content");
+
+      badge.textContent = cell.type;
+      badge.className = "drawer-badge badge-" + cell.type;
+      title.textContent = cell.title;
+
+      let detailHtml = `
+        <strong>Hilbert Distance:</strong> ${cell.idx}<br>
+        <strong>Grid Coordinate:</strong> (${cell.x}, ${cell.y})<br>
+        <strong>Timestamp:</strong> ${cell.timestamp}<br><br>
+      `;
+
+      if (cell.type === "commit") {
+        detailHtml += `
+          <strong>Commit SHA:</strong> ${cell.full_sha}<br>
+          <strong>Short SHA:</strong> ${cell.sha}<br><br>
+          <strong>Git Message:</strong><br>${cell.title}
+        `;
+      } else if (cell.type === "clean" || cell.type === "defect" || cell.type === "noise") {
+        detailHtml += `
+          <strong>Ticket ID:</strong> ${cell.ticket_id}<br>
+          <strong>Evaluation Head:</strong> ${cell.head}<br>
+          <strong>Decision:</strong> <span style="color: ${cell.color}; font-weight: bold;">${cell.decision}</span><br>
+          <strong>Confidence:</strong> ${(cell.confidence * 100).toFixed(1)}%<br>
+          <strong>Inference Latency:</strong> ${cell.latency_ms} ms<br><br>
+          <strong>Rationale:</strong><br>${cell.rationale || "N/A"}<br>
+        `;
+        if (cell.advisory_path) {
+          detailHtml += `<br><strong>Advisory File:</strong> ${cell.advisory_path}`;
+        }
+      } else if (cell.type === "ruling") {
+        detailHtml += `
+          <strong>Ruling Artifact:</strong> ${cell.filename}<br><br>
+          <strong>Title:</strong> ${cell.title}
+        `;
+      }
+
+      content.innerHTML = detailHtml;
+      // BK-58: show the Run button only for cells with a launch class
+      const lc = launchClassFor(cell);
+      document.getElementById("drawer-run").style.display = lc ? "block" : "none";
+      document.getElementById("drawer-run").textContent = lc ? "▶ Run / Teleoperate (" + lc + ")" : "▶ Run / Teleoperate";
+      document.getElementById("term").style.display = "none";
+      document.getElementById("term-input").style.display = "none";
+      drawer.classList.add("open");
+    }
+
+    document.getElementById("drawer-close").addEventListener("click", () => {
+      drawer.classList.remove("open");
+      selectedCell = null;
+      render();
+    });
+
+    document.getElementById("btn-reset").addEventListener("click", fitAll);
+    document.getElementById("btn-frontier").addEventListener("click", flyToFrontier);
+    document.getElementById("btn-refresh").addEventListener("click", loadData);
+
+    // Initial Load
+    resize();
+    loadData();
+
+    // Auto-refresh every 10 seconds
+    setInterval(loadData, 10000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "ticket_id": "gh26-5-glass-box",
+  "roadmap_item": "GH-26.5",
+  "step": "GLASS BOX: observation plane as the agent cockpit (integration) \u2014 end-to-end scripted scenario, geo-obs extension, 3-hash provenance chain, systems/RECEIPT_GH26_AGENT_LOOP.md",
+  "created": "2026-09-11T13:35:00-05:00",
+  "created_by": "Antigravity builder session (Jericho-authorized 26.2->26.5 arc, 26.4 460d7a6 landed)",
+  "failing_command": "pytest tests/test_gh26_glass_box.py",
+  "context": {
+    "authorization": "GEOS_EMIT_ACK gate OPEN - .geos_emit_ack at repo root, commits 93363d5/ee92607/460d7a6/6fab88a",
+    "prior_items": "26.1 c29a52c (per-tick live surface), 26.2 00b29da (geos_emit aperture write path), 26.3 9c0d969 (autoatlas.emit_admit), 26.4 460d7a6 (resident daemon under preemption + paged memory), 6fab88a (append-on-admit corpus hook)",
+    "spec": "systems/GH26_AGENT_IN_THE_LOOP_SPEC.md section 26.5",
+    "requirements": "Single surface read shows end-to-end loop: agent posts intent (@750) -> resident box services under preemption (tick advances) -> result lands (@754) -> new capability admitted via oracle (table slot lit + tools/glyph_gpt/admitted/ tile captured) -> canonical replay fixpoint holds. Three-hash provenance chain: sentinel verify pass (frame geometry) + admitted tile SHA256 + final image MD5",
+    "gate_requirements": "tests/test_gh26_glass_box.py green across all scenario phases; systems/RECEIPT_GH26_AGENT_LOOP.md generated with before/during/after ASCII canvases and 3 hashes; geo-obs server extended with geos_verify_sentinels and geos_read_cell"
+  },
+  "attempt": 1,
+  "max_attempts": 3,
+  "gate": "tests/test_gh26_glass_box.py green + full arc regression from clean + feat(gh26.5) commit + roadmap GH-26 row updated with 26.5 status; THEN retire this ticket to .builder_queue/resolved/",
+  "receipt_discipline": "failing-test output before the fix, passing run after; receipts are command output not narrative",
+  "status": "resolved",
+  "resolved": "2026-09-11T13:40:00-05:00",
+  "resolved_by": "Antigravity builder session",
+  "resolution": "tests/test_gh26_glass_box.py 8/8 passed, 39/39 GH-26 suite passed, 30/30 core regressions passed, systems/RECEIPT_GH26_AGENT_LOOP.md generated with 3-hash provenance chain"
+}

@@ -1,0 +1,31 @@
+{
+  "state": {
+    "iteration": 0,
+    "last_working_step": 133000000,
+    "stall_step": 16500000,
+    "csr_state": {
+      "mcause": "0x0000000000000009",
+      "scause": "0x8000000000000005",
+      "sepc": "0x0000000000000000",
+      "satp": "0x800000000008155f"
+    },
+    "applied_fixes": [
+      "epoch_fix_verified"
+    ],
+    "boot_log": []
+  },
+  "results": [
+    {
+      "iteration": 0,
+      "status": "uart_stalled",
+      "steps": 16500000,
+      "best_steps": 133000000,
+      "stall_mode": "no_uart_progress",
+      "fixes": [
+        "epoch_fix_verified"
+      ],
+      "time": 0
+    }
+  ],
+  "timestamp": "2026-08-30 00:38:13"
+}

@@ -1,0 +1,145 @@
+== S legs (source reads) ==
+S1_walkld_PTE_U_refs = 1
+S1_walkld_PTE_V_refs = 1
+S1_walkld_PTE_W_refs = 0
+S1_walkst_PTE_U_refs = 1
+S1_walkst_PTE_W_refs = 1
+S2_walkld_addr_in_box_refs = 2
+S2_walkld_tile_refs = 11
+S3_walkst_unmapped_silent = False
+== D/C legs (CPU oracle + WGSL twin, RTX 5090) ==
+{
+ "C1_unpaged_ek1_control": {
+  "cpu": {
+   "error": null,
+   "fault_addr": 400,
+   "faulted": true,
+   "halted": true,
+   "mem_100": 0,
+   "mem_3072": 0,
+   "r10": 0,
+   "receipt_720": 0,
+   "steps": 18
+  },
+  "wgsl": {
+   "error": null,
+   "halted": true,
+   "r10": 0,
+   "ram_100": 0,
+   "ram_3072": 0,
+   "receipt_720_ram": 0,
+   "steps": 18
+  }
+ },
+ "C2_super_paged_mmio_read": {
+  "cpu": {
+   "error": null,
+   "fault_addr": null,
+   "faulted": false,
+   "halted": true,
+   "mem_100": 0,
+   "mem_3072": 0,
+   "r10": 0,
+   "receipt_720": 0,
+   "steps": 7
+  },
+  "wgsl": {
+   "error": null,
+   "halted": true,
+   "r10": 0,
+   "ram_100": 0,
+   "ram_3072": 0,
+   "receipt_720_ram": 0,
+   "steps": 7
+  }
+ },
+ "D1_paged_control": {
+  "cpu": {
+   "error": null,
+   "fault_addr": 12288,
+   "faulted": true,
+   "halted": true,
+   "mem_100": 0,
+   "mem_3072": 0,
+   "r10": 0,
+   "receipt_720": 0,
+   "steps": 20
+  },
+  "wgsl": {
+   "error": null,
+   "halted": true,
+   "r10": 11399181,
+   "ram_100": 0,
+   "ram_3072": 11399181,
+   "receipt_720_ram": 0,
+   "steps": 23
+  }
+ },
+ "D2_pte_u_bypass": {
+  "cpu": {
+   "error": null,
+   "fault_addr": 12288,
+   "faulted": true,
+   "halted": true,
+   "mem_100": 0,
+   "mem_3072": 0,
+   "r10": 0,
+   "receipt_720": 0,
+   "steps": 20
+  },
+  "wgsl": {
+   "error": null,
+   "halted": true,
+   "r10": 4294967295,
+   "ram_100": 0,
+   "ram_3072": 11399181,
+   "receipt_720_ram": 0,
+   "steps": 23
+  }
+ },
+ "D3_mmio_read_through_pte": {
+  "cpu": {
+   "error": null,
+   "fault_addr": 12304,
+   "faulted": true,
+   "halted": true,
+   "mem_100": 0,
+   "mem_3072": 0,
+   "r10": 0,
+   "receipt_720": 0,
+   "steps": 20
+  },
+  "wgsl": {
+   "error": null,
+   "halted": true,
+   "r10": 1300,
+   "ram_100": 0,
+   "ram_3072": 0,
+   "receipt_720_ram": 0,
+   "steps": 23
+  }
+ },
+ "D4_unmapped_store_silent": {
+  "cpu": {
+   "error": null,
+   "fault_addr": 12288,
+   "faulted": true,
+   "halted": true,
+   "mem_100": 0,
+   "mem_3072": 0,
+   "r10": 0,
+   "receipt_720": 0,
+   "steps": 21
+  },
+  "wgsl": {
+   "error": null,
+   "halted": true,
+   "r10": 0,
+   "ram_100": 0,
+   "ram_3072": 0,
+   "receipt_720_ram": 0,
+   "steps": 21
+  }
+ }
+}
+results_md5=a5fb00173b426465c03bd5a18f4087cb

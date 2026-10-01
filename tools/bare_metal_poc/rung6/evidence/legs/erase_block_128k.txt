@@ -1,0 +1,15 @@
+  [ok]   walk done  -- tail='tributed with ABSOLUTELY NO WARRANTY.\r\n (/-_--_-\\)           www.tinycorelinux.net\r\n\r\ntc@box:~$ '
+  [ok]   ECC/PAR line printed
+  [ok]   gate line printed
+  [ok]   counters BEFORE the gate line  -- ECC at byte 107, CRC at 143
+  [ok]   exactly one verdict  -- 1 found
+  [ok]   gate line BEFORE the verdict  -- CRC at 143, verdict at 185
+  [ok]   verdict matches the prediction  -- wire=PASS, predicted=PASS
+  [ok]   ECC= matches the replay  -- wire 0001FE1C, predicted 0001FE1C
+  [ok]   PAR= matches the replay  -- wire 00000000, predicted 00000000
+  [ok]   computed CRC matches the replay  -- wire 393950AA, predicted 393950AA
+  [ok]   expected CRC is the baked constant  -- wire 393950AA, .inc 393950AA
+  [ok]   handoff iff the gate passed  -- HANDOFF BUILT=True, verdict=PASS
+  [ok]   anchor tc@box  -- 1 boot(s), 8 allowed
+erase_block_128k: GREEN  wall=12.5s boots=1 predicted ECC=0001FE1C PAR=00000000 verdict=PASS
+    trace (last boot, 0.25 s polling): s2 enter@0.3s walk done@1.3s verdict@1.3s

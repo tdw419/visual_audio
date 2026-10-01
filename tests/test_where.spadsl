@@ -1,0 +1,6 @@
+A = region(shape=(4,), initial=5)
+B = region(shape=(4,), initial=3)
+C = region(shape=(4,), initial=1)
+D = where(C, A, B)
+total = reduce(D, sum)
+print(total)

@@ -1,0 +1,76 @@
+# rung9's gate in a pristine tree — and the pins proven against their producer
+
+Made 2026-09-20, ~14:36–14:43. This is the last row of the prerequisite work:
+`reproduce_prereqs.sh` claims a clean checkout plus `rung7/core.gz` is enough to
+run any closed rung, and the three rows checked below and beside it are the
+proof for rungs 9, 6 and 6.5.
+
+It lives here, in `rung6/evidence/`, because what it verifies is the reference
+this row pins: BM602's identity stage (and BM653's, which carries the same three
+files in its own `evidence/refs/`) trusts `bm903_px_zp_leg0.bin`,
+`bm903_px_cmdline_leg0.bin` and `bm903_px_regs_leg0.json` — dumped by rung 9's
+gate, ignored by git, and copied into both rows as landed verbatim references.
+A pin nobody re-derives is a frozen accident, so the producer was run from the
+commit and its output re-hashed. `rung9/` is read-only to this lane; the record
+of its run belongs with the rows that consume its bytes.
+
+## The tree
+
+    T=/tmp/bm000_final
+    git -C <repo> archive HEAD tools/bare_metal_poc | tar -x -C $T   # at c0ad33a1
+    mkdir -p $T/tools/bare_metal_poc/rung7
+    cp rung7/core.gz $T/tools/bare_metal_poc/rung7/
+    cd $T/tools/bare_metal_poc && bash reproduce_prereqs.sh
+      -> PREREQ_STATUS=GREEN, 39 s, 12/12 legs, no tracked file moved
+    cd rung9 && bash run_bm903_e2e.sh        # twice; the script itself came out
+                                             # of the archive, nothing copied in
+
+## rung9/run_bm903_e2e.sh — two passes, both clean
+
+    pass 1: BM903 E2E TALLY: 42 pass, 0 red        rc=0   ~2 min 50 s
+    pass 2: BM903 E2E TALLY: 42 pass, 0 red        rc=0   ~2 min 45 s
+
+Both of the deliberately-RED legs fired identically, which is the part worth
+recording: the fault-injection halves of this gate do not drift the way the
+autologin leg does.
+
+    L1 FAIL: 1 zeropage diff(s) vs bm902_zp.bin outside whitelist: 0x244
+    RED LEG OK: differ exited non-zero as required
+      (same offset, same message, both passes)
+
+and L6's independent cross-check held in both: the guest's computed CRC
+`BM903-S2 GATE2 CRC=6AB8F2D3 EXP=393950AA` against the host's own arithmetic,
+which is what lets a refusal leg be called a pass.
+
+The gate's first leg is itself an input pin — `S0 input pins (nothing
+downstream is trusted past this line)` → `[PASS] pin ../rung7/core.gz` — so
+this run also re-proves, in a tree that received `core.gz` by hand, that rung
+9's own refusal path fires on the blob TASK_BM001 has not landed.
+
+## The references, re-derived from their producer
+
+`rung9/bm903_px_*_leg0.*` as rewritten by the pristine gate above, sha256
+prefixed:
+
+    bm903_px_zp_leg0.bin        bc2431d7be0ab1d2   == pinned
+    bm903_px_cmdline_leg0.bin   30cd829f2a88c80c   == pinned
+    bm903_px_regs_leg0.json     935d5fe1c23f878e   == pinned
+
+All three match the values in `rung6/evidence/refs/refs.json` and
+`rung6_5/evidence/refs/refs.json` byte for byte, including the registers dump —
+which is JSON carrying a `captured_by` field, and rung 9 writes the same value
+for the same fork, so the whole file hashes clean rather than needing a
+field-level exception. That is the claim the pinning pass needed and did not
+previously have: the landed reference is what rung 9 produces today, from the
+commit, on a machine that had never held the lane's working copy — not a copy of
+one lucky run.
+
+## What this does not cover
+
+* The autologin allowance is unchanged: the getty race is the only leg that
+  varies run to run, and the gate's 8-boot policy is what absorbs it.
+* Rung 9's own tree still contains two conditionals of the class BM602 and
+  BM802 just left (`bm903_mkimg_px.py:133`, `bm903_pxcodec.py:124-125`). Filing
+  them is in `ROADMAP.md`'s TASK_BM001 package; this lane cannot edit them.
+* `rung7/core.gz` remains outside git. Everything above depends on copying it in
+  by hand, which is exactly the gap the ratification has to close.

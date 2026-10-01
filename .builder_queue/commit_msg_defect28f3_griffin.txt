@@ -1,0 +1,67 @@
+fix(suite): SUITE-FIX-1 cluster (4) file (3) — griffin_lim bin contract + random_state (22/22)
+
+DEFECT-28 (3): `src/griffin_lim.py` carried TWO independent defects, neither a tolerance.
+
+RED first (orchestrator's own run at ba54fb4, output/DEFECT28F3_griffin_RED_prefix.txt):
+  /usr/bin/python3 -m pytest tests/test_griffin_lim.py -q
+  -> 4 failed, 18 passed in 0.88s
+     ValueError: operands could not be broadcast together with shapes (129,32) (1025,32)
+       at src/griffin_lim.py:93 (and (32,16) (129,16) at :141)
+     AssertionError: Arrays are not almost equal (99.6% mismatched) at tests/test_griffin_lim.py:255
+
+(A) two n_fft values inside one round trip. `librosa.istft(complex_spec, hop_length=...)` was called
+    WITHOUT n_fft, so librosa inferred 2*(bins-1) from the input while the forward
+    `librosa.stft(audio, n_fft=self.n_fft)` used the constructor's 2048 -> 1025 bins; the phase
+    update then broadcast-fails. Independent probe (librosa 0.11.0): istft(bins=129, hop=64) -> 960
+    samples; stft(len=960, n_fft=2048) -> 1025 bins (mismatch), n_fft=256 -> 129 bins (match).
+(B) `random_state` never reproduced. It was honoured only by np.random.seed() in __init__, while the
+    draws happen inside reconstruct() — constructing the second instance re-seeded the global RNG
+    after the first had drawn, against the docstring at :25 ("Random seed for reproducibility").
+
+Fix, module-side only (+45/-9, sha256 6d3c5921... -> b43c3401378c201dd60d72c1d8f8955b5f74d1087ebb82c6a138f3cf333a37ec):
+  * both reconstruct paths derive eff_n_fft = 2*(bins-1) from the input spectrogram, pass it
+    explicitly to BOTH istft and stft, refuse bins < 2 with a ValueError naming the shape, and
+    UserWarning-name any disagreement with self.n_fft (the input wins — never a silent
+    reinterpretation, never a relaxed guard);
+  * __init__ builds an instance np.random.RandomState(random_state); the process-global
+    np.random.seed() call is removed; the phase draw uses the instance RNG and falls back to global
+    draws for random_state=None. Public signatures unchanged; _validate_input, _compute_error and
+    estimate_parameters untouched.
+No assertion changed: tests/test_griffin_lim.py sha256 8ac3542266... before == after (not in this diff).
+
+GREEN (orchestrator's own run, output/DEFECT28F3_gate_green.txt):
+  /usr/bin/python3 -m pytest tests/test_griffin_lim.py -q
+  -> 22 passed, 4 warnings in 0.96s   [rc=0]
+
+Non-vacuity, both directions (out-of-tree copies in /tmp, live file re-hashed byte-identical;
+.builder_queue/probe_defect28f3_nonvacuity.py, output/DEFECT28F3_nonvacuity_orch.txt):
+  V1 forward stft re-pinned to self.n_fft      ->  3 failed, 19 passed  (the broadcast legs)
+  V2 RNG draw reverted to global np.random     ->  1 failed, 21 passed  (test_reproduce_with_random_state)
+
+Neighbour gate:
+  /usr/bin/python3 -m pytest tests/test_griffin_lim.py tests/test_vcc_validation.py tests/test_cross_modal.py -q
+  -> 6 failed, 33 passed   (pre-fix 10 failed, 29 passed; the only delta is griffin_lim 4 -> 0.
+     test_cross_modal.py's 6 stay red by design — RULING-PENDING; test_vcc_validation.py 9/9 green.)
+
+Row gate (SUITE-FIX-1's own command), output/SUITE_DEFECT28F3_SINK.jsonl + output/SUITE_DEFECT28F3_SWEEP.txt:
+  PATH=/usr/bin:$PATH suite_sweep.sh -b 12G -w 4 -- /usr/bin/python3 tools/suite_iso_harness.py tests -t 150 -w 4
+  -> 257 files / 1669 collected / PASS 243 . FAIL 7 . TIMEOUT 7
+  Full delta vs output/SUITE_FIX1_FINAL_SINK.jsonl, every change attributed:
+    test_griffin_lim.py         FAIL -> PASS   (this change)
+    test_vcc_validation.py      FAIL -> PASS   (previous tick's DEFECT-28 (2) landing, in the baseline)
+    test_visual_player_command.py FAIL -> PASS (documented contention flake)
+    NO PASS -> FAIL anywhere.
+    3 new TIMEOUTs — test_spatial_rv32i_cpu.py, test_sbi_firmware.py,
+    test_rv64i_to_glyph_xv6_nano.py — attributed to LOAD, not this change: all three pass in
+    isolation on the same interpreter (19 passed/39.95s; 13 passed/49.02s, load avg 5.8-9.7) and
+    none of them imports src/griffin_lim.py (output/DEFECT28F3_TIMEOUT_isolation_orch.txt).
+
+Not verified (stated plainly in the receipt): spectrogram2wav.py's production path was not
+executed (nothing in the tree runs that CLI) — its improvement is mechanism-reasoned, not measured;
+_compute_error's now-dead signal.resample shape-patch was left in place; no WGSL/GPU leg exists for
+this module; reconstruction quality is not claimed; a same-instance second reconstruct() still
+advances the RNG (the test's contract is two equal-seeded instances).
+
+Receipt: systems/RECEIPT_DEFECT28F3_GRIFFIN_BIN_CONTRACT.md
+Brief (delegated to agy, exit 0 / 120s, log output/agy/agy_impl_20260913_194803.log):
+.builder_queue/brief_defect28f3_griffin_bin_contract.md

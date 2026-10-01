@@ -1,0 +1,72 @@
+# VirtIO Pixel Driver - Multi-Sector Extraction (Simplified Demo)
+# This driver handles Ubuntu kernel requests for 4KB pages (8 sectors @ 512 bytes each)
+# Demonstrates multi-sector looping logic (Hilbert mapping happens in WGSL shader)
+
+:init
+# Initialize VirtIO MMIO registers
+LDI r1 0x1000      # VirtIO MMIO base address (relative offset 0x1000 in our address space)
+LDI r2 0x01        # ACKNOWLEDGE status
+STR r1 r2
+LDI r2 0x04        # DRIVER_OK status
+STR r1 r2
+
+:poll_queue
+# Poll queue_notify flag (offset 0x02 from base)
+LDR r3 r1 0x02     # Read queue_notify
+LDI r2 0x00        # Compare to 0
+CMP r3 r2
+JZ poll_queue      # Spin if no request
+
+# Queue is ready - read request parameters
+LDR r4 r1 0x03     # Read sector_id (starting sector)
+LDR r5 r1 0x06     # Read sector_count (how many sectors, e.g., 8 for 4KB page)
+LDR r6 r1 0x04     # Read dma_buffer_base (where to write results)
+
+# Initialize loop counter
+LDI r7 0x00        # Loop counter = 0
+
+:sector_loop
+# Check if we've read all sectors
+CMP r5 r7          # sector_count == loop_counter?
+JZ complete
+
+# Calculate coordinate for this sector
+# For demo: x = sector_id + loop_counter, y = 0
+MOV r8 r4          # Copy sector_id to r8
+ADD r8 r7          # Add loop counter to get current sector number
+
+# Calculate x coordinate (sequential for demo)
+MOV r9 r8          # x = sector_id + loop_counter
+
+# y coordinate (row) - for demo, assume single row (y=0)
+LDI r10 0
+
+# Fetch pixel at (x, y) coordinate
+LDP r11 r9 r10     # Load pixel from MKV frame at (x, y)
+
+# Write to DMA buffer
+# dma_offset = dma_buffer_base + loop_counter * 512
+MOV r12 r6         # dma_buffer_base
+MOV r13 r7         # loop_counter
+LDI r14 512
+MUL r13 r14        # loop_counter * 512
+ADD r12 r13        # dma_offset = dma_base + loop_counter * 512
+
+# Write the pixel data to DMA buffer
+STR r12 r11
+
+# Advance to next sector
+LDI r15 1
+ADD r7 r15         # Increment loop counter
+JMP sector_loop
+
+:complete
+# Clear queue_notify flag to acknowledge completion
+LDI r2 0x00
+STR r1 r2
+
+# Set queue_ready to indicate we're ready for next request
+LDI r2 0x01
+STR r1 r2
+
+HALT

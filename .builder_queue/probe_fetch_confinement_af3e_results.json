@@ -1,0 +1,132 @@
+{
+ "C1_unpaged_out_of_tile_ST_control": {
+  "exit_status": 1,
+  "fault_addr": 656,
+  "fault_reason": null,
+  "faulted": true,
+  "halt_reason": null,
+  "img_dims": [
+   32,
+   64
+  ],
+  "injected_word0": null,
+  "mode_final": "SUPER",
+  "program": ":__entry\nLDI r5 4660\nLDI r15 164\nST r15 r5\nHALT\n",
+  "r10": 0,
+  "tile": [
+   256,
+   19,
+   1,
+   2
+  ]
+ },
+ "F0_in_program_JMP_control": {
+  "exit_status": 0,
+  "fault_addr": 0,
+  "fault_reason": null,
+  "faulted": false,
+  "halt_reason": null,
+  "img_dims": [
+   32,
+   64
+  ],
+  "injected_word0": null,
+  "mode_final": "USER",
+  "program": ":__entry\nLDI r5 1\nJMP 2,0\nPRT r5\nHALT\n:nop\n:nop\n:nop\n:nop\n",
+  "r10": 0,
+  "tile": [
+   256,
+   19,
+   1,
+   2
+  ]
+ },
+ "F1_fetch_pc_census": {
+  "exit_status": 0,
+  "fault_addr": 0,
+  "fault_reason": null,
+  "faulted": false,
+  "halt_reason": null,
+  "img_dims": [
+   32,
+   64
+  ],
+  "mode_final": "USER",
+  "pc_rows_visited": [
+   0
+  ],
+  "pc_trace_first12": [
+   [
+    0,
+    0
+   ],
+   [
+    4,
+    0
+   ],
+   [
+    8,
+    0
+   ]
+  ],
+  "program": ":__entry\nLDI r10 11399181\nLDI r5 1\nHALT\n",
+  "r10": 11399181,
+  "tile": [
+   256,
+   19,
+   1,
+   2
+  ]
+ },
+ "F2_jmpr_execute_out_of_tile": {
+  "exit_status": 0,
+  "fault_addr": 0,
+  "fault_reason": null,
+  "faulted": false,
+  "halt_reason": "opcode-None pixel at (4,40): rgb=(np.uint8(0), np.uint8(0), np.uint8(0)) is not a known opcode color",
+  "img_dims": [
+   32,
+   64
+  ],
+  "injected_word0": 15487056,
+  "mode_final": "USER",
+  "program": ":__entry\nLDI r15 2621440\nJMPR r15\nHALT\n",
+  "r10": 11399181,
+  "tile": [
+   256,
+   19,
+   1,
+   2
+  ]
+ },
+ "F3_push_inject_then_execute": {
+  "exit_status": 0,
+  "fault_addr": 0,
+  "fault_reason": null,
+  "faulted": false,
+  "halt_reason": "opcode-None pixel at (4,50): rgb=(np.uint8(0), np.uint8(0), np.uint8(0)) is not a known opcode color",
+  "img_dims": [
+   32,
+   64
+  ],
+  "injected_word0": 15487056,
+  "mode_final": "USER",
+  "program": ":__entry\nLDI r31 1601\nLDI r5 15487056\nPUSH r5\nLDI r31 1602\nLDI r5 10\nPUSH r5\nLDI r31 1603\nLDI r5 11399181\nPUSH r5\nLDI r31 1604\nLDI r5 0\nPUSH r5\nLDI r15 3276800\nJMPR r15\nHALT\n",
+  "r10": 11399181,
+  "tile": [
+   256,
+   19,
+   1,
+   2
+  ]
+ },
+ "_meta": {
+  "instr_width": 4,
+  "tile": [
+   256,
+   19,
+   1,
+   2
+  ]
+ }
+}

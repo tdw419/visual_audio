@@ -1,0 +1,67 @@
+; scheduler_fixed.glyph - Fixed version using POP before CTX_LOAD
+; The interrupt pushes a return address, then ISR must POP it before CTX_LOAD
+
+VECTOR 1 :scheduler_isr
+
+:boot
+; Initialize SP to 0
+SET 0
+STORE (3, 0)
+
+; Initialize P1's PCB by CALLing into its entry point
+; This pushes p1_start to stack, which CTX_SAVE will save
+CALL :p1_init
+
+; Set PID = 0 and enable interrupts
+SET 0
+STORE (100, 0)
+SEI
+
+; Jump to P0
+JMP :p0_start
+
+; --- PROCESS 0 ---
+:p0_start
+LOAD (50, 0)
+ADD 10
+STORE (50, 0)
+JMP :p0_start
+
+; --- PROCESS 1 ---
+:p1_start
+LOAD (60, 0)
+ADD 1
+STORE (60, 0)
+JMP :p1_start
+
+:p1_init
+; The CALL from boot pushed p1_start to stack
+; CTX_SAVE peeks it and saves to P1's PCB
+CTX_SAVE (30, 240)
+; RET returns to boot (P1 will be loaded on first context switch)
+RET
+
+; --- SCHEDULER MICROKERNEL ---
+:scheduler_isr
+; Interrupt pushed return address to stack. POP it before CTX_LOAD.
+POP
+
+LOAD (100, 0)
+SUB 0
+JZ :switch_to_p1
+
+:switch_to_p0
+; P1 was running. Save P1, Load P0.
+CTX_SAVE (30, 240)
+CTX_LOAD (20, 240)
+SET 0
+STORE (100, 0)
+RET
+
+:switch_to_p1
+; P0 was running. Save P0, Load P1.
+CTX_SAVE (20, 240)
+CTX_LOAD (30, 240)
+SET 1
+STORE (100, 0)
+RET

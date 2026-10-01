@@ -1,0 +1,20 @@
+; Test: register IRQ 1 handler, enable interrupts, spin.
+; An external raise_interrupt(1, x, y) should vector into the handler,
+; which stores a marker pixel at (x, y) using the payload coords in (5,0)/(6,0), then RET.
+VECTOR 1 :irq_handler
+
+SET 0
+STORE (7, 0)
+SEI
+
+:spin
+LOAD (7, 0)
+ADD 0
+JMP :spin
+
+:irq_handler
+LOAD (5, 0)
+STORE (8, 0)
+SET 1
+STORE (7, 0)
+RET

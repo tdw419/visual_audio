@@ -1,0 +1,158 @@
+{
+ "results": {
+  "C1_no_rearm_single_dispatch": {
+   "exit_status": 0,
+   "fault_reason": null,
+   "faulted": false,
+   "final_pc": [
+    8,
+    0
+   ],
+   "host_arm": 3,
+   "ksys_word_after": 0,
+   "mode_final": "USER",
+   "output": [
+    7
+   ]
+  },
+  "C2_no_rewrite_same_handler_each_dispatch": {
+   "exit_status": 0,
+   "fault_reason": null,
+   "faulted": false,
+   "final_pc": [
+    8,
+    0
+   ],
+   "fires_of_7": 2,
+   "host_arm": 3,
+   "ksys_word_after": 3,
+   "mode_final": "USER",
+   "output": [
+    7,
+    7
+   ]
+  },
+  "C3_unpaged_out_of_tile_ksys_ST_traps": {
+   "exit_status": 1,
+   "fault_reason": null,
+   "faulted": true,
+   "final_pc": [
+    0,
+    30
+   ],
+   "host_arm": 0,
+   "ksys_word_after": 0,
+   "mode_final": "SUPER",
+   "output": []
+  },
+  "K1_ksys_chain_two_dispatches_plus_unarm": {
+   "exit_status": 0,
+   "fault_reason": null,
+   "faulted": false,
+   "final_pc": [
+    20,
+    2
+   ],
+   "host_arm": 3,
+   "ksys_word_after": 0,
+   "mode_final": "SUPER",
+   "output": [
+    7,
+    7,
+    52,
+    0
+   ]
+  },
+  "K2_ksys_self_rearm_persistence": {
+   "exit_status": 0,
+   "fault_reason": null,
+   "faulted": false,
+   "final_pc": [
+    8,
+    0
+   ],
+   "handler_fires": 75,
+   "host_arm": 3,
+   "ksys_word_after": 3,
+   "mode_final": "USER",
+   "output": [
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7
+   ]
+  }
+ },
+ "results_md5": "2335277c5ccee3affe19f04b905876df"
+}

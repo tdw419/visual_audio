@@ -1,0 +1,74 @@
+# BM802 in a pristine tree: every host leg, and a 12-boot preflight (13 planned)
+
+Made 2026-09-20, ~14:36–14:53, in `/tmp/bm000_final` — a `git archive HEAD
+tools/bare_metal_poc` tree (at `c0ad33a1`, so `reproduce_prereqs.sh` itself came
+out of the commit) fed with nothing but `rung7/core.gz`:
+
+    mkdir -p rung7 && cp core.gz rung7/
+    bash reproduce_prereqs.sh      # PREREQ_STATUS=GREEN, 39 s, 12/12 legs
+    cd rung9 && bash run_bm903_e2e.sh            # 42 pass, 0 red x2
+    cd ../rung8 && python3 bm802_fixture.py      # below
+
+Why rung 8 is here at all: it is the row whose rig assembles its own medium from
+rung 9's bytes, so it is the one that can tell whether the pristine medium is
+*the* medium and not a look-alike. Its first selftest leg answers that
+directly — `control fixture == rung9/bm903_medium_px.raw byte for byte
+(13,640,192 B)`.
+
+## Host legs (no qemu), all rc=0
+
+| command | what it proves | result in the pristine tree |
+|---|---|---|
+| `bm802_fixture.py` | the gate-off rig builds, and its four equivalence legs hold | `BM802 FIXTURE TALLY: 0 red`, 5/5, ~1 s |
+| `bm802_pin_bitest.py` | the stage1 pin added on 2026-09-20 actually fires | clean build ok against `f0e7d7e1c6ab4536…`, then `[BITES] moved pin -> AssertionError` |
+| `bm802_header_fields.py` | no fatal offset falls inside a field the loader re-pins | rc=0; e.g. `0x263 init_size byte 3` is outside the overwritten range |
+| `bm802_archive_local.py` | the INERT initrd legs really are corrupt at the archive layer | rc=0; of 17 INERT boots, 16 on never-loaded `*.ko.gz`, 1 (`libresolv-2.28.so`) on a live file |
+
+## The boot plumbing: `run_bm802_sweep.py --limit=3 --recheck=2`
+
+`--dry` first, in the pristine tree: geometry re-derived identically (`medium
+13,640,192 B, plane 3,407,872 B, payload 13,631,488 B`), 306 map samples, ~319
+boots, ~165 min. **The full map was not re-run pristine** — 165 min of TCG boots
+buys no new claim about the prerequisite chain; the preflight does.
+
+Preflight: 6 map samples + 3 controls + 2 gate-ON refusals = 11 primary boots,
+plus one 3x-budget recheck, so **12 boots run and 12 rows written**
+(`preflight rc=0`, ~7 min). The driver routes preflight rows away from the real
+map into its own `bm802_preflight_rows.txt` — a path relative to whichever tree
+it runs in, so those 12 rows landed in `/tmp/bm000_final/tools/bare_metal_poc/rung8/`
+and were deleted with the scratch tree; the file exists in no checkout and on no
+box now, and the table below is its transcription. What the repo's own
+`bm802_sweep_rows.txt` and `bm802_sensitivity_map.txt` hold is unchanged by this
+run, which is the point of the routing (the plan allowed for
+a second recheck leg and none was needed). Only one leg presented as SENSITIVE/SLOW for that recheck, per the
+run's own line: `1 SENSITIVE/SLOW legs re-run at 3x the budget -> 0 came
+alive`. The interesting part is
+not that it ran but that its 12 rows can be set against the lane's landed
+`bm802_sweep_rows.txt` (363 boots) leg for leg:
+
+| id | lane | pristine |
+|---|---|---|
+| control-0/1/2 | CONTROL-OK | CONTROL-OK |
+| gateon-0, gateon-1 | refused | refused |
+| width-initrd | INERT | INERT |
+| width-pm-kernel | SENSITIVE | SENSITIVE |
+| width-stage2-code | INERT (stage 6, `tc@box:~$`) | INERT (stage 5, hostname banner) |
+| band-stage1-mbr-000 / -001 / -002 | INERT / SENSITIVE / INERT | INERT / SENSITIVE / INERT |
+| band-stage1-mbr-001#slow | DEAD | DEAD |
+
+12 of 12 verdicts agree, and the offsets and the computed gate values agree too;
+11 of 12 agree on stage. The twelfth is the documented Tiny Core autologin
+tty1/ttyS0 race — the shell prompt either lands in the captured serial window
+(stage 6) or does not (stage 5), which changes nothing about the fault's
+classification since both are "the boot went on". The derived boot budget also
+differs by run (38.1 s there, 47.1 s here) because each run re-derives it from
+its own three controls at 3x the median; the recheck leg then runs at 3x that,
+which is why `#slow` took 141 s here.
+
+## What this row still does not do from a clean tree
+
+The 319-boot sensitivity map itself. It is reproducible — the plan, the rig and
+the budget derivation all re-derived clean above, and the driver's header
+carries the relaunch command — but its numbers were measured once, on this box,
+over the ~165 min the plan itself prints, and re-running it in a scratch tree
+would spend that much TCG to re-measure a shape that has not moved.

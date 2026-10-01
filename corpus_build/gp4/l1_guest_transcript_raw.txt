@@ -1,0 +1,12 @@
+📤 Running Hermes in guest: mkdir -p /var/tmp/gp4_1789617660 && { echo "== GP4 SELF-OBSERVATION 1789617660 =="; grep -E '^(Name|Pid|PPid|Umask|Threads|TracerPid):' /proc/self/status; echo '-- fd --'; ls -l /proc/self/fd 2>/dev/null | head -8; } > /var/tmp/gp4_1789617660/proc_snapshot.txt 2>&1; echo GP4N1-1789617660 > /var/tmp/gp4_1789617660/nonce1.txt; echo GP4N1-1789617660 >> /var/tmp/gp4_1789617660/self_log.txt; echo DONE-1789617660
+
+✅ Success
+
+Output:
+Done — exit code 0, output `DONE-1789617660`.
+
+Files created under /var/tmp/gp4_1789617660/:
+
+- proc_snapshot.txt — captured `grep`'s view of itself (Name: grep, Pid 51958, PPid 51955, Umask 0002, TracerPid 0, Threads 1) plus its fds: 0→/dev/null, 1→pipe (captured stdout), 2→/dev/null, 3→/proc/51959/fd
+- nonce1.txt — contains GP4N1-1789617660
+- self_log.txt — one line: GP4N1-1789617660

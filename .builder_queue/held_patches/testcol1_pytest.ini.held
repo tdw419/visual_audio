@@ -1,0 +1,11 @@
+[pytest]
+# TEST-COL-1: Bound repo-wide pytest collection sweep to active project directories.
+# The following trees and patterns are intentionally outside the declared sweep:
+#   - venv.broken, venv, .venv_test, test_env (virtual environments / external dependencies)
+#   - lib (vendored third-party libraries)
+#   - initramfs-cognitive (initramfs image build tree)
+#   - root-level test_*.py scratch scripts (one-off scratch probes, not part of regression suites)
+# See systems/GLYPH_SELF_HOSTING_ROADMAP.md row TEST-COL-1 and receipt.
+
+pythonpath = .
+testpaths = tests tools systems output glyph_dispatch pixel_interpreter route_b external deepseek-harness

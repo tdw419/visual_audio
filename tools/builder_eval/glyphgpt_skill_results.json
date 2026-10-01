@@ -1,0 +1,54 @@
+{
+  "ts": "2026-09-12T14:16:37-0500",
+  "A_B": {
+    "skill_path": "/home/jericho/.hermes/skills/geometry-os/glyph-teleoperation/SKILL.md",
+    "skill_bytes": 6814,
+    "skill_lines": 70,
+    "max_seq_len": 128,
+    "vocab_size": 77,
+    "tokenized": true,
+    "n_tokens": 837,
+    "first_tokens": [
+      1,
+      3,
+      6,
+      6,
+      6,
+      3,
+      6,
+      5,
+      5,
+      5,
+      3,
+      6,
+      6,
+      6,
+      3,
+      6,
+      6,
+      3,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6
+    ],
+    "best_case_positions_needed": 6830,
+    "oversubscription_x": 53.4
+  },
+  "C": {
+    "seed_tile": "?",
+    "n": 16,
+    "best_score": -3,
+    "score_histogram": {
+      "-4": 14,
+      "-3": 2
+    },
+    "halted": false,
+    "accepted": false,
+    "detail": "ValueError: not enough values to unpack (expected 2, got 1)",
+    "wall_s": 6.79,
+    "ms_per_attempt": 424.3
+  }
+}

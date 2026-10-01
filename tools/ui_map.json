@@ -1,0 +1,35 @@
+{
+  "resolution": [1024, 768],
+  "elements": {
+    "gdm.user_jericho": {
+      "x": 512,
+      "y": 384,
+      "description": "Center screen user tile on GDM login"
+    },
+    "gdm.password_field": {
+      "x": 512,
+      "y": 420,
+      "description": "Password input field after selecting user"
+    },
+    "gdm.unlock_button": {
+      "x": 512,
+      "y": 480,
+      "description": "Unlock/Submit button on login screen"
+    },
+    "gnome.activities": {
+      "x": 50,
+      "y": 15,
+      "description": "Top-left Activities menu button"
+    },
+    "gnome.show_apps": {
+      "x": 512,
+      "y": 740,
+      "description": "Show Applications grid button at bottom of dock"
+    },
+    "gnome.terminal_icon": {
+      "x": 400,
+      "y": 740,
+      "description": "Terminal icon in the dock (assuming standard placement)"
+    }
+  }
+}

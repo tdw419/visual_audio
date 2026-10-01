@@ -1,0 +1,15 @@
+# Probe: the 4 baseline TIMEOUTs re-run at their own budget (-t 400, -w 1, 12 GiB scope)
+# command: for f in <the 4>; do suite_sweep.sh -b 12G -w 4 -- suite_iso_harness.py tests/$f.py -t 400 -w 1; done
+test_xv6_boot_regression.py     TIMEOUT 400.11s rc=-9 coll=0 pass=0 fail=0   <- coll=0: hangs BEFORE collection
+test_probe_stval.py             TIMEOUT 400.43s rc=-9 coll=0 pass=0 fail=0   <- coll=0: hangs BEFORE collection
+test_pixel_lm_train.py          PASS    80.16s  rc=0  coll=6 pass=6 fail=0
+test_ollama_security_analysis.py FAIL   387.46s rc=1  coll=37 pass=36 fail=1
+
+## CORRECTION 2026-09-13 (this file's conclusion was WRONG)
+
+The coll=0 readings below were read as collection hangs. Refuted by direct probe:
+`pytest --collect-only -q` collects 2 tests from test_xv6_boot_regression.py in
+0.14s and 1 from test_probe_stval.py in 0.18s. coll=0 is a PARSER ARTIFACT: on a
+timeout SIGKILL pytest never writes --junitxml and -q prints dots, not test names,
+so suite_iso_harness.py:154,228 defaults every count to 0. Both files are heavy
+EXECUTION workloads, not import-time stalls. See roadmap row SUITE-COLLECT-1 (corrected).

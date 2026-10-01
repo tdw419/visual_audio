@@ -1,0 +1,132 @@
+; synth_loop.glyph
+; Demonstrates automatic 2D spatial routing for loop blocks
+
+ORG (0, 1)
+
+; --- 1. SETUP DEMO REGISTERS ---
+; REG_CUR_X = 5
+SET 5
+STORE (40, 0)
+
+; REG_CUR_Y = 2
+SET 2
+STORE (41, 0)
+
+; REG_BLOCK_ORIGIN_X = 1
+SET 1
+STORE (42, 0)
+
+; --- 2. CALL THE SYNTHESIZER ROUTINE ---
+CALL :synth_loop_closure
+
+; --- 3. DONE ---
+HALT
+
+
+; ==============================================================================
+; SUBROUTINE: synth_loop_closure
+; Wraps current placement run into a closed 2D spatial circuit
+; Input:  REG_CUR_X (40, 0), REG_CUR_Y (41, 0), REG_BLOCK_ORIGIN_X (42, 0)
+; ==============================================================================
+:synth_loop_closure
+; 1. Stamp DIR_DOWN (25) at end of forward pass
+LOAD (40, 0)
+STORE (9, 0)            ; Target X
+LOAD (41, 0)
+STORE (10, 0)           ; Target Y
+SET 25                  ; OP_DIR_DOWN
+STORE (11, 0)
+CALL :emit_channel_r
+
+; 2. Advance to return track (Y + 1)
+LOAD (41, 0)
+ADD 1
+STORE (41, 0)
+
+; 3. Stamp SPLIT_H (28) at (Current_X, Y + 1)
+LOAD (40, 0)
+STORE (9, 0)
+LOAD (41, 0)
+STORE (10, 0)
+SET 28                  ; OP_SPLIT_H
+STORE (11, 0)
+CALL :emit_channel_r
+
+; 4. Stamp Exit Port (HALT at Current_X + 1, Y + 1)
+LOAD (40, 0)
+ADD 1
+STORE (9, 0)
+LOAD (41, 0)
+STORE (10, 0)
+SET 255                 ; OP_HALT
+STORE (11, 0)
+CALL :emit_channel_r
+
+; 5. Route Westward to Loop Origin
+:route_west_loop
+LOAD (40, 0)
+SUB 1
+STORE (40, 0)
+
+; Check if we reached REG_BLOCK_ORIGIN_X
+LOAD (42, 0)
+STORE (151, 0)          ; Save REG_BLOCK_ORIGIN_X to temp
+
+; Patch :dynamic_sub with REG_BLOCK_ORIGIN_X
+SET_ADDR_HIGH 100
+SET_ADDR_LOW 1
+CH_WRITE_MEM (151, 0) 2
+
+; Now run the patched SUB instruction
+LOAD (40, 0)
+JMP :dynamic_sub
+
+:after_sub
+JZ :close_upward_port
+
+; Lay intermediate DIR_LEFT tile if needed, or leave clear for left traversal
+LOAD (40, 0)
+STORE (9, 0)
+LOAD (41, 0)
+STORE (10, 0)
+SET 26                  ; OP_DIR_LEFT
+STORE (11, 0)
+CALL :emit_channel_r
+JMP :route_west_loop
+
+; 6. Stamp DIR_UP (27) to feed back into loop start
+:close_upward_port
+LOAD (42, 0)
+STORE (9, 0)
+LOAD (41, 0)
+STORE (10, 0)
+SET 27                  ; OP_DIR_UP
+STORE (11, 0)
+CALL :emit_channel_r
+
+RET
+
+
+; ==============================================================================
+; SUBROUTINE: emit_channel_r
+; Emits opcode in (11, 0) to R channel at coordinate ( (9, 0), (10, 0) )
+; ==============================================================================
+:emit_channel_r
+LOAD (9, 0)
+STORE (100, 0)
+LOAD (10, 0)
+STORE (101, 0)
+
+LOAD (11, 0)
+STORE (102, 0)
+
+LOAD_COORD (100, 101)
+CH_WRITE_MEM (102, 0) 0
+
+RET
+
+; --- ISOLATED CODE BLOCKS ---
+ORG (100, 1)
+:dynamic_sub
+SUB 0
+JMP :after_sub

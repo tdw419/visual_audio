@@ -1,0 +1,3 @@
+#!/bin/sh
+# probe_run_arg_af3e runner fixture: record argv[1] into a fixed marker file
+printf 'ARG1=[%s]' "$1" > /tmp/b5_marker2

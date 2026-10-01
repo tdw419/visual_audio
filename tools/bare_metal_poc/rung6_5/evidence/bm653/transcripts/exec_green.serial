@@ -1,0 +1,35 @@
+BM903-S1
+BM903-S1 JUMP STAGE2
+BM903-S2 ENTER
+BM903-S2 PMODE
+BM903-S2 A20 OK
+BM903-S2 PIXEL WALK DONE
+BM903-S2 ECC=00000000 PAR=00000000
+BM903-S2 GATE2 CRC=2C14707B EXP=2C14707B
+BM903-S2 GATE2=PASS
+IMG2EXEC BANNER NID=EE1B
+BM903-S2 EXEC=OK
+
+BM903-S2 HANDOFF BUILT
+init started: BusyBox v1.29.3 (2018-12-19 15:29:37 UTC)
+[H[J[1;32mBooting [1;33mCore 10.1 [0;39m
+[1;32mRunning Linux Kernel [1;33m4.19.10-tinycore[1;32m.[0;39m
+[1;34mChecking boot options...[0;39m[1;32m Done.[0;39m
+[1;34mStarting udev daemon for hotplug support...[0;39m/[1;32m Done.[0;39m
+[1;34mScanning hard disk partitions to create [1;33m/etc/fstab [0;39m
+[1;32mSetting Language to [1;35mC[1;32m Done.[0;39m
+[1;32mPossible swap partition(s) enabled.[0;39m
+[1;34mLoading extensions...[0;39m/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-[1;32m Done.[0;39m
+[1;32mSetting keymap to [1;35mus[1;32m Done.[0;39m
+[1;32mSetting hostname to [1;35mbox[0;39m [1;32mDone.[0;39m
+
+   ( '>')
+  /) TC (\   Core is distributed with ABSOLUTELY NO WARRANTY.
+ (/-_--_-\)           www.tinycorelinux.net
+
+login[490]: root login on 'ttyS0'
+[H[J   ( '>')
+  /) TC (\   Core is distributed with ABSOLUTELY NO WARRANTY.
+ (/-_--_-\)           www.tinycorelinux.net
+
+tc@box:~$ 

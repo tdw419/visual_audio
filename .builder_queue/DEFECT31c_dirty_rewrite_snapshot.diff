@@ -1,0 +1,198 @@
+diff --git a/tools/rv64i_to_glyph.py b/tools/rv64i_to_glyph.py
+index 764366de..6ed005f1 100755
+--- a/tools/rv64i_to_glyph.py
++++ b/tools/rv64i_to_glyph.py
+@@ -1036,31 +1036,85 @@ def transpile_rv32i_to_glyph(
+         # hardware r31 stack (the same mechanism CALL/RET use; safe here
+         # because the SB sequence never spans a CALL/RET boundary).
+         elif op == OP_SB:
++            # DEFECT-31c (2026-09-25, af3e takeover tick; RED repro
++            # .builder_queue/dbg_d30_iso_sb_base_af3e.py — `sb` with base
++            # x30 stores nothing while a non-scratch control stores fine;
++            # sort/bytewise_numeric read back NULs through this shape).
++            # Engine truth (dbg_d30_engine_add_matrix*.py): the address
++            # temp must NEVER be rs1's own register — `LDI _a imm` into
++            # rs1's register destroys the base before `ADD` reads it.
++            # r26..r30 are ALL live RV temporaries (consecutive SBs
++            # re-read their base from x30), so save/restore the full
++            # set. Shape: push 26..30; capture value into saved r26
++            # FIRST (rs2 read before churn; rs2==x26 masks in place,
++            # rs1==x26 stages the address before that); stage the
++            # address into _a where _a != rs1; shift/cur pick the two
++            # scratch regs left over.
+             lines.append("PUSH r26")
+             lines.append("PUSH r27")
+-            lines.append(f"LDI r30 0x{imm & 0xFFFFFFFF:x}")
+-            _emit_add_reg(lines, "r30", rs1)
+-            lines.append("LDI r28 3")
+-            lines.append("AND r28 r30")
+-            lines.append("LDI r29 3")
+-            lines.append("SHL r28 r29")            # r28 = shift, kept below
+-            lines.append(f"LDI r30 0x{imm & 0xFFFFFFFF:x}")
+-            _emit_add_reg(lines, "r30", rs1)
+-            if byte_to_word_mem:
+-                lines.append("LDI r29 2")
+-                lines.append("SHR r30 r29")          # r30 = word_addr, kept below
+-            lines.append("LD r29 r30")                # r29 = cur_word
+-            lines.append("LDI r27 0xff")
+-            lines.append("SHL r27 r28")                # r27 = mask (0xFF<<shift)
+-            lines.append("OR r29 r27")
+-            lines.append("XOR r29 r27")                 # r29 = cur_word, lane cleared
+-            lines.append("LDI r26 0")
+-            _emit_add_reg(lines, "r26", rs2)
++            lines.append("PUSH r28")
++            lines.append("PUSH r29")
++            lines.append("PUSH r30")
++            _staged = False
++            if rs1 == 26:
++                # base lives in saved r26: stage address before the
++                # value capture reuses r26
++                lines.append(f"LDI r30 0x{imm & 0xFFFFFFFF:x}")
++                _emit_add_reg(lines, "r30", rs1)
++                _staged = True
++            if rs2 == 26:
++                lines.append("LDI r27 0xff")
++                lines.append("AND r26 r27")
++            else:
++                lines.append("LDI r26 0")
++                _emit_add_reg(lines, "r26", rs2)
++                lines.append("LDI r27 0xff")
++                lines.append("AND r26 r27")
++            if not _staged:
++                _a = "r28" if rs1 == 30 else "r30"
++                lines.append(f"LDI {_a} 0x{imm & 0xFFFFFFFF:x}")
++                _emit_add_reg(lines, _a, rs1)
++            else:
++                _a = "r30"
++            if _a == "r30":
++                _s, _c = "r28", "r29"
++            else:                                # _a == r28 (rs1 was x30)
++                _s, _c = "r29", "r30"
++            if _a == "r30":
++                lines.append("LDI r28 3")
++                lines.append("AND r28 r30")
++                lines.append("LDI r29 3")
++                lines.append("SHL r28 r29")            # r28 = shift
++                if byte_to_word_mem:
++                    lines.append("LDI r29 2")
++                    lines.append("SHR r30 r29")        # r30 = word_addr
++                lines.append("LD r29 r30")             # r29 = cur_word
++                _s, _c = "r28", "r29"
++            else:
++                # DEFECT-31c fix (af3e, 2026-09-25 ~10:2x CDT): byte lane
++                # extract must mask with 3 (lane = addr&3), not 2 — mask 2
++                # was copied from the OP_SH shape and mis-shifts lanes 1/3
++                # (RED repro: tests/test_rv64i_to_glyph_xv6_nano.py 4F/9P,
++                # SpatialMisalignmentFault PC.x=1953 not aligned to 4).
++                lines.append("LDI r29 3")
++                lines.append("AND r29 r28")
++                lines.append("LDI r30 3")
++                lines.append("SHL r29 r30")            # r29 = shift
++                if byte_to_word_mem:
++                    lines.append("LDI r30 2")
++                    lines.append("SHR r28 r30")        # r28 = word_addr
++                lines.append("LD r30 r28")             # r30 = cur_word
++                _s, _c = "r29", "r30"
+             lines.append("LDI r27 0xff")
+-            lines.append("AND r26 r27")
+-            lines.append("SHL r26 r28")                 # r26 = (rs2&0xff)<<shift
+-            lines.append("OR r29 r26")
+-            lines.append("ST r30 r29")
++            lines.append(f"SHL r27 {_s}")              # r27 = mask (0xFF<<shift)
++            lines.append(f"OR {_c} r27")
++            lines.append(f"XOR {_c} r27")               # cur_word, lane cleared
++            lines.append(f"SHL r26 {_s}")               # r26 = (val&0xff)<<shift
++            lines.append(f"OR {_c} r26")
++            lines.append(f"ST {_a} {_c}")
++            lines.append("POP r30")
++            lines.append("POP r29")
++            lines.append("POP r28")
+             lines.append("POP r27")                     # DEFECT 11: restore
+             lines.append("POP r26")                     #   the callee-saved regs
+ 
+@@ -1109,31 +1163,64 @@ def transpile_rv32i_to_glyph(
+         # but with a 0xFFFF lane mask and shift = (addr&2)<<3. Same DEFECT 11
+         # fix: PUSH/POP r26/r27 around the RMW (see the SB comment).
+         elif op == OP_SH:
++            # DEFECT-31c (same fix shape as OP_SB above): save/restore
++            # ALL of r26..r30 (they are live RV temporaries), value
++            # captured into saved r26 first (rs1==x26 stages the address
++            # before that), address staged into _a where _a != rs1.
+             lines.append("PUSH r26")
+             lines.append("PUSH r27")
+-            lines.append(f"LDI r30 0x{imm & 0xFFFFFFFF:x}")
+-            _emit_add_reg(lines, "r30", rs1)
+-            lines.append("LDI r28 2")
+-            lines.append("AND r28 r30")
+-            lines.append("LDI r29 3")
+-            lines.append("SHL r28 r29")            # r28 = shift, kept below
+-            lines.append(f"LDI r30 0x{imm & 0xFFFFFFFF:x}")
+-            _emit_add_reg(lines, "r30", rs1)
+-            if byte_to_word_mem:
++            lines.append("PUSH r28")
++            lines.append("PUSH r29")
++            lines.append("PUSH r30")
++            _staged = False
++            if rs1 == 26:
++                lines.append(f"LDI r30 0x{imm & 0xFFFFFFFF:x}")
++                _emit_add_reg(lines, "r30", rs1)
++                _staged = True
++            if rs2 == 26:
++                lines.append("LDI r27 0xffff")
++                lines.append("AND r26 r27")
++            else:
++                lines.append("LDI r26 0")
++                _emit_add_reg(lines, "r26", rs2)
++                lines.append("LDI r27 0xffff")
++                lines.append("AND r26 r27")
++            if not _staged:
++                _a = "r28" if rs1 == 30 else "r30"
++                lines.append(f"LDI {_a} 0x{imm & 0xFFFFFFFF:x}")
++                _emit_add_reg(lines, _a, rs1)
++            else:
++                _a = "r30"
++            if _a == "r30":
++                lines.append("LDI r28 2")
++                lines.append("AND r28 r30")
++                lines.append("LDI r29 3")
++                lines.append("SHL r28 r29")            # r28 = shift
++                if byte_to_word_mem:
++                    lines.append("LDI r29 2")
++                    lines.append("SHR r30 r29")        # r30 = word_addr
++                lines.append("LD r29 r30")             # r29 = cur_word
++                _s, _c = "r28", "r29"
++            else:
+                 lines.append("LDI r29 2")
+-                lines.append("SHR r30 r29")          # r30 = word_addr, kept below
+-            lines.append("LD r29 r30")                # r29 = cur_word
+-            lines.append("LDI r27 0xffff")
+-            lines.append("SHL r27 r28")                # r27 = mask (0xFFFF<<shift)
+-            lines.append("OR r29 r27")
+-            lines.append("XOR r29 r27")                 # r29 = cur_word, lane cleared
+-            lines.append("LDI r26 0")
+-            _emit_add_reg(lines, "r26", rs2)
++                lines.append("AND r29 r28")
++                lines.append("LDI r30 3")
++                lines.append("SHL r29 r30")            # r29 = shift
++                if byte_to_word_mem:
++                    lines.append("LDI r30 2")
++                    lines.append("SHR r28 r30")        # r28 = word_addr
++                lines.append("LD r30 r28")             # r30 = cur_word
++                _s, _c = "r29", "r30"
+             lines.append("LDI r27 0xffff")
+-            lines.append("AND r26 r27")
+-            lines.append("SHL r26 r28")                 # r26 = (rs2&0xffff)<<shift
+-            lines.append("OR r29 r26")
+-            lines.append("ST r30 r29")
++            lines.append(f"SHL r27 {_s}")              # r27 = mask (0xFFFF<<shift)
++            lines.append(f"OR {_c} r27")
++            lines.append(f"XOR {_c} r27")               # cur_word, lane cleared
++            lines.append(f"SHL r26 {_s}")               # r26 = (val&0xffff)<<shift
++            lines.append(f"OR {_c} r26")
++            lines.append(f"ST {_a} {_c}")
++            lines.append("POP r30")
++            lines.append("POP r29")
++            lines.append("POP r28")
+             lines.append("POP r27")                     # DEFECT 11: restore
+             lines.append("POP r26")                     #   the callee-saved regs
+ 

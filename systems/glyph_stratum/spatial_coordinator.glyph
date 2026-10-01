@@ -1,0 +1,33 @@
+┌────────────────────────────────────────────────────────────┐
+│  SPATIAL PROGRAM COORDINATOR v1.0                         │
+│  "The Screen is the Mind" - Window Spawner                │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│   :boot_coordinator                                       │
+│   LDI r0, 0x1000       ; Spatial Address: Window 1        │
+│   LDI r1, 0x2000       ; Spatial Address: Window 2        │
+│   LDI r2, 1            ; Window ID counter                │
+│                                                            │
+│   :spawn_windows                                          │
+│   ; --- Patch-and-Copy Emission ---                       │
+│   ; Load template opcode from atlas                       │
+│   LDI r3, 0x80         ; Template: Base Window Opcode     │
+│                                                            │
+│   ; Patch register operand using bitwise OR               │
+│   OR r4, r3, r2        ; Patch in the Window ID           │
+│                                                            │
+│   ; Write executable program to spatial memory            │
+│   STORE r4, [r0]       ; GPU writes to Window 1 region    │
+│   ADD r0, r0, 0x100    ; Advance spatial pointer          │
+│                                                            │
+│   ; Coordinate next window                                │
+│   ADD r2, r2, 1        ; Next Window ID                   │
+│   OR r4, r3, r2        ; Patch in the Window ID           │
+│   STORE r4, [r1]       ; GPU writes to Window 2 region    │
+│                                                            │
+│   :yield_to_incubator                                     │
+│   ; Windows are now autonomous regions of instructions.   │
+│   ; Relinquish control back to WGPU execution substrate.  │
+│   HALT                 ; Stop coordinator thread          │
+│                                                            │
+└────────────────────────────────────────────────────────────┘

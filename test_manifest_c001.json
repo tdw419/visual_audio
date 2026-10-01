@@ -1,0 +1,21 @@
+{
+  "canvas": [400, 300, "#202020"],
+  "blocks": {
+    "label": {
+      "params": ["txt", "col"],
+      "ops": [["word", "$txt", 4, 14, "$col"]]
+    },
+    "button": {
+      "params": ["txt"],
+      "ops": [
+        ["frame", 0, 0, 100, 24, "#3b82f6"],
+        ["op", "spatial_set", 5, 5, 10, 10, "#ff0000"],
+        ["place", "label", 8, 5, {"txt": "$txt", "col": "#ffffff"}]
+      ]
+    }
+  },
+  "main": [
+    ["place", "button", 20, 20, {"txt": "open"}],
+    ["place", "button", 20, 60, {"txt": "save"}]
+  ]
+}

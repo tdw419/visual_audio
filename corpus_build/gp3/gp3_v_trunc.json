@@ -1,0 +1,11 @@
+{
+ "guest_path": "/var/tmp/gp3_1789615295/truncrw/f.bin",
+ "size": 29,
+ "recon_sha256": "3e7166cf09043b3aa76c833f05e743f5fbb05c503a5722e1ba5299f0f5541807",
+ "expected_sha256": "3e7166cf09043b3aa76c833f05e743f5fbb05c503a5722e1ba5299f0f5541807",
+ "match": true,
+ "frames_read": [
+  39
+ ],
+ "note": "ok"
+}

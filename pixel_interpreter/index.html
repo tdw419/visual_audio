@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Pixel CPU Visual Shell</title>
+  <script src="https://pixijs.download/v7.3.2/pixi.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      background: #0d0f12;
+      color: #00ffcc;
+      font-family: monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      overflow: hidden;
+    }
+    #hud, #inspector-hud {
+      display: flex;
+      gap: 20px;
+      background: #161b22;
+      padding: 8px 16px;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+    }
+    #hud {
+      margin-bottom: 8px;
+    }
+    #inspector-hud {
+      margin-bottom: 12px;
+      color: #58a6ff;
+    }
+    #controls {
+      margin-top: 12px;
+      display: flex;
+      gap: 10px;
+    }
+    button {
+      background: #21262d;
+      color: #58a6ff;
+      border: 1px solid #30363d;
+      padding: 6px 14px;
+      font-family: monospace;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    button:hover { background: #30363d; }
+    canvas {
+      border: 2px solid #30363d;
+      image-rendering: pixelated;
+    }
+    .val { font-weight: bold; color: #fff; }
+  </style>
+</head>
+<body>
+
+  <div id="hud">
+    <div>CYCLES: <span class="val" id="val-cycle">0</span></div>
+    <div>PC: (<span class="val" id="val-pc">0, 0</span>)</div>
+    <div>ACC: <span class="val" id="val-acc">0</span></div>
+    <div>ZF: <span class="val" id="val-zf">0</span></div>
+    <div>STATUS: <span class="val" id="val-status">PAUSED</span></div>
+  </div>
+
+  <div id="inspector-hud" style="flex-direction:column;">
+    <div style="display:flex; gap: 20px;">
+      <div>INSPECTOR [X:<span class="val" id="ins-x">-</span> Y:<span class="val" id="ins-y">-</span>]</div>
+      <div>R(Op): <span class="val" id="ins-r">-</span></div>
+      <div>G(A/X): <span class="val" id="ins-g">-</span></div>
+      <div>B(B/Y): <span class="val" id="ins-b">-</span></div>
+      <div>A(Dst): <span class="val" id="ins-a">-</span></div>
+    </div>
+    <div style="display: flex; gap: 6px; margin-top: 6px;">
+      <button id="btn-bp-write" onclick="toggleBreakpoint('write')">BREAK ON WRITE</button>
+      <button id="btn-bp-pc" onclick="toggleBreakpoint('pc')">BREAK ON PC</button>
+      <button onclick="sendCmd('clear_all_bp')">CLEAR ALL WATCHPOINTS</button>
+    </div>
+  </div>
+
+  <div id="canvas-container"></div>
+
+  <div id="controls">
+    <button onclick="sendCmd('play')">PLAY</button>
+    <button onclick="sendCmd('pause')">PAUSE</button>
+    <button onclick="sendCmd('step')">STEP 1</button>
+    <button onclick="sendCmd('set_speed', {cycles: 1})">1x</button>
+    <button onclick="sendCmd('set_speed', {cycles: 16})">16x</button>
+    <button onclick="sendCmd('set_speed', {cycles: 64})">64x</button>
+    <button onclick="sendCmd('reset')">RESET</button>
+  </div>
+<!-- Floating Opcode & Bytecode Editor Dock -->
+<div id="ast-editor-dock" style="display: none;">
+  <div class="panel-header">IN-PIXEL AST EDITOR</div>
+  <div class="row">
+    <span class="lbl">Target:</span>
+    <span id="editor-coord" style="color: #00ffcc;">(0, 1)</span>
+  </div>
+
+  <div class="row" style="margin-top: 6px;">
+    <span class="lbl">Opcode:</span>
+    <select id="edit-op" onchange="updateEditorPreview()">
+      <option value="0">0: NOP</option>
+      <option value="1">1: SET [Imm]</option>
+      <option value="2">2: ADD [Imm/SrcB]</option>
+      <option value="3">3: SUB [Imm/SrcB]</option>
+      <option value="4">4: LOAD (X, Y)</option>
+      <option value="5">5: STORE (X, Y)</option>
+      <option value="6">6: JMP (X, Y)</option>
+      <option value="7">7: JZ (X, Y)</option>
+      <option value="8">8: INDIRECT_LOAD</option>
+      <option value="9">9: INDIRECT_STORE [Imm]</option>
+      <option value="10">10: SET_ADDR_HIGH [Imm]</option>
+      <option value="11">11: SET_ADDR_LOW [Imm]</option>
+      <option value="12">12: ADD_COORD [Imm]</option>
+      <option value="13">13: LOAD_COORD (X, Y)</option>
+      <option value="14">14: MUL [Imm]</option>
+      <option value="15">15: CALL (X, Y)</option>
+      <option value="16">16: RET</option>
+      <option value="17">17: AND [Imm]</option>
+      <option value="19">19: CTX_SAVE (X, Y)</option>
+      <option value="20">20: CTX_LOAD (X, Y)</option>
+      <option value="255">255: HALT</option>
+    </select>
+  </div>
+
+  <!-- Dynamic Parameter Inputs -->
+  <div id="editor-fields" style="margin-top: 8px;">
+    <div class="row" id="row-src-a">
+      <span class="lbl">G (SrcA / X):</span>
+      <input type="number" id="edit-g" min="0" max="255" value="0" oninput="updateEditorPreview()">
+    </div>
+    <div class="row" id="row-src-b">
+      <span class="lbl">B (SrcB / Y):</span>
+      <input type="number" id="edit-b" min="0" max="255" value="0" oninput="updateEditorPreview()">
+    </div>
+    <div class="row" id="row-dst">
+      <span class="lbl">A (Dst / Imm):</span>
+      <input type="number" id="edit-a" min="0" max="65535" value="0" oninput="updateEditorPreview()">
+    </div>
+  </div>
+
+  <div class="row divider"></div>
+  <div class="row">
+    <span class="lbl">Preview:</span>
+    <span id="editor-preview" class="glyph-code">NOP</span>
+  </div>
+
+  <div style="display: flex; gap: 8px; margin-top: 10px;">
+    <button onclick="commitBytecodePatch(true)" style="flex: 1; background: #238636; color: #fff;">PATCH & NEXT</button>
+    <button onclick="commitBytecodePatch(false)">PATCH</button>
+    <button onclick="closeEditor()">CLOSE</button>
+  </div>
+</div>
+
+<style>
+  #ast-editor-dock {
+    position: fixed;
+    top: 70px;
+    right: 20px;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-top: 3px solid #00ffcc;
+    border-radius: 6px;
+    padding: 12px;
+    width: 280px;
+    font-family: monospace;
+    font-size: 12px;
+    color: #c9d1d9;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.7);
+    z-index: 500;
+  }
+  #ast-editor-dock select, #ast-editor-dock input {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    color: #58a6ff;
+    font-family: monospace;
+    padding: 3px 6px;
+    border-radius: 4px;
+    width: 120px;
+  }
+  
+  #spatial-terminal {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    background: rgba(22, 27, 34, 0.95);
+    border: 1px solid #30363d;
+    border-left: 3px solid #58a6ff;
+    border-radius: 6px;
+    padding: 10px;
+    width: 320px;
+    font-family: monospace;
+    z-index: 600;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(4px);
+  }
+  #terminal-input {
+    width: 100%;
+    box-sizing: border-box;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    color: #58a6ff;
+    font-family: monospace;
+    font-size: 11px;
+    line-height: 1.4;
+    padding: 6px;
+    border-radius: 4px;
+    resize: vertical;
+    margin-top: 6px;
+  }
+  #terminal-input:focus {
+    outline: none;
+    border-color: #00ffcc;
+  }
+</style>
+
+<!-- Floating Live Text Terminal -->
+<div id="spatial-terminal">
+  <div class="panel-header" style="display: flex; justify-content: space-between;">
+    <span>PIXEL OS SPATIAL CONSOLE</span>
+    <button onclick="toggleTerminal()" style="padding: 1px 6px; font-size: 10px; cursor: pointer; background: #30363d; color: #fff; border: 1px solid #8b949e; border-radius: 4px;">_</button>
+  </div>
+  
+  <textarea id="terminal-input" rows="5" spellcheck="false" placeholder="Type ASCII assembly...
+SET 5
+LOOP: SUB 1
+JNZ LOOP
+HALT"></textarea>
+
+  <div style="display: flex; gap: 8px; margin-top: 6px;">
+    <button onclick="submitSource()" style="flex: 1; background: #238636; color: #fff; font-weight: bold; cursor: pointer; border: none; border-radius: 4px; padding: 4px;">
+      ⚡ INGEST & SYNTHESIZE
+    </button>
+    <button onclick="clearTerminal()" style="cursor: pointer; background: #30363d; color: #fff; border: 1px solid #8b949e; border-radius: 4px; padding: 4px;">CLEAR</button>
+  </div>
+</div>
+
+  <script>
+    const WIDTH = 256;
+    const HEIGHT = 256;
+    const SCALE = 3;
+
+    const app = new PIXI.Application({
+      width: WIDTH * SCALE,
+      height: HEIGHT * SCALE,
+      backgroundColor: 0x000000,
+      resolution: window.devicePixelRatio || 1,
+      autoDensity: true,
+    });
+    document.getElementById("canvas-container").appendChild(app.view);
+
+    const viewportContainer = new PIXI.Container();
+    viewportContainer.scale.set(SCALE);
+    app.stage.addChild(viewportContainer);
+
+    const buffer = new Uint8Array(WIDTH * HEIGHT * 4);
+    const baseTexture = PIXI.BaseTexture.fromBuffer(buffer, WIDTH, HEIGHT, {
+      scaleMode: PIXI.SCALE_MODES.NEAREST,
+      format: PIXI.FORMATS.RGBA,
+    });
+    const texture = new PIXI.Texture(baseTexture);
+    const sprite = new PIXI.Sprite(texture);
+    viewportContainer.addChild(sprite);
+
+    const bpGraphics = new PIXI.Graphics();
+    viewportContainer.addChild(bpGraphics);
+    
+    let activeBreakpoints = [];
+    let selectedPixel = {x: 0, y: 0};
+
+    function renderBreakpoints(breakpoints) {
+      bpGraphics.clear();
+      activeBreakpoints = breakpoints || [];
+      for (const bp of activeBreakpoints) {
+        const isWrite = bp.types.includes('write');
+        const isPC = bp.types.includes('pc');
+        
+        if (isWrite) {
+          bpGraphics.lineStyle(2 / viewportContainer.scale.x, 0xff00ff, 1);
+          bpGraphics.drawRect(bp.x, bp.y, 1, 1);
+        }
+        if (isPC) {
+          bpGraphics.beginFill(0xffcc00, 0.8);
+          bpGraphics.drawCircle(bp.x + 0.5, bp.y + 0.5, 0.3);
+          bpGraphics.endFill();
+        }
+      }
+    }
+
+    function toggleBreakpoint(type) {
+      sendCmd('toggle_bp', { x: selectedPixel.x, y: selectedPixel.y, type: type });
+    }
+
+    // Inspector Logic
+    sprite.interactive = true;
+    app.view.addEventListener('contextmenu', (e) => e.preventDefault());
+    sprite.on('rightdown', (e) => {
+      const pos = e.data.getLocalPosition(sprite);
+      const x = Math.floor(pos.x);
+      const y = Math.floor(pos.y);
+      if (x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT) {
+        selectedPixel = { x, y };
+        toggleBreakpoint('write');
+      }
+    });
+    
+    sprite.on('pointerdown', (e) => {
+      updateInspector(e);
+      if (e.data.originalEvent.shiftKey) {
+        const pos = e.data.getLocalPosition(sprite);
+        const x = Math.floor(pos.x);
+        const y = Math.floor(pos.y);
+        if (x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT) {
+          sendCmd('interrupt', { irq: 1, x, y });
+        }
+      }
+    });
+    sprite.on('pointermove', (e) => { updateInspector(e); });
+
+    function updateInspector(event) {
+      const pos = event.data.getLocalPosition(sprite);
+      const x = Math.floor(pos.x);
+      const y = Math.floor(pos.y);
+
+      if (x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT) {
+        selectedPixel = { x, y };
+        const idx = (y * WIDTH + x) * 4;
+        document.getElementById('ins-x').innerText = x;
+        document.getElementById('ins-y').innerText = y;
+        document.getElementById('ins-r').innerText = buffer[idx];
+        document.getElementById('ins-g').innerText = buffer[idx+1];
+        document.getElementById('ins-b').innerText = buffer[idx+2];
+        document.getElementById('ins-a').innerText = buffer[idx+3];
+      }
+    }
+
+    const heatmapGraphics = new PIXI.Graphics();
+    viewportContainer.addChild(heatmapGraphics);
+    
+    const heatmapReads = new Float32Array(WIDTH * HEIGHT);
+    const heatmapWrites = new Float32Array(WIDTH * HEIGHT);
+    
+    app.ticker.add(() => {
+      heatmapGraphics.clear();
+      for(let y = 0; y < HEIGHT; y++) {
+        for(let x = 0; x < WIDTH; x++) {
+          const idx = y * WIDTH + x;
+          let rIntensity = heatmapReads[idx];
+          let wIntensity = heatmapWrites[idx];
+          
+          if (rIntensity > 0.01 || wIntensity > 0.01) {
+            let r = Math.min(255, wIntensity * 255);
+            let b = Math.min(255, rIntensity * 255);
+            // Mix colors: write is red, read is blue
+            let color = (Math.floor(r) << 16) | (Math.floor(b));
+            let maxAlpha = Math.max(rIntensity, wIntensity);
+            
+            heatmapGraphics.beginFill(color, maxAlpha * 0.8);
+            heatmapGraphics.drawRect(x, y, 1, 1);
+            heatmapGraphics.endFill();
+            
+            heatmapReads[idx] *= 0.92;
+            heatmapWrites[idx] *= 0.92;
+          } else {
+            heatmapReads[idx] = 0;
+            heatmapWrites[idx] = 0;
+          }
+        }
+      }
+    });
+
+    // WebSocket link
+    const ws = new WebSocket("ws://localhost:8765");
+    ws.binaryType = "arraybuffer";
+
+    ws.onmessage = (event) => {
+      const data = new DataView(event.data);
+      const metaLen = data.getUint32(0, true);
+      
+      const metaBytes = new Uint8Array(event.data, 4, metaLen);
+      const metaStr = new TextDecoder().decode(metaBytes);
+      const meta = JSON.parse(metaStr);
+
+      // Update HUD
+      document.getElementById("val-cycle").innerText = meta.cycle;
+      document.getElementById("val-pc").innerText = `${meta.pc[0]}, ${meta.pc[1]}`;
+      document.getElementById("val-acc").innerText = meta.acc;
+      document.getElementById("val-zf").innerText = meta.zf;
+      document.getElementById("val-status").innerText = meta.halted ? "HALTED" : "RUNNING";
+
+      // Register heatmap hits
+      if (meta.reads) {
+          meta.reads.forEach(([x, y]) => { heatmapReads[y * WIDTH + x] = 1.0; });
+      }
+      if (meta.writes) {
+          meta.writes.forEach(([x, y]) => { heatmapWrites[y * WIDTH + x] = 1.0; });
+      }
+
+      // Update Pixel Texture
+      const pixelBytes = new Uint8Array(event.data, 4 + metaLen);
+      buffer.set(pixelBytes);
+      baseTexture.update();
+      
+      // Update inspector if we have cached coords? Not strictly necessary unless we want live updates of hovered cell
+    };
+
+    function sendCmd(action, extra = {}) {
+      ws.send(JSON.stringify({ action, ...extra }));
+    }
+
+    // Pan and Zoom logic
+    app.view.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const pointerPos = { x: e.offsetX, y: e.offsetY };
+        const oldScale = viewportContainer.scale.x;
+        const zoomDelta = e.deltaY < 0 ? 1.1 : (1 / 1.1);
+        const newScale = Math.max(0.5, Math.min(50, oldScale * zoomDelta));
+        
+        const scaleChange = newScale / oldScale;
+        viewportContainer.x = pointerPos.x - (pointerPos.x - viewportContainer.x) * scaleChange;
+        viewportContainer.y = pointerPos.y - (pointerPos.y - viewportContainer.y) * scaleChange;
+        viewportContainer.scale.set(newScale);
+        
+        renderBreakpoints(activeBreakpoints); // redraw to adjust line thickness
+    });
+
+    let isPanning = false;
+    let panStart = {x: 0, y: 0};
+    let containerStart = {x: 0, y: 0};
+
+    app.view.addEventListener('mousedown', (e) => {
+        if (e.button === 1 || e.altKey) {
+            e.preventDefault();
+            isPanning = true;
+            panStart = { x: e.clientX, y: e.clientY };
+            containerStart = { x: viewportContainer.x, y: viewportContainer.y };
+        }
+    });
+
+    app.view.addEventListener('mousemove', (e) => {
+        if (isPanning) {
+            const dx = e.clientX - panStart.x;
+            const dy = e.clientY - panStart.y;
+            viewportContainer.x = containerStart.x + dx;
+            viewportContainer.y = containerStart.y + dy;
+        }
+    });
+
+    window.addEventListener('mouseup', (e) => {
+        if (e.button === 1 || e.altKey) {
+            isPanning = false;
+        }
+    });
+
+    // --- AST EDITOR LOGIC ---
+    let editTarget = { x: 0, y: 1 };
+
+    function openEditorAt(x, y) {
+      editTarget = { x, y };
+      document.getElementById("editor-coord").innerText = `(${x}, ${y})`;
+      
+      const idx = (y * WIDTH + x) * 4;
+      const r = buffer[idx];
+      const g = buffer[idx + 1];
+      const b = buffer[idx + 2];
+      const a = buffer[idx + 3];
+
+      document.getElementById("edit-op").value = r;
+      document.getElementById("edit-g").value = g;
+      document.getElementById("edit-b").value = b;
+      document.getElementById("edit-a").value = a;
+
+      updateEditorPreview();
+      document.getElementById("ast-editor-dock").style.display = "block";
+    }
+
+    function closeEditor() {
+      document.getElementById("ast-editor-dock").style.display = "none";
+    }
+
+    function updateEditorPreview() {
+      const r = parseInt(document.getElementById("edit-op").value) || 0;
+      const g = parseInt(document.getElementById("edit-g").value) || 0;
+      const b = parseInt(document.getElementById("edit-b").value) || 0;
+      const a = parseInt(document.getElementById("edit-a").value) || 0;
+
+      const info = disassembleTexel(editTarget.x, editTarget.y, r, g, b, a);
+      document.getElementById("editor-preview").innerText = info.label;
+    }
+
+    function commitBytecodePatch(advanceNext = false) {
+      const r = parseInt(document.getElementById("edit-op").value) || 0;
+      const g = parseInt(document.getElementById("edit-g").value) || 0;
+      const b = parseInt(document.getElementById("edit-b").value) || 0;
+      const a = parseInt(document.getElementById("edit-a").value) || 0;
+
+      sendCmd("inject_bytecode", {
+        patches: [[editTarget.x, editTarget.y, r, g, b, a]]
+      });
+
+      const idx = (editTarget.y * WIDTH + editTarget.x) * 4;
+      buffer[idx]     = r;
+      buffer[idx + 1] = g;
+      buffer[idx + 2] = b;
+      buffer[idx + 3] = a;
+      baseTexture.update();
+
+      if (advanceNext) {
+        let nextX = editTarget.x + 1;
+        let nextY = editTarget.y;
+        if (nextX >= WIDTH) {
+          nextX = 0;
+          nextY = Math.min(127, nextY + 1);
+        }
+        openEditorAt(nextX, nextY);
+        inspectCoordinate(nextX, nextY, true);
+      }
+    }
+
+    app.view.addEventListener('dblclick', (e) => {
+      const rect = app.view.getBoundingClientRect();
+      const texX = Math.floor(((e.clientX - rect.left) - viewportContainer.x) / (SCALE * zoomScale));
+      const texY = Math.floor(((e.clientY - rect.top) - viewportContainer.y) / (SCALE * zoomScale));
+
+      if (texX >= 0 && texX < WIDTH && texY >= 1 && texY < 128) {
+        openEditorAt(texX, texY);
+      }
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') {
+        if (e.key === 'Enter') {
+          commitBytecodePatch(true);
+        } else if (e.key === 'Escape') {
+          closeEditor();
+        }
+        return;
+      }
+
+      if (e.key === 'e' || e.key === 'E') {
+        openEditorAt(selectedPixel.x, selectedPixel.y);
+      } else if (e.key === ' ') {
+        e.preventDefault();
+        sendCmd('step');
+      } else if (e.key === 'p' || e.key === 'P') {
+        sendCmd(document.getElementById("val-status").innerText === "RUNNING" ? 'pause' : 'play');
+      }
+    });
+
+    // --- Terminal Frontend Interaction Hooks ---
+    let terminalOpen = true;
+
+    function toggleTerminal() {
+      const area = document.getElementById("terminal-input");
+      terminalOpen = !terminalOpen;
+      area.style.display = terminalOpen ? "block" : "none";
+    }
+
+    function clearTerminal() {
+      document.getElementById("terminal-input").value = "";
+    }
+
+    function submitSource() {
+      const text = document.getElementById("terminal-input").value;
+      if (!text.trim()) return;
+
+      // Send raw ASCII payload to WebSocket
+      sendCmd("write_text", {
+        text: text,
+        entry_x: 0,
+        entry_y: 1 // Coordinate of the in-pixel lexer bootstrap
+      });
+
+      // Automatically switch speed to 64x so compilation happens in under a second
+      sendCmd("set_speed", { cycles: 64 });
+    }
+
+    // Hotkey: Press `T` or `~` to focus the in-canvas terminal
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+        if (e.key === 't' || e.key === 'T' || e.key === '`') {
+          e.preventDefault();
+          document.getElementById("terminal-input").focus();
+        }
+      }
+    });
+
+  </script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+total 1236
+drwxr-xr-x 149 root                 root                 12288 Sep 16 19:17 .
+drwxr-xr-x  23 root                 root                  4096 Sep 16 14:43 ..
+-rw-------   1 root                 root                     0 Aug  1 12:54 .pwd.lock
+-rw-r--r--   1 root                 root                   862 Aug  1 12:54 .resolv.conf.systemd-resolved.bak

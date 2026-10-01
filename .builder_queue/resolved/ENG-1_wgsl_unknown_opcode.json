@@ -1,0 +1,10 @@
+{
+  "id": "ENG-1-wgsl-unknown-opcode-fallthrough",
+  "found": "2026-09-11",
+  "found_by": "builder cron af3e62239ce2 during BK-4 WGSL parity probe",
+  "severity": "engine-divergence",
+  "claim": "An unknown opcode pixel diverges the two engines: GlyphCPUv2.step() (tools/glyph_isa_v2.py ~line 570) sets running=False and halts; the WGSL shader's get_opcode_from_color (tools/wgsl_glyph_isa_v2.py line ~100) returns 1000 and main() has NO branch matching 1000, so next_pc advances and execution silently continues as a no-op. A byte-corrupted opcode pixel halts one engine and continues on the other — any lockstep/parity claim over corrupted media is unsound until this is fixed.",
+  "proposed_gate": "flip one opcode pixel in a trivially-halting image -> BOTH engines halt (or both fault) with a distinguishing receipt; add to tests/test_gh4_wgsl_parity.py or a new tests/test_eng1_unknown_opcode.py",
+  "fix_sketch": "WGSL: `} else if (opcode == 1000u) { cpu.running = 0u; cpus[cpu_id] = cpu; return; }` before the pc writeback — mirror Python's halt. Alternatively full parity: make Python continue-noop on unknown (worse).",
+  "status": "candidate — needs promotion per standing backlog rule"
+}

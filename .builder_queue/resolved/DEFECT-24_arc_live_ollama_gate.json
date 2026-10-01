@@ -1,0 +1,36 @@
+{
+ "id": "DEFECT-24",
+ "title": "arc leg A's verdict depends on a live Ollama draft: one GPU-saturated 120 s socket timeout turns the whole leg red",
+ "filed": "2026-09-13T19:4xZ",
+ "filed_by": "builder cron af3e62239ce2 (during the DEFECT-23 landing verification)",
+ "base_commit": "1833ba0",
+ "type": "gate determinism (the ORACLE's verdict depends on live LLM sampling + GPU presence)",
+ "status": "CLOSED 2026-09-13 — implemented and landed by builder cron af3e62239ce2; roadmap row DEFECT-24 is ✅ (systems/GLYPH_SELF_HOSTING_ROADMAP.md:358), receipt systems/RECEIPT_DEFECT24_LIVE_DRAFT_SPLIT.md, commit c6f877a. Kept for provenance, never delete. NOTE for a future supply scan: this ticket is NOT eligible supply.",
+ "severity": "a leg that flips red/green with GPU contention makes leg A's verdict non-replayable in the same way the unpinned pytest-randomly seed did (DEFECT-22), and it can mask or mimic a real regression",
+ "measured": {
+  "leg": "tests/test_gh18_syscall_abi.py::test_gh18_admit_syscall_via_ingest_end_to_end",
+  "guard": "line 363 @pytest.mark.skipif(not _ollama_available(), reason=\"local Ollama not reachable\") writes that records nothing and refuses only when Ollama is DOWN",
+  "call": "admit_syscall(runner, N_NEW, contract=\"triple(r1) -> r2: r2 = 3 * r1\", argv={0: 6}, expected=18) - one live local-model draft",
+  "red_observed_2026091319": {
+   "command": "/usr/bin/time -v python3 -m pytest tests/test_defect23_pt_identity.py tests/test_gh18_syscall_abi.py -q",
+   "result": "1 failed, 16 passed in 121.50s",
+   "failure": "TimeoutError: timed out (socket.py:718 cannot read from timed out object), 120.66 s in a single-test re-run - i.e. the client timeout, not an assertion",
+   "conditions": "nvidia-smi utilization.gpu=100%, ollama ps: qwen2.5-coder:14b resident 10 GB, 11109/24463 MiB used"
+  },
+  "green_evidence_same_leg_no_code_change": [
+   "output/arc_lega_seed2026091305_9bd8dd2.txt -> test_gh18_admit_syscall_via_ingest_end_to_end PASSED, 325 passed, rc=0",
+   "output/arc_lega_seed3120512294_cf9ae6d.txt -> PASSED, 325 passed, rc=0",
+   "output/arc_lega_seed891718887_cf9ae6d.txt -> PASSED, 325 passed, rc=0",
+   "output/arc_lega_seed2026091315_7b0d086.txt -> PASSED, 325 passed, rc=0 (the DEFECT-23 landing arc, ~4 min after the red)"
+  ],
+  "conclusion": "the leg is order-independent but load-dependent; nothing in the diff under test was involved (the failing test runs mode=\"admit\", the fix touches mode=\"paged_dispatch\" PTEs)"
+ },
+ "ruling_pointer": ".builder_queue/RULING_gh12_gate_determinism.md (option 3: deterministic leg in the arc, live draft as non-blocking smoke) and .builder_queue/RULING_arc_determinism_standing.md (a green that depends on uncontrolled inputs is not evidence; live-LLM legs run as non-blocking smoke and never gate)",
+ "options_cheapest_first": [
+  "1. Apply the ruled split to this leg: keep the deterministic half gating, move the single live-model draft into a non-blocking smoke leg (a test carrying @pytest.mark.live_smoke, which tools/arc_lega.sh already deselects via -m \"not live_smoke\"). tests/test_gh12_autoatlas.py already carries that marker, so the mechanism exists and is in use.",
+  "2. Leave the leg gating but make its failure non-silent and self-describing: catch the socket timeout and fail with a NAMED reason (LIVE_DRAFT_UNAVAILABLE) so a reader can tell a live-model red from a code red. Cheaper, but the arc's verdict still depends on GPU state.",
+  "3. Do nothing and keep reading leg A's verdict with this caveat in mind (status quo; rejected - it is how a real regression gets dismissed as 'the ollama flake')."
+ ],
+ "not_proven": "that GPU saturation was the ONLY cause of the 2026-09-13 19:4x red (it is the best-supported cause: four same-leg greens within the hour, same code, and the timeout is the client's 120 s, not an assertion); and whether the draft would have timed out with a longer client timeout rather than being genuinely stuck.",
+ "interaction_with_DEFECT_23": "this ticket was found while landing DEFECT-23 and is NOT a blocker for it - c7995a7's own arc run is green with this leg included."
+}

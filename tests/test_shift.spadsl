@@ -1,0 +1,4 @@
+A = region(shape=(5,), initial=1)
+B = shift(A, offset=2)
+total = reduce(B, sum)
+print(total)

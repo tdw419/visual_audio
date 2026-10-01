@@ -1,0 +1,11 @@
+{
+ "guest_path": "/var/tmp/gp4_1789617660/self_log.txt",
+ "size": 34,
+ "recon_sha256": "9c4b42bc7209b33c78293d5d52782fe9a94b8cfcd41e5d394a4f3a98214157c0",
+ "expected_sha256": "ff8567d7ddd5b17fc2c12844502052e278985609fd94b3972eb12a3d8c1ef9d1",
+ "match": false,
+ "frames_read": [
+  57
+ ],
+ "note": "container is authoritative only after a writeback barrier"
+}

@@ -1,0 +1,31 @@
+; test_call_ret.glyph - Verify CALL/RET opcodes work
+
+:test_call
+; Initialize SP to 0
+SET 0
+STORE (3, 0)
+
+SET 5
+STORE (10, 0)  ; Initial value = 5
+
+; CALL subroutine
+CALL :double_value
+
+; Check result (should be 10)
+LOAD (10, 0)
+SUB 10
+JZ :pass
+HALT
+
+:pass
+; Success!
+SET 255
+STORE (255, 0)  ; Write 255 to (255, 0) to signal success
+HALT
+
+:double_value
+; Double the value at (10, 0)
+LOAD (10, 0)
+MUL 2
+STORE (10, 0)
+RET

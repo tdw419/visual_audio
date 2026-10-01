@@ -1,0 +1,4 @@
+  green: code 1026 B, leg 230 B over the rung5 baseline; medium 67108864 B
+  noecho: code 1026 B, leg 230 B over the rung5 baseline; medium 67108864 B
+  nombox: code 1026 B, leg 230 B over the rung5 baseline; medium 67108864 B
+  halt: code 1026 B, leg 230 B over the rung5 baseline; medium 67108864 B

@@ -1,0 +1,11 @@
+; Verifies INDIRECT_STORE_MEM: writes a runtime value (staged in a scratch
+; cell) to a runtime-computed address (packed in the accumulator).
+SET 77
+STORE (50, 0)      ; scratch value cell = 77
+
+SET 10
+SET_ADDR_HIGH 30   ; Acc = (30 << 8)
+SET_ADDR_LOW 40    ; Acc = (30, 40) packed
+INDIRECT_STORE_MEM (50, 0)  ; memory[40,30] = memory[0,50].R = 77
+
+HALT

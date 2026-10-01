@@ -1,0 +1,12 @@
+{
+ "guest_path": "/var/tmp/gp3_1789615295/multiframe/big.bin",
+ "size": 40000000,
+ "recon_sha256": "38aed44ac42f83da184e8ef15dcbfd195a4d7ba858eac88ad1427ae2b18487f9",
+ "expected_sha256": "38aed44ac42f83da184e8ef15dcbfd195a4d7ba858eac88ad1427ae2b18487f9",
+ "match": true,
+ "frames_read": [
+  133,
+  134
+ ],
+ "note": "ok"
+}

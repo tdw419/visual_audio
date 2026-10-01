@@ -1,0 +1,736 @@
+{
+  "source_code": "\ndef analyze_data(data, threshold=10):\n    results = []\n    \n    if not data:\n        return results\n    \n    for item in data:\n        try:\n            if item > threshold:\n                processed = item * 2\n                results.append(processed)\n            elif item == threshold:\n                results.append(item)\n            else:\n                results.append(0)\n        except Exception as e:\n            print(f\"Error processing {item}: {e}\")\n    \n    return results\n\ndata = [5, 15, 10, 20, 3, 12]\nanalyzed = analyze_data(data)\nprint(f\"Results: {analyzed}\")\n",
+  "events": [
+    {
+      "construct": "function",
+      "start_time": 0.0,
+      "duration": 0.8,
+      "pitch": 261.63,
+      "amplitude": 0.7,
+      "waveform": "sine",
+      "text": "def analyze_data"
+    },
+    {
+      "construct": "indent",
+      "start_time": 0.8,
+      "duration": 0.05,
+      "pitch": 293.66,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2192"
+    },
+    {
+      "construct": "variable",
+      "start_time": 0.8500000000000001,
+      "duration": 0.3,
+      "pitch": 440.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "results"
+    },
+    {
+      "construct": "assignment",
+      "start_time": 1.1500000000000001,
+      "duration": 0.15,
+      "pitch": 659.25,
+      "amplitude": 0.6,
+      "waveform": "square",
+      "text": "="
+    },
+    {
+      "construct": "statement_end",
+      "start_time": 1.3,
+      "duration": 0.1,
+      "pitch": 329.63,
+      "amplitude": 0.4,
+      "waveform": "sine",
+      "text": ";"
+    },
+    {
+      "construct": "conditional",
+      "start_time": 1.4000000000000001,
+      "duration": 0.4,
+      "pitch": 392.0,
+      "amplitude": 0.6,
+      "waveform": "sine",
+      "text": "if"
+    },
+    {
+      "construct": "variable",
+      "start_time": 1.8000000000000003,
+      "duration": 0.3,
+      "pitch": 440.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "data"
+    },
+    {
+      "construct": "indent",
+      "start_time": 2.1,
+      "duration": 0.05,
+      "pitch": 261.63,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2192"
+    },
+    {
+      "construct": "return",
+      "start_time": 2.15,
+      "duration": 0.5,
+      "pitch": 880.0,
+      "amplitude": 0.7,
+      "waveform": "sine",
+      "text": "return"
+    },
+    {
+      "construct": "variable",
+      "start_time": 2.65,
+      "duration": 0.3,
+      "pitch": 392.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "results"
+    },
+    {
+      "construct": "statement_end",
+      "start_time": 2.9499999999999997,
+      "duration": 0.1,
+      "pitch": 293.66,
+      "amplitude": 0.4,
+      "waveform": "sine",
+      "text": ";"
+    },
+    {
+      "construct": "dedent",
+      "start_time": 3.05,
+      "duration": 0.05,
+      "pitch": 293.66,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2190"
+    },
+    {
+      "construct": "for_loop",
+      "start_time": 3.0999999999999996,
+      "duration": 0.5,
+      "pitch": 440.0,
+      "amplitude": 0.65,
+      "waveform": "sine",
+      "text": "for"
+    },
+    {
+      "construct": "variable",
+      "start_time": 3.5999999999999996,
+      "duration": 0.3,
+      "pitch": 440.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "item"
+    },
+    {
+      "construct": "variable",
+      "start_time": 3.8999999999999995,
+      "duration": 0.3,
+      "pitch": 440.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "data"
+    },
+    {
+      "construct": "indent",
+      "start_time": 4.199999999999999,
+      "duration": 0.05,
+      "pitch": 261.63,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2192"
+    },
+    {
+      "construct": "exception",
+      "start_time": 4.249999999999999,
+      "duration": 0.5,
+      "pitch": 523.25,
+      "amplitude": 0.6,
+      "waveform": "sine",
+      "text": "try"
+    },
+    {
+      "construct": "indent",
+      "start_time": 4.749999999999999,
+      "duration": 0.05,
+      "pitch": 293.66,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2192"
+    },
+    {
+      "construct": "conditional",
+      "start_time": 4.799999999999999,
+      "duration": 0.4,
+      "pitch": 392.0,
+      "amplitude": 0.6,
+      "waveform": "sine",
+      "text": "if"
+    },
+    {
+      "construct": "variable",
+      "start_time": 5.199999999999999,
+      "duration": 0.3,
+      "pitch": 440.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "item"
+    },
+    {
+      "construct": "comparison",
+      "start_time": 5.499999999999999,
+      "duration": 0.2,
+      "pitch": 783.99,
+      "amplitude": 0.55,
+      "waveform": "square",
+      "text": "Gt"
+    },
+    {
+      "construct": "variable",
+      "start_time": 5.699999999999999,
+      "duration": 0.3,
+      "pitch": 440.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "threshold"
+    },
+    {
+      "construct": "indent",
+      "start_time": 5.999999999999999,
+      "duration": 0.05,
+      "pitch": 261.63,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2192"
+    },
+    {
+      "construct": "variable",
+      "start_time": 6.049999999999999,
+      "duration": 0.3,
+      "pitch": 392.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "processed"
+    },
+    {
+      "construct": "assignment",
+      "start_time": 6.349999999999999,
+      "duration": 0.15,
+      "pitch": 587.33,
+      "amplitude": 0.6,
+      "waveform": "square",
+      "text": "="
+    },
+    {
+      "construct": "variable",
+      "start_time": 6.499999999999999,
+      "duration": 0.3,
+      "pitch": 392.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "item"
+    },
+    {
+      "construct": "operation",
+      "start_time": 6.799999999999999,
+      "duration": 0.15,
+      "pitch": 659.25,
+      "amplitude": 0.5,
+      "waveform": "square",
+      "text": "Mult"
+    },
+    {
+      "construct": "number",
+      "start_time": 6.949999999999999,
+      "duration": 0.2,
+      "pitch": 587.33,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "2"
+    },
+    {
+      "construct": "statement_end",
+      "start_time": 7.1499999999999995,
+      "duration": 0.1,
+      "pitch": 293.66,
+      "amplitude": 0.4,
+      "waveform": "sine",
+      "text": ";"
+    },
+    {
+      "construct": "variable",
+      "start_time": 7.249999999999999,
+      "duration": 0.3,
+      "pitch": 392.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "processed"
+    },
+    {
+      "construct": "statement_end",
+      "start_time": 7.549999999999999,
+      "duration": 0.1,
+      "pitch": 293.66,
+      "amplitude": 0.4,
+      "waveform": "sine",
+      "text": ";"
+    },
+    {
+      "construct": "dedent",
+      "start_time": 7.649999999999999,
+      "duration": 0.05,
+      "pitch": 293.66,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2190"
+    },
+    {
+      "construct": "conditional",
+      "start_time": 7.699999999999998,
+      "duration": 0.4,
+      "pitch": 392.0,
+      "amplitude": 0.6,
+      "waveform": "sine",
+      "text": "else"
+    },
+    {
+      "construct": "indent",
+      "start_time": 8.099999999999998,
+      "duration": 0.05,
+      "pitch": 261.63,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2192"
+    },
+    {
+      "construct": "conditional",
+      "start_time": 8.149999999999999,
+      "duration": 0.4,
+      "pitch": 329.63,
+      "amplitude": 0.6,
+      "waveform": "sine",
+      "text": "if"
+    },
+    {
+      "construct": "variable",
+      "start_time": 8.549999999999999,
+      "duration": 0.3,
+      "pitch": 392.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "item"
+    },
+    {
+      "construct": "comparison",
+      "start_time": 8.85,
+      "duration": 0.2,
+      "pitch": 659.25,
+      "amplitude": 0.55,
+      "waveform": "square",
+      "text": "Eq"
+    },
+    {
+      "construct": "variable",
+      "start_time": 9.049999999999999,
+      "duration": 0.3,
+      "pitch": 392.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "threshold"
+    },
+    {
+      "construct": "indent",
+      "start_time": 9.35,
+      "duration": 0.05,
+      "pitch": 293.66,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2192"
+    },
+    {
+      "construct": "variable",
+      "start_time": 9.4,
+      "duration": 0.3,
+      "pitch": 440.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "item"
+    },
+    {
+      "construct": "statement_end",
+      "start_time": 9.700000000000001,
+      "duration": 0.1,
+      "pitch": 329.63,
+      "amplitude": 0.4,
+      "waveform": "sine",
+      "text": ";"
+    },
+    {
+      "construct": "dedent",
+      "start_time": 9.8,
+      "duration": 0.05,
+      "pitch": 261.63,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2190"
+    },
+    {
+      "construct": "conditional",
+      "start_time": 9.850000000000001,
+      "duration": 0.4,
+      "pitch": 329.63,
+      "amplitude": 0.6,
+      "waveform": "sine",
+      "text": "else"
+    },
+    {
+      "construct": "indent",
+      "start_time": 10.250000000000002,
+      "duration": 0.05,
+      "pitch": 293.66,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2192"
+    },
+    {
+      "construct": "number",
+      "start_time": 10.300000000000002,
+      "duration": 0.2,
+      "pitch": 659.25,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "0"
+    },
+    {
+      "construct": "statement_end",
+      "start_time": 10.500000000000002,
+      "duration": 0.1,
+      "pitch": 329.63,
+      "amplitude": 0.4,
+      "waveform": "sine",
+      "text": ";"
+    },
+    {
+      "construct": "dedent",
+      "start_time": 10.600000000000001,
+      "duration": 0.05,
+      "pitch": 261.63,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2190"
+    },
+    {
+      "construct": "dedent",
+      "start_time": 10.650000000000002,
+      "duration": 0.05,
+      "pitch": 293.66,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2190"
+    },
+    {
+      "construct": "dedent",
+      "start_time": 10.700000000000003,
+      "duration": 0.05,
+      "pitch": 261.63,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2190"
+    },
+    {
+      "construct": "exception",
+      "start_time": 10.750000000000004,
+      "duration": 0.5,
+      "pitch": 523.25,
+      "amplitude": 0.6,
+      "waveform": "sine",
+      "text": "except"
+    },
+    {
+      "construct": "indent",
+      "start_time": 11.250000000000004,
+      "duration": 0.05,
+      "pitch": 293.66,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2192"
+    },
+    {
+      "construct": "function_call",
+      "start_time": 11.300000000000004,
+      "duration": 0.25,
+      "pitch": 880.0,
+      "amplitude": 0.65,
+      "waveform": "triangle",
+      "text": "print"
+    },
+    {
+      "construct": "string",
+      "start_time": 11.550000000000004,
+      "duration": 0.4,
+      "pitch": 587.33,
+      "amplitude": 0.6,
+      "waveform": "sine",
+      "text": "\"Error processing ...\""
+    },
+    {
+      "construct": "variable",
+      "start_time": 11.950000000000005,
+      "duration": 0.3,
+      "pitch": 440.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "item"
+    },
+    {
+      "construct": "string",
+      "start_time": 12.250000000000005,
+      "duration": 0.4,
+      "pitch": 587.33,
+      "amplitude": 0.6,
+      "waveform": "sine",
+      "text": "\": ...\""
+    },
+    {
+      "construct": "variable",
+      "start_time": 12.650000000000006,
+      "duration": 0.3,
+      "pitch": 440.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "e"
+    },
+    {
+      "construct": "statement_end",
+      "start_time": 12.950000000000006,
+      "duration": 0.1,
+      "pitch": 329.63,
+      "amplitude": 0.4,
+      "waveform": "sine",
+      "text": ";"
+    },
+    {
+      "construct": "dedent",
+      "start_time": 13.050000000000006,
+      "duration": 0.05,
+      "pitch": 261.63,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2190"
+    },
+    {
+      "construct": "dedent",
+      "start_time": 13.100000000000007,
+      "duration": 0.05,
+      "pitch": 293.66,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2190"
+    },
+    {
+      "construct": "return",
+      "start_time": 13.150000000000007,
+      "duration": 0.5,
+      "pitch": 261.63,
+      "amplitude": 0.7,
+      "waveform": "sine",
+      "text": "return"
+    },
+    {
+      "construct": "variable",
+      "start_time": 13.650000000000007,
+      "duration": 0.3,
+      "pitch": 440.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "results"
+    },
+    {
+      "construct": "statement_end",
+      "start_time": 13.950000000000008,
+      "duration": 0.1,
+      "pitch": 329.63,
+      "amplitude": 0.4,
+      "waveform": "sine",
+      "text": ";"
+    },
+    {
+      "construct": "dedent",
+      "start_time": 14.050000000000008,
+      "duration": 0.05,
+      "pitch": 261.63,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2190"
+    },
+    {
+      "construct": "variable",
+      "start_time": 14.100000000000009,
+      "duration": 0.3,
+      "pitch": 392.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "data"
+    },
+    {
+      "construct": "assignment",
+      "start_time": 14.40000000000001,
+      "duration": 0.15,
+      "pitch": 587.33,
+      "amplitude": 0.6,
+      "waveform": "square",
+      "text": "="
+    },
+    {
+      "construct": "number",
+      "start_time": 14.55000000000001,
+      "duration": 0.2,
+      "pitch": 587.33,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "5"
+    },
+    {
+      "construct": "number",
+      "start_time": 14.750000000000009,
+      "duration": 0.2,
+      "pitch": 587.33,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "15"
+    },
+    {
+      "construct": "number",
+      "start_time": 14.950000000000008,
+      "duration": 0.2,
+      "pitch": 587.33,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "10"
+    },
+    {
+      "construct": "number",
+      "start_time": 15.150000000000007,
+      "duration": 0.2,
+      "pitch": 587.33,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "20"
+    },
+    {
+      "construct": "number",
+      "start_time": 15.350000000000007,
+      "duration": 0.2,
+      "pitch": 587.33,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "3"
+    },
+    {
+      "construct": "number",
+      "start_time": 15.550000000000006,
+      "duration": 0.2,
+      "pitch": 587.33,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "12"
+    },
+    {
+      "construct": "statement_end",
+      "start_time": 15.750000000000005,
+      "duration": 0.1,
+      "pitch": 293.66,
+      "amplitude": 0.4,
+      "waveform": "sine",
+      "text": ";"
+    },
+    {
+      "construct": "variable",
+      "start_time": 15.850000000000005,
+      "duration": 0.3,
+      "pitch": 392.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "analyzed"
+    },
+    {
+      "construct": "assignment",
+      "start_time": 16.150000000000006,
+      "duration": 0.15,
+      "pitch": 587.33,
+      "amplitude": 0.6,
+      "waveform": "square",
+      "text": "="
+    },
+    {
+      "construct": "function_call",
+      "start_time": 16.300000000000004,
+      "duration": 0.25,
+      "pitch": 783.99,
+      "amplitude": 0.65,
+      "waveform": "triangle",
+      "text": "analyze_data"
+    },
+    {
+      "construct": "variable",
+      "start_time": 16.550000000000004,
+      "duration": 0.3,
+      "pitch": 392.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "data"
+    },
+    {
+      "construct": "statement_end",
+      "start_time": 16.850000000000005,
+      "duration": 0.1,
+      "pitch": 293.66,
+      "amplitude": 0.4,
+      "waveform": "sine",
+      "text": ";"
+    },
+    {
+      "construct": "function_call",
+      "start_time": 16.950000000000006,
+      "duration": 0.25,
+      "pitch": 783.99,
+      "amplitude": 0.65,
+      "waveform": "triangle",
+      "text": "print"
+    },
+    {
+      "construct": "string",
+      "start_time": 17.200000000000006,
+      "duration": 0.4,
+      "pitch": 523.25,
+      "amplitude": 0.6,
+      "waveform": "sine",
+      "text": "\"Results: ...\""
+    },
+    {
+      "construct": "variable",
+      "start_time": 17.600000000000005,
+      "duration": 0.3,
+      "pitch": 392.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "analyzed"
+    },
+    {
+      "construct": "statement_end",
+      "start_time": 17.900000000000006,
+      "duration": 0.1,
+      "pitch": 293.66,
+      "amplitude": 0.4,
+      "waveform": "sine",
+      "text": ";"
+    }
+  ],
+  "total_duration": 18.000000000000007,
+  "sample_rate": 44100
+}

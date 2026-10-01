@@ -1,0 +1,40 @@
+feat(suite-iso1): per-file isolation harness — gate 5/5 (RED hold-out rc=4 → GREEN 34.98s)
+
+Row SUITE-ISO-1 (promoted 943f28a from RULING_testcol1_sweep_scope.md line 39, the follow-on leg that
+ruling declared and kept out of leg 1). "The suite is green" is now provable in one bounded command
+instead of a truncated sweep plus manual per-module re-runs.
+
+RED before (both new files moved aside, own run):
+  /usr/bin/python3 -m pytest tests/test_suite_iso_harness.py -q
+  -> rc=4, "no tests ran in 0.06s"                      output/suite_iso1_gate_RED_holdout.txt
+
+GREEN after (own run):
+  /usr/bin/python3 -m pytest tests/test_suite_iso_harness.py -q --junitxml=output/suite_iso1_gate.xml
+  -> 5 passed, rc=0, in 34.98s                           output/suite_iso1_gate_full.txt, .xml
+
+Legs also run individually so no slow leg could mask another: L1 + L3 + L4 3 passed in 6.56s;
+L2 known-hangers 1 passed in 3.34s; L2 tests-root count equality 1 passed in 25.35s.
+
+Mechanism: tools/suite_iso_harness.py — one subprocess per discovered test file, per-file wall-clock
+timeout (DEFAULT_TIMEOUT_S = 15.0 at :32, CLI override), one machine-readable record per file (path,
+verdict PASS/FAIL/CRASH/TIMEOUT/ERROR, duration_s, rc, counts, last output line), non-zero exit iff any
+file is FAIL or CRASH; the 3 known non-terminating files come back TIMEOUT with the budget named rather
+than hanging the sweep. Gate: tests/test_suite_iso_harness.py.
+
+No regression (own runs, same tree):
+  arc leg A (52 files)          324 passed, 1 skipped, rc=0, 140.73 s, no segfault   output/arc_legA_suite_iso1.txt
+  arc leg B (newer suites)      83 passed, rc=0, 8.53 s                              output/arc_legB_suite_iso1.txt
+  pytest tests/ --collect-only  rc=0, 1609 collected, zero ERROR lines (1604 before the 5 new legs)
+  git status (tracked)          empty — only the two new files added
+
+Provenance: delegated to agy (.builder_queue/brief_suite_iso1_harness.md,
+output/agy/agy_impl_20260913_052822.log). The delegate was SIGKILLed mid-flight (exit -9) while waiting on
+its own background benchmark and produced no completion claim; it had already written both files. Every
+number above is the orchestrator's own run under the loop's fallback rule — not the delegate's claim.
+
+HONEST BOUNDARY: parameter choices (15 s default, discovery/exclusion rules at
+tools/suite_iso_harness.py:35) are the delegate's; behaviour was verified, the exclusion list was not
+audited line by line. The L2 tests-root leg is bounded (25.35 s) and claims nothing about every file under
+tests/ running to completion. tests/test_suite_iso_harness.py is force-added past .gitignore's test_*.py
+rule. DEFECT-22 (arc leg A instability) was NOT reproduced — this row supplied the instrument that will
+name the owning file; that ticket stays OPEN.

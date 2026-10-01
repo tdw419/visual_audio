@@ -1,0 +1,32 @@
+{
+ "guest_path": "/var/tmp/gp4_1789617660/self_log.txt",
+ "size": 34,
+ "extents": 1,
+ "frames": [
+  57
+ ],
+ "spans": [
+  {
+   "disk_bytes": [
+    3779653632,
+    3779657728
+   ],
+   "start": {
+    "frame": 57,
+    "x": 3072,
+    "y": 1315,
+    "channel": "R",
+    "intra_byte": 21557248
+   },
+   "end": {
+    "frame": 57,
+    "x": 4095,
+    "y": 1315,
+    "channel": "A",
+    "intra_byte": 21561343
+   },
+   "blocks": 1,
+   "logical_first": 0
+  }
+ ]
+}

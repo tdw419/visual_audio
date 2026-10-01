@@ -1,0 +1,484 @@
+{
+  "source_code": "\ndef factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)\n\ndef fibonacci(n):\n    if n <= 1:\n        return n\n    return fibonacci(n - 1) + fibonacci(n - 2)\n\nprint(f\"factorial(5) = {factorial(5)}\")\nprint(f\"fibonacci(10) = {fibonacci(10)}\")\n",
+  "events": [
+    {
+      "construct": "function",
+      "start_time": 0.0,
+      "duration": 0.8,
+      "pitch": 261.63,
+      "amplitude": 0.7,
+      "waveform": "sine",
+      "text": "def factorial"
+    },
+    {
+      "construct": "indent",
+      "start_time": 0.8,
+      "duration": 0.05,
+      "pitch": 293.66,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2192"
+    },
+    {
+      "construct": "conditional",
+      "start_time": 0.8500000000000001,
+      "duration": 0.4,
+      "pitch": 392.0,
+      "amplitude": 0.6,
+      "waveform": "sine",
+      "text": "if"
+    },
+    {
+      "construct": "variable",
+      "start_time": 1.25,
+      "duration": 0.3,
+      "pitch": 440.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "n"
+    },
+    {
+      "construct": "comparison",
+      "start_time": 1.55,
+      "duration": 0.2,
+      "pitch": 783.99,
+      "amplitude": 0.55,
+      "waveform": "square",
+      "text": "LtE"
+    },
+    {
+      "construct": "number",
+      "start_time": 1.75,
+      "duration": 0.2,
+      "pitch": 659.25,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "1"
+    },
+    {
+      "construct": "indent",
+      "start_time": 1.95,
+      "duration": 0.05,
+      "pitch": 261.63,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2192"
+    },
+    {
+      "construct": "return",
+      "start_time": 2.0,
+      "duration": 0.5,
+      "pitch": 880.0,
+      "amplitude": 0.7,
+      "waveform": "sine",
+      "text": "return"
+    },
+    {
+      "construct": "number",
+      "start_time": 2.5,
+      "duration": 0.2,
+      "pitch": 587.33,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "1"
+    },
+    {
+      "construct": "statement_end",
+      "start_time": 2.7,
+      "duration": 0.1,
+      "pitch": 293.66,
+      "amplitude": 0.4,
+      "waveform": "sine",
+      "text": ";"
+    },
+    {
+      "construct": "dedent",
+      "start_time": 2.8000000000000003,
+      "duration": 0.05,
+      "pitch": 293.66,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2190"
+    },
+    {
+      "construct": "return",
+      "start_time": 2.85,
+      "duration": 0.5,
+      "pitch": 261.63,
+      "amplitude": 0.7,
+      "waveform": "sine",
+      "text": "return"
+    },
+    {
+      "construct": "variable",
+      "start_time": 3.35,
+      "duration": 0.3,
+      "pitch": 440.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "n"
+    },
+    {
+      "construct": "operation",
+      "start_time": 3.65,
+      "duration": 0.15,
+      "pitch": 783.99,
+      "amplitude": 0.5,
+      "waveform": "square",
+      "text": "Mult"
+    },
+    {
+      "construct": "function_call",
+      "start_time": 3.8,
+      "duration": 0.25,
+      "pitch": 880.0,
+      "amplitude": 0.65,
+      "waveform": "triangle",
+      "text": "factorial"
+    },
+    {
+      "construct": "variable",
+      "start_time": 4.05,
+      "duration": 0.3,
+      "pitch": 440.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "n"
+    },
+    {
+      "construct": "operation",
+      "start_time": 4.35,
+      "duration": 0.15,
+      "pitch": 783.99,
+      "amplitude": 0.5,
+      "waveform": "square",
+      "text": "Sub"
+    },
+    {
+      "construct": "number",
+      "start_time": 4.5,
+      "duration": 0.2,
+      "pitch": 659.25,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "1"
+    },
+    {
+      "construct": "statement_end",
+      "start_time": 4.7,
+      "duration": 0.1,
+      "pitch": 329.63,
+      "amplitude": 0.4,
+      "waveform": "sine",
+      "text": ";"
+    },
+    {
+      "construct": "dedent",
+      "start_time": 4.8,
+      "duration": 0.05,
+      "pitch": 261.63,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2190"
+    },
+    {
+      "construct": "function",
+      "start_time": 4.85,
+      "duration": 0.8,
+      "pitch": 261.63,
+      "amplitude": 0.7,
+      "waveform": "sine",
+      "text": "def fibonacci"
+    },
+    {
+      "construct": "indent",
+      "start_time": 5.6499999999999995,
+      "duration": 0.05,
+      "pitch": 293.66,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2192"
+    },
+    {
+      "construct": "conditional",
+      "start_time": 5.699999999999999,
+      "duration": 0.4,
+      "pitch": 392.0,
+      "amplitude": 0.6,
+      "waveform": "sine",
+      "text": "if"
+    },
+    {
+      "construct": "variable",
+      "start_time": 6.1,
+      "duration": 0.3,
+      "pitch": 440.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "n"
+    },
+    {
+      "construct": "comparison",
+      "start_time": 6.3999999999999995,
+      "duration": 0.2,
+      "pitch": 783.99,
+      "amplitude": 0.55,
+      "waveform": "square",
+      "text": "LtE"
+    },
+    {
+      "construct": "number",
+      "start_time": 6.6,
+      "duration": 0.2,
+      "pitch": 659.25,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "1"
+    },
+    {
+      "construct": "indent",
+      "start_time": 6.8,
+      "duration": 0.05,
+      "pitch": 261.63,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2192"
+    },
+    {
+      "construct": "return",
+      "start_time": 6.85,
+      "duration": 0.5,
+      "pitch": 880.0,
+      "amplitude": 0.7,
+      "waveform": "sine",
+      "text": "return"
+    },
+    {
+      "construct": "variable",
+      "start_time": 7.35,
+      "duration": 0.3,
+      "pitch": 392.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "n"
+    },
+    {
+      "construct": "statement_end",
+      "start_time": 7.6499999999999995,
+      "duration": 0.1,
+      "pitch": 293.66,
+      "amplitude": 0.4,
+      "waveform": "sine",
+      "text": ";"
+    },
+    {
+      "construct": "dedent",
+      "start_time": 7.749999999999999,
+      "duration": 0.05,
+      "pitch": 293.66,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2190"
+    },
+    {
+      "construct": "return",
+      "start_time": 7.799999999999999,
+      "duration": 0.5,
+      "pitch": 261.63,
+      "amplitude": 0.7,
+      "waveform": "sine",
+      "text": "return"
+    },
+    {
+      "construct": "function_call",
+      "start_time": 8.299999999999999,
+      "duration": 0.25,
+      "pitch": 880.0,
+      "amplitude": 0.65,
+      "waveform": "triangle",
+      "text": "fibonacci"
+    },
+    {
+      "construct": "variable",
+      "start_time": 8.549999999999999,
+      "duration": 0.3,
+      "pitch": 440.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "n"
+    },
+    {
+      "construct": "operation",
+      "start_time": 8.85,
+      "duration": 0.15,
+      "pitch": 783.99,
+      "amplitude": 0.5,
+      "waveform": "square",
+      "text": "Sub"
+    },
+    {
+      "construct": "number",
+      "start_time": 9.0,
+      "duration": 0.2,
+      "pitch": 659.25,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "1"
+    },
+    {
+      "construct": "operation",
+      "start_time": 9.2,
+      "duration": 0.15,
+      "pitch": 783.99,
+      "amplitude": 0.5,
+      "waveform": "square",
+      "text": "Add"
+    },
+    {
+      "construct": "function_call",
+      "start_time": 9.35,
+      "duration": 0.25,
+      "pitch": 880.0,
+      "amplitude": 0.65,
+      "waveform": "triangle",
+      "text": "fibonacci"
+    },
+    {
+      "construct": "variable",
+      "start_time": 9.6,
+      "duration": 0.3,
+      "pitch": 440.0,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "n"
+    },
+    {
+      "construct": "operation",
+      "start_time": 9.9,
+      "duration": 0.15,
+      "pitch": 783.99,
+      "amplitude": 0.5,
+      "waveform": "square",
+      "text": "Sub"
+    },
+    {
+      "construct": "number",
+      "start_time": 10.05,
+      "duration": 0.2,
+      "pitch": 659.25,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "2"
+    },
+    {
+      "construct": "statement_end",
+      "start_time": 10.25,
+      "duration": 0.1,
+      "pitch": 329.63,
+      "amplitude": 0.4,
+      "waveform": "sine",
+      "text": ";"
+    },
+    {
+      "construct": "dedent",
+      "start_time": 10.35,
+      "duration": 0.05,
+      "pitch": 261.63,
+      "amplitude": 0.3,
+      "waveform": "sine",
+      "text": "\u2190"
+    },
+    {
+      "construct": "function_call",
+      "start_time": 10.4,
+      "duration": 0.25,
+      "pitch": 783.99,
+      "amplitude": 0.65,
+      "waveform": "triangle",
+      "text": "print"
+    },
+    {
+      "construct": "string",
+      "start_time": 10.65,
+      "duration": 0.4,
+      "pitch": 523.25,
+      "amplitude": 0.6,
+      "waveform": "sine",
+      "text": "\"factorial(5) = ...\""
+    },
+    {
+      "construct": "function_call",
+      "start_time": 11.05,
+      "duration": 0.25,
+      "pitch": 783.99,
+      "amplitude": 0.65,
+      "waveform": "triangle",
+      "text": "factorial"
+    },
+    {
+      "construct": "number",
+      "start_time": 11.3,
+      "duration": 0.2,
+      "pitch": 587.33,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "5"
+    },
+    {
+      "construct": "statement_end",
+      "start_time": 11.5,
+      "duration": 0.1,
+      "pitch": 293.66,
+      "amplitude": 0.4,
+      "waveform": "sine",
+      "text": ";"
+    },
+    {
+      "construct": "function_call",
+      "start_time": 11.6,
+      "duration": 0.25,
+      "pitch": 783.99,
+      "amplitude": 0.65,
+      "waveform": "triangle",
+      "text": "print"
+    },
+    {
+      "construct": "string",
+      "start_time": 11.85,
+      "duration": 0.4,
+      "pitch": 523.25,
+      "amplitude": 0.6,
+      "waveform": "sine",
+      "text": "\"fibonacci(10) = ...\""
+    },
+    {
+      "construct": "function_call",
+      "start_time": 12.25,
+      "duration": 0.25,
+      "pitch": 783.99,
+      "amplitude": 0.65,
+      "waveform": "triangle",
+      "text": "fibonacci"
+    },
+    {
+      "construct": "number",
+      "start_time": 12.5,
+      "duration": 0.2,
+      "pitch": 587.33,
+      "amplitude": 0.5,
+      "waveform": "triangle",
+      "text": "10"
+    },
+    {
+      "construct": "statement_end",
+      "start_time": 12.7,
+      "duration": 0.1,
+      "pitch": 293.66,
+      "amplitude": 0.4,
+      "waveform": "sine",
+      "text": ";"
+    }
+  ],
+  "total_duration": 12.799999999999999,
+  "sample_rate": 44100
+}

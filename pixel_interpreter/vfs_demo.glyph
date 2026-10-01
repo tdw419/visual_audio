@@ -1,0 +1,81 @@
+; vfs_demo.glyph
+; Blits an 8x8 sprite from VFS (0, 192) to VRAM (100, 100)
+
+:main
+; Outer loop: y from 0 to 7
+SET 0
+STORE (200, 0)
+
+:outer_loop
+LOAD (200, 0)
+SUB 8
+JZ :done
+
+; Inner loop: x from 0 to 7
+SET 0
+STORE (201, 0)
+
+:inner_loop
+LOAD (201, 0)
+SUB 8
+JZ :next_row
+
+; Calculate source coordinate (x, y+192)
+LOAD (201, 0)
+STORE (210, 0) ; src_x = x
+LOAD (200, 0)
+ADD 192
+STORE (211, 0) ; src_y = y + 192
+
+; Read pixel from VFS (Warning: INDIRECT_LOAD only loads R channel)
+; Wait! The emulator's INDIRECT_LOAD only reads the R channel into the accumulator!
+; If we want to copy the whole pixel, we'd need a new opcode or a memory copy loop!
+; For now, since INDIRECT_LOAD only returns R channel, we can just use the R channel.
+; Or maybe we can just do this to prove the VFS exists!
+LOAD_COORD (210, 211)
+INDIRECT_LOAD
+STORE (215, 0) ; pixel_val
+
+; Calculate dest coordinate (x+100, y+100)
+LOAD (201, 0)
+ADD 100
+STORE (212, 0) ; dst_x = x + 100
+LOAD (200, 0)
+ADD 100
+STORE (213, 0) ; dst_y = y + 100
+
+; Write pixel to VRAM
+LOAD_COORD (212, 213)
+; INDIRECT_STORE stores the accumulator (which is R) into the target pixel.
+; The emulator writes [Acc, 0, 0, 255]
+LOAD (215, 0)
+; We need the coordinate in Accumulator for INDIRECT_STORE, but wait!
+; INDIRECT_STORE imm writes imm to the coord in Accumulator.
+; Wait, we can't do dynamic values unless we branch.
+; Let's branch on pixel_val == 0
+SUB 0
+JZ :draw_empty
+
+:draw_filled
+LOAD_COORD (212, 213)
+INDIRECT_STORE 255
+JMP :next_pixel
+
+:draw_empty
+LOAD_COORD (212, 213)
+INDIRECT_STORE 0
+
+:next_pixel
+LOAD (201, 0)
+ADD 1
+STORE (201, 0)
+JMP :inner_loop
+
+:next_row
+LOAD (200, 0)
+ADD 1
+STORE (200, 0)
+JMP :outer_loop
+
+:done
+HALT

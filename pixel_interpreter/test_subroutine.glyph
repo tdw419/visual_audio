@@ -1,0 +1,61 @@
+; test_subroutine.glyph
+; Demonstrates CALL and RET by using a subroutine to draw 2x2 squares
+
+:main
+; Draw first square at (10, 100)
+SET 10
+STORE (200, 0) ; arg1 = x
+SET 100
+STORE (201, 0) ; arg2 = y
+CALL :draw_square
+
+; Draw second square at (20, 100)
+SET 20
+STORE (200, 0)
+SET 100
+STORE (201, 0)
+CALL :draw_square
+
+; Draw third square at (15, 110)
+SET 15
+STORE (200, 0)
+SET 110
+STORE (201, 0)
+CALL :draw_square
+
+:done
+HALT
+
+; --------------------------------------
+; Subroutine: draw_square
+; Arguments: (200, 0) = x, (201, 0) = y
+; --------------------------------------
+:draw_square
+; Calculate x+1, y+1
+LOAD (200, 0)
+STORE (202, 0)  ; x1
+ADD 1
+STORE (203, 0)  ; x2
+
+LOAD (201, 0)
+STORE (204, 0)  ; y1
+ADD 1
+STORE (205, 0)  ; y2
+
+; Draw pixel 1 (x1, y1)
+LOAD_COORD (202, 204)
+INDIRECT_STORE 255
+
+; Draw pixel 2 (x2, y1)
+LOAD_COORD (203, 204)
+INDIRECT_STORE 255
+
+; Draw pixel 3 (x1, y2)
+LOAD_COORD (202, 205)
+INDIRECT_STORE 255
+
+; Draw pixel 4 (x2, y2)
+LOAD_COORD (203, 205)
+INDIRECT_STORE 255
+
+RET

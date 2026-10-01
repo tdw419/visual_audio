@@ -1,0 +1,31 @@
+{
+  "id": "DEFECT-21",
+  "found": "2026-09-13T04:00:00-05:00",
+  "found_by": "builder cron af3e62239ce2 (PHASE 3 arc verification at head 7bfafc0)",
+  "severity": "gate-red-at-clean-head (false positive, no product impact)",
+  "status": "RESOLVED (same tick) — fixed in tests/test_wf1_tick_claim_bound.py",
+  "claim": "The WF-1 claim-bound gate (tests/test_wf1_tick_claim_bound.py::test_wf1_l3_no_gpu_tick_parity_claim) was RED at clean head 7bfafc0: its scanner reported the loop's own limitation LABEL as a landed GPU-tick-parity claim.",
+  "measured": {
+    "red": "4 passed / 1 failed, rc=1 on BOTH /usr/bin/python3 and the repo python3 (output/wf1_gate_run8_red_7bfafc0.txt, output/wf1_gate_run8_red_venv.txt)",
+    "flagged": "1 unit across 138 claim-surface files: systems/RECEIPT_SUBSTOR-1_SUBSTRATE_STORAGE_ORACLE.md -> '**Not run this tick:** the full arc suite (only the gate plus its L5 leg were run), the GPU/WGSL parity legs, and any QEMU lockstep run.' (output/wf1_rediscan_7bfafc0.txt, probe output/wf1_rediscan_probe.py)",
+    "root_cause": "the unit carries a tick token ('this tick'), a GPU token ('GPU/WGSL') and a parity token ('parity'); none of the 30 committed negation patterns matched 'Not run'. 'not verified' and 'unbuilt'/'unmeasurable' were already admitted as limitation vocabulary — 'not run' was the missing sibling.",
+    "why_not_caught_earlier": "the canonical arc list (RECEIPT_ARC_VERIFY_3e2bd8e.md) globs test_gh*/test_bk*/test_eng*/test_defect1* only; test_wf1_* is not in it, so a red gate could sit at a clean HEAD"
+  },
+  "fix": "tests/test_wf1_tick_claim_bound.py: _NEGATION_PATTERNS += r\"not\\s+run\\b\", r\"not\\s+been\\s+run\\b\" (adjacency-matched, so a non-adjacent 'not ... run' overclaim still trips), plus known-negative leg 4 with the verbatim SUBSTOR clause and a label-replacement discrimination control.",
+  "verification": {
+    "gate": "5 passed rc=0 on /usr/bin/python3 and on the venv (output/wf1_gate_run9_green_py312.txt, output/wf1_gate_run9_green_venv.txt)",
+    "real_surface": "0 flagged / 138 files (output/wf1_rediscan_post_defect21.txt)",
+    "anti_vacuity": "adversarial corpus unchanged at 7/8 caught, the 8th being the gate's declared no-tick-token boundary (output/wf1_orch_probe_pre_defect21.txt -> output/wf1_orch_probe_post_defect21.txt)",
+    "guard_withdrawal": "output/defect21_guard_withdrawal_probe.txt — W3 (label replaced by 'This tick:') TRIPs, W4 (non-adjacent 'not ... run') TRIPs, W5/W6 CLEAN and identical to the pre-existing boundary for the older 'not verified' pattern",
+    "arc": "canonical 52-file arc 325 tests / 0 failures / 0 errors / 1 skipped rc=0 (output/arc_verify_7bfafc0.xml); newer row suites 83 tests / 0 failures rc=0 (output/arc2_new_suites_post_fix.xml)"
+  },
+  "receipt": "systems/RECEIPT_WF1_DEFECT21_FALSE_POSITIVE.md",
+  "honest_boundary": "the scanner clears a whole claim unit when any negation matches it, so '…parity verified; the WASM leg was not run.' is CLEAN (W5). That is the pre-existing unit-level negation boundary (W6 shows the same for 'not verified'), not a new blindness class; re-scoping it to token proximity would be a design change to a landed gate.",
+  "blocked_work": "none",
+  "see": [
+    "systems/RECEIPT_WF1_DEFECT21_FALSE_POSITIVE.md",
+    "systems/RECEIPT_WF1_TICK_CLAIM_BOUND.md",
+    "output/wf1_rediscan_probe.py",
+    "output/defect21_guard_withdrawal_probe.py"
+  ]
+}

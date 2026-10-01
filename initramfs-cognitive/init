@@ -1,0 +1,52 @@
+#!/bin/sh
+# Init script with overlayfs for /etc/fstab fix
+
+mount -t proc none /proc
+mount -t sysfs none /sys
+mount -t devtmpfs none /dev
+
+echo "=== Geometry OS PXC1 Boot ==="
+
+# Load VirtIO block module
+echo "Loading VirtIO block module..."
+insmod /lib/modules/virtio_blk.ko || echo "Warning: virtio_blk.ko load failed"
+
+# Wait for block device
+echo "Waiting for /dev/vda..."
+while [ ! -b /dev/vda ]; do
+    sleep 0.5
+done
+
+echo "✓ Block device found: /dev/vda"
+
+# Load ext4 modules
+echo "Loading ext4 modules..."
+insmod /lib/modules/mbcache.ko || true
+insmod /lib/modules/jbd2.ko || true
+insmod /lib/modules/crc16.ko || true
+insmod /lib/modules/ext4.ko || true
+
+# Mount the pixel rootfs read-write
+echo "Mounting pixel rootfs..."
+ROOT_DEV="$(findfs LABEL=cloudimg-rootfs 2>/dev/null)"
+if [ -z "$ROOT_DEV" ]; then
+    echo "Warning: findfs could not locate LABEL=cloudimg-rootfs, falling back to /dev/vda1"
+    ROOT_DEV=/dev/vda1
+fi
+echo "✓ Root device: $ROOT_DEV"
+mount -t ext4 "$ROOT_DEV" /mnt
+
+# Load overlay module
+echo "Loading overlay module..."
+insmod /lib/modules/overlay.ko 2>/dev/null || echo "Overlay module not available, using direct mount"
+
+# Fix /etc/fstab directly (backend has in-memory write overlay)
+echo "Fixing /etc/fstab..."
+if [ -f /mnt/etc/fstab ]; then
+    sed -i 's|/boot/efi.*|/boot/efi    /boot/efi    vfat    defaults,nofail    0       2|' /mnt/etc/fstab
+    echo "✓ /etc/fstab fixed"
+fi
+
+# Switch root into the pixel Ubuntu OS
+echo "Switching root to Ubuntu..."
+exec switch_root /mnt /sbin/init

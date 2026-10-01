@@ -1,0 +1,22 @@
+{
+  "ticket": "wordbase-audio-cmd-preexisting-failure",
+  "filed_by": "gh19-stdlib-track cron worker",
+  "filed_at": "2026-09-10",
+  "severity": "medium",
+  "track": "main-chain (GH-8b/GH-16/GH-17 drift surface) — NOT GH-19",
+  "summary": "tests/test_wordbase_audio_cmd.py: 5/22 fail from a clean tree on any branch. tools/wordbase_audio_cmd.py + its tests date to 2026-07-24; glyph_isa_v2.py was rewritten 2026-09-07/08 by GH-8b/GH-16/GH-17 and the tool was never updated.",
+  "root_cause": "Since GH-8b/GH-16/GH-17, GlyphCPUv2 stores to non-FS-window, non-MMIO addresses land in self.memory (shadow RAM), NOT the image ndarray. tools/wordbase_audio_cmd.py execute_glyph_assembly() (line ~183) reads back via cpu._mem_read(image, 500) which reads the image pixels -> always 0. Minimal repro: asm ['LDI r1 500','LDI r2 255','ST r1 r2','HALT'] on a 200-col image -> cpu.memory[500]==255 but _mem_read(image,500)==0.",
+  "failing_tests": [
+    "test_clear_color_writes_real_wordbase_color_to_framebuffer[blue-#0000FF]",
+    "test_clear_color_writes_real_wordbase_color_to_framebuffer[red-#FF0000]",
+    "test_clear_color_writes_real_wordbase_color_to_framebuffer[green-#008000]",
+    "tests/test_wordbase_audio_cmd.py::TestCompileAndExecute::test_colors_are_genuinely_distinct",
+    "tests/test_wordbase_audio_cmd.py::TestFullPipeline::test_clear_blue_halt_full_pipeline"
+  ],
+  "suggested_fix_options": [
+    "A (minimal, preserves intent): execute_glyph_assembly reads back cpu.memory[500] (shadow RAM) instead of _mem_read(image, ...) — matches where GH-16/17 stores actually land.",
+    "B (if image-pixel persistence is the intent): route addr 500 through the GH-8b FS pixel window (_fs_pix_write), but that changes the memory map contract and needs GH-18 track sign-off."
+  ],
+  "constraint": "tools/glyph_isa_v2.py is GH-18-track-owned; fix belongs in tools/wordbase_audio_cmd.py readback (option A) or a coordinated change. Also note: full-suite runs with system python3 hit ModuleNotFoundError librosa (2 collection errors: test_frequency_mapper.py, test_griffin_lim.py) — pre-existing, unrelated.",
+  "verification_evidence": "GH-19 branch clean tree: tests/test_gh19_stdlib.py 27/27 pass; tests/test_gh*.py 150/150 pass in 29.87s (matches 'GH-19 complete' commit receipt)."
+}

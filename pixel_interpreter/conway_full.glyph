@@ -1,0 +1,239 @@
+; Conway's Game of Life - 4x4 grid (complete working version)
+; Blinker oscillator: vertical line at (1,151) that becomes horizontal
+
+; Memory layout:
+; y=0: CPU state
+; y=1-200: Code
+; y=151-154: Current grid (4x4)
+; y=155-158: Next grid (4x4)
+; Working vars in row 0:
+; (200,0): outer_y counter
+; (201,0): inner_x counter
+; (202,0): neighbor_count
+; (203,0): temp_x
+; (204,0): temp_y
+
+; Initialize blinker at (1, 151) - vertical line
+SET 255
+STORE (1, 151)
+STORE (1, 152)
+STORE (1, 153)
+
+; Outer loop: y from 0 to 3
+SET 0
+STORE (200, 0)
+
+:outer_loop
+LOAD (200, 0)
+SUB 3
+JZ :done  ; Done with all rows
+
+; Inner loop: x from 0 to 3
+SET 0
+STORE (201, 0)
+
+:inner_loop
+LOAD (201, 0)
+SUB 3
+JZ :next_row  ; Done with this row
+
+; Count neighbors
+SET 0
+STORE (202, 0)  ; neighbor_count = 0
+
+; Save base coordinates
+LOAD (201, 0)
+STORE (203, 0)  ; temp_x = inner_x
+LOAD (200, 0)
+STORE (204, 0)  ; temp_y = outer_y
+
+; Check neighbors (unrolled for all 8 directions)
+; Top-left: (x-1, y-1)
+SET_ADDR_HIGH 203
+SET_ADDR_LOW 204
+ADD_COORD -1  ; y-1 (wraps around)
+SUB 1  ; x-1 using SUB
+SET_ADDR_LOW 0  ; This is wrong - need different approach
+; Alternative: SET_ADDR_HIGH directly with x-1
+LOAD (203, 0)
+SUB 1
+STORE (205, 0)  ; x_minus1
+LOAD (204, 0)
+SUB 1
+STORE (206, 0)  ; y_minus1
+SET_ADDR_HIGH 205
+SET_ADDR_LOW 206
+INDIRECT_LOAD
+SUB 255
+JZ :n1_alive
+JMP :n2
+
+:n1_alive
+LOAD (202, 0)
+ADD 1
+STORE (202, 0)
+
+:n2
+; Top: (x, y-1)
+SET_ADDR_HIGH 203
+SET_ADDR_LOW 206
+INDIRECT_LOAD
+SUB 255
+JZ :n2_alive
+JMP :n3
+
+:n2_alive
+LOAD (202, 0)
+ADD 1
+STORE (202, 0)
+
+:n3
+; Top-right: (x+1, y-1)
+LOAD (203, 0)
+ADD 1
+STORE (207, 0)  ; x_plus1
+SET_ADDR_HIGH 207
+SET_ADDR_LOW 206
+INDIRECT_LOAD
+SUB 255
+JZ :n3_alive
+JMP :n4
+
+:n3_alive
+LOAD (202, 0)
+ADD 1
+STORE (202, 0)
+
+:n4
+; Left: (x-1, y)
+SET_ADDR_HIGH 205
+SET_ADDR_LOW 204
+INDIRECT_LOAD
+SUB 255
+JZ :n4_alive
+JMP :n5
+
+:n4_alive
+LOAD (202, 0)
+ADD 1
+STORE (202, 0)
+
+:n5
+; Right: (x+1, y)
+SET_ADDR_HIGH 207
+SET_ADDR_LOW 204
+INDIRECT_LOAD
+SUB 255
+JZ :n5_alive
+JMP :n6
+
+:n5_alive
+LOAD (202, 0)
+ADD 1
+STORE (202, 0)
+
+:n6
+; Bottom-left: (x-1, y+1)
+LOAD (204, 0)
+ADD 1
+STORE (208, 0)  ; y_plus1
+SET_ADDR_HIGH 205
+SET_ADDR_LOW 208
+INDIRECT_LOAD
+SUB 255
+JZ :n6_alive
+JMP :n7
+
+:n6_alive
+LOAD (202, 0)
+ADD 1
+STORE (202, 0)
+
+:n7
+; Bottom: (x, y+1)
+SET_ADDR_HIGH 203
+SET_ADDR_LOW 208
+INDIRECT_LOAD
+SUB 255
+JZ :n7_alive
+JMP :n8
+
+:n7_alive
+LOAD (202, 0)
+ADD 1
+STORE (202, 0)
+
+:n8
+; Bottom-right: (x+1, y+1)
+SET_ADDR_HIGH 207
+SET_ADDR_LOW 208
+INDIRECT_LOAD
+SUB 255
+JZ :n8_alive
+JMP :apply_rules
+
+:n8_alive
+LOAD (202, 0)
+ADD 1
+STORE (202, 0)
+
+; Apply Game of Life rules
+:apply_rules
+; Check if current cell is alive
+SET_ADDR_HIGH 203
+SET_ADDR_LOW 204
+INDIRECT_LOAD
+SUB 255
+JZ :alive_rules
+
+; Dead cell: exactly 3 neighbors -> become alive
+LOAD (202, 0)
+SUB 3
+JZ :become_alive
+JMP :die
+
+:become_alive
+; Store 255 in next grid at (x, y+4)
+SET_ADDR_HIGH 203
+SET_ADDR_LOW 204
+ADD_COORD 4  ; y+4
+INDIRECT_STORE 255
+JMP :next_cell
+
+:alive_rules
+; Alive cell: 2 or 3 neighbors -> stay alive
+LOAD (202, 0)
+SUB 2
+JZ :stay_alive
+SUB 1
+JZ :stay_alive
+; Otherwise die
+JMP :die
+
+:stay_alive
+SET_ADDR_HIGH 203
+SET_ADDR_LOW 204
+ADD_COORD 4  ; y+4
+INDIRECT_STORE 255
+JMP :next_cell
+
+:die
+SET_ADDR_HIGH 203
+SET_ADDR_LOW 204
+ADD_COORD 4  ; y+4
+INDIRECT_STORE 0
+
+:next_cell
+LOAD (201, 0)
+ADD 1
+STORE (201, 0)
+JMP :inner_loop
+
+:next_row
+LOAD (200, 0)
+ADD 1
+STORE (200, 0)
+JMP :outer_loop
+
+:done
+HALT

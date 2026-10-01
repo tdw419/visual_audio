@@ -1,0 +1,17 @@
+{
+  "cache_magic": "VAC-CACHE",
+  "version": 1,
+  "max_entries": 4096,
+  "entry_size_bytes": 131072,
+  "total_cache_bytes": 536870912,
+  "current_entries": 0,
+  "hit_count": 0,
+  "miss_count": 0,
+  "allocation_table": {
+    "type": "bitmap",
+    "size_bytes": 512,
+    "description": "1 bit per entry, 0=free, 1=allocated (512 bytes = 4096 bits)",
+    "bitmap_hex": "00" 
+  },
+  "entries": []
+}

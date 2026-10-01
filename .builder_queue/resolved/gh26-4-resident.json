@@ -1,0 +1,20 @@
+{
+  "ticket_id": "gh26-4-resident",
+  "roadmap_item": "GH-26.4",
+  "step": "RESIDENT: agent daemon box as a real USER task under GH-16 preemption; argv-in/result-out via GH-9 loader; working memory > box size pages via GH-25 PTE_HILB",
+  "created": "2026-09-11T09:45:00-05:00",
+  "created_by": "oversight session (Jericho-authorized 26.2->26.5 strict sequence; 26.2 00b29da, 26.3 9c0d969 landed)",
+  "failing_command": "tests/test_gh26_resident.py does not exist yet - this ticket authorizes creating it from systems/GH26_AGENT_IN_THE_LOOP_SPEC.md section 26.4 (RED first: failing-test output before the fix)",
+  "context": {
+    "authorization": "GEOS_EMIT_ACK gate OPEN - .geos_emit_ack at repo root, commits 93363d5/ee92607; strict sequence 26.2->26.3->26.4->26.5, one item per ticket, gate green before next",
+    "prior_items": "26.1 c29a52c (per-tick live surface), 26.2 00b29da (geos_emit aperture write path, mailbox {700..767}), 26.3 9c0d969 (autoatlas.emit_admit oracle-only tile admission, receipted)",
+    "spec": "systems/GH26_AGENT_IN_THE_LOOP_SPEC.md section 26.4 - read it before writing tests",
+    "requirements": "agent daemon = a USER task in a box, scheduled like any other under GH-16 tick preemption (KTICK_PC/TIMER_RELOAD/TICK_PC at BOX_MMIO_BASE+0x3C/0x44/0x48); argv passed in via the box tile-ABI window (argv word 750, result word 754, GH-22 word format cksum[31:24]|op[15:8]|payload[7:0]); result read back from the same window; working set larger than the box pages through GH-25 PTE_HILB frames (PAGE_TABLE word 8211, PTE_V|PTE_W|PTE_U|PTE_HILB, xy2d 64x64 frame grid) - first resident-viewport consumer",
+    "gate_requirements": "RED gate tests/test_gh26_resident.py: daemon task gets preempted mid-compute and resumes correctly (tick boundary), result word lands in box window after argv post, working memory beyond box size is served through Hilbert-paged frames (access a word beyond box bounds via PTE mapping, correct value), adversarial: daemon fault does not corrupt neighbor boxes, preemption does not lose box register context",
+    "adversarial_first": "aperture/fault/starvation legs are first-class per the spec, not afterthoughts"
+  },
+  "attempt": 1,
+  "max_attempts": 3,
+  "gate": "tests/test_gh26_resident.py green + full arc regression from clean + feat(gh26.4) commit + roadmap GH-26 row updated with 26.4 status; THEN retire this ticket to .builder_queue/resolved/",
+  "receipt_discipline": "failing-test output before the fix, passing run after; receipts are command output not narrative"
+}

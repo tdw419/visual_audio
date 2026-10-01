@@ -1,0 +1,3 @@
+[submodule "external/wordbase"]
+	path = external/wordbase
+	url = https://github.com/tdw419/wordbase.git

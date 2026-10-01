@@ -1,0 +1,17 @@
+{
+  "id": "INSTRUMENT-1",
+  "title": "the `live_smoke` pytest mark is unregistered — the deselection that keeps live-model legs out of the arc rests on a mark pytest does not know",
+  "filed": "2026-09-13T15:4xZ",
+  "filed_by": "builder cron af3e62239ce2, while verifying DEFECT-25",
+  "base_commit": "e3a384b",
+  "type": "instrument hygiene (warn-level, not a defect): a mark typo would silently re-gate the arc on a live model",
+  "status": "LANDED 2026-09-13 (builder cron af3e62239ce2, promotion 34934c6 + implementation 73f8559) - `pytest.ini` registers `live_smoke`, gate `tests/test_instrument1_mark_registration.py` 4 passed and the same set with `--strict-markers` 18 passed; unknown-mark warnings over the 4 live_smoke files 5 -> 0. Receipt systems/RECEIPT_INSTRUMENT1_LIVE_SMOKE_MARK.md. Kept in .builder_queue/ (not moved to resolved/) so the measured basis the roadmap row cites stays adjacent to the row's own evidence; retiring it from the monitor's queue count is a monitor-scope decision, not this row's.",
+  "measured": {
+    "evidence": "`pytest tests/test_arc_determinism_audit.py tests/test_gh20_fs_v2.py -q` after the DEFECT-25 landing -> `14 passed, 5 warnings in 43.34s`, every warning `PytestUnknownMarkWarning: Unknown pytest.mark.live_smoke - is this a typo?` raised at each `@pytest.mark.live_smoke` decorator",
+    "scope": "the mark is used by tests/test_gh12_autoatlas.py:243, tests/test_gh18_syscall_abi.py, tests/test_gh12_escalation.py and now the five migrated GH-20 legs; it is deselected by `tools/arc_lega.sh` via `-m \"not live_smoke\"` (pinned by tests/test_arc_determinism_audit.py::test_l3_arc_runner_excludes_live_smoke)",
+    "why_it_matters": "pytest filters `-m` by mark NAME, so an unregistered mark still deselects; but an unregistered mark is also the state in which a typo (`live_smok`, `live-smoke`) deselects NOTHING and re-gates arc leg A on a live Ollama draft with no error — the exact failure DEFECT-24/25 removed. Registration turns that class from silent into loud."
+  },
+  "cheapest_fix": "add a `[tool.pytest.ini_options] markers = [\"live_smoke: ...\"]` entry (or the project's existing pytest config file) that registers the mark; one gate leg asserting `--strict-markers` (or the warning-free run) on the arc selector file set",
+  "gate_clause": "with the mark registered, the DEFECT-25/24 file set runs with 0 `PytestUnknownMarkWarning`; RED-first shown by a deliberately misspelled mark in a throwaway fixture failing under `--strict-markers`, i.e. the guard must be shown able to fail",
+  "honest_note": "warn-level cleanliness, NOT a correctness gap today: 9 legs are currently deselected correctly (arc run `SEED=2026091321`: `9 deselected`). Do not promote before the higher-value items; file it so the state is not forgotten."
+}

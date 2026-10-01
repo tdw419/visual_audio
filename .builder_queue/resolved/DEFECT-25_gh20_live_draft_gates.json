@@ -1,0 +1,32 @@
+{
+ "id": "DEFECT-25",
+ "title": "five GH-20 fs_v2 legs draft a LIVE tile to gate arc leg A (found by the DEFECT-24 landing arc run itself)",
+ "filed": "2026-09-13T15:2xZ",
+ "filed_by": "builder cron af3e62239ce2 (during the DEFECT-24 landing arc run)",
+ "base_commit": "4441197",
+ "type": "gate determinism — the same class as DEFECT-24, in a leg the DEFECT-24 audit CANNOT see",
+ "status": "CLOSED 2026-09-13 — implemented and landed by builder cron af3e62239ce2; roadmap row DEFECT-25 is ✅ (systems/GLYPH_SELF_HOSTING_ROADMAP.md:359), receipt systems/RECEIPT_DEFECT25_GH20_LIVE_DRAFT_SPLIT.md, commit 76a5261. Kept for provenance, never delete. NOTE for a future supply scan: this ticket is NOT eligible supply.",
+ "severity": "the same non-replayability DEFECT-24 removed from the gh18 leg: the arc's verdict depends on one local-model draft answering inside the 120 s client timeout. Measured: it DID turn leg A red this tick, on a test the change under test never touched.",
+ "measured": {
+  "arc_run": "SEED=2026091316 bash ~/.hermes/scripts/suite_sweep.sh -b 12G -w 4 -- bash tools/arc_lega.sh",
+  "head": "4441197",
+  "verdict": "1 failed, 322 passed, 1 skipped, 4 deselected in 266.76s (the 4 deselected are DEFECT-24's migrated legs; the delta versus the previous arc is exactly those legs)",
+  "failure": "tests/test_gh20_fs_v2.py::test_gh20_fs_rename_inplace_inode_preserved -> /usr/lib/python3.12/socket.py:707: TimeoutError: timed out (log output/arc_lega_seed2026091316_4441197.txt:337,344)",
+  "isolation_clean": "pytest tests/test_gh20_fs_v2.py::test_gh20_fs_rename_inplace_inode_preserved -q -> 1 passed in 10.21s on the same tree (so the red is load/order-dependent, not a semantic regression)",
+  "runtime_signature": "the run took 266.76s versus ~126s for the four preceding arc runs — the extra ~120s is the socket timeout itself, i.e. the arc's wall time is also live-model-dependent",
+  "unmigrated_legs": [
+   "tests/test_gh20_fs_v2.py:118 test_gh20_fs_append_grows_extents_clean -> admit_syscall(runner, FSV2_N_APPEND, contract=...)",
+   "tests/test_gh20_fs_v2.py:163 test_gh20_fs_rename_inplace_inode_preserved -> admit_syscall(runner, FSV2_N_RENAME, contract=...)",
+   "tests/test_gh20_fs_v2.py:202 test_gh20_fs_unlink_shared_refcount_fails_clean -> admit_syscall(runner, FSV2_N_UNLINK, contract=...)",
+   "tests/test_gh20_fs_v2.py:235 test_gh20_canonical_replay_fixpoint_across_mutations -> admit_syscall(runner, n, contract='fs op tile', ...) in a loop",
+   "tests/test_gh20_fs_v2.py:274 test_gh20_fs_ops_are_proven_table_tiles -> admit_syscall(runner, n, contract='fs op tile', ...) in a loop"
+  ],
+  "why_the_audit_missed_them": "tests/test_arc_determinism_audit.py's signals are (a) a decorator carrying _ollama_available, (b) a body call to _ollama_available without a monkeypatch fixture, (c) a name denoting live smoke. None of these five legs has any of the three: they call admit_syscall() with a contract and no monkeypatch fixture, so the draft routes to the live model through autoatlas.ingest -> escalate. This blind spot is DECLARED in the audit docstring ('does not prove that an unmocked call to escalate( ... is caught'), but a declared blind spot is still a blind spot: the row's own claim ('arc leg A no longer gates on a live model') is not yet true."
+ },
+ "options_cheapest_first": [
+  "1. Extend the audit's signal FIRST (mechanical, makes the gap visible): a test whose body calls admit_syscall( / ingest( / escalate( and whose signature does NOT take a monkeypatch fixture is a live-model leg and must carry @pytest.mark.live_smoke. Show it RED against the pre-fix tree (it flags exactly these five legs) and prove the post-fix tree is clean. This is the sensor the next step needs.",
+  "2. Then migrate per leg, cheapest-first: for each fs op, add a deterministic sibling that pins the verified tile through the same seam DEFECT-24 used (aa.escalate monkeypatched to return a pinned, oracle-verified tile; the real oracle, IR gate and in-image re-dispatch still run), and mark the live drafting leg @pytest.mark.live_smoke. The pinned tiles must be verified by the oracle in the test (never asserted verified=True by hand).",
+  "3. If a per-op pinned tile turns out to be more than a mechanical port (the fs ops' oracle proofs need word-exact FSTAB mutations), split it: migrate the three single-op legs now (append/rename/unlink) and file the two loop legs as their own ticket rather than weakening their coverage."
+ ],
+ "not_proven": "that the timeout had no other contributing cause (GPU contention from a parallel session is the best-supported one, and the leg is green in isolation); and whether a longer client timeout would have succeeded rather than finding a genuinely stuck request."
+}

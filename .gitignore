@@ -1,0 +1,152 @@
+# Python
+__pycache__/
+.env
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+ENV/
+env/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Large generated files (exceed GitHub 100MB limit)
+alpine_gpu_pixels.npy
+*.npy
+*.npz
+
+# Trace files
+traces/*.jsonl
+traces/*.log
+*.log
+
+# Runtime artifacts
+.rts/
+scene*.png
+visual_audio.mkv
+
+# Generated audio cache (protected asset)
+voicebook/
+
+# Database
+db/*.db
+
+# Test fixtures
+tests/fixtures/*.png
+
+# Compiled binaries
+*.qcow2
+*.img
+*.iso
+*.apkovl.tar.gz
+*.nut
+*.raw
+*.bin
+*.elf
+
+# Backup files
+*.backup
+*.bak
+*_backup
+
+# Documentation drafts
+*_draft.md
+drafts/
+
+# Auto-generated
+wordbook.png
+wordbook.meta.json
+
+# Alpine boot artifacts
+boot_images/alpine_*
+boot_images/ubuntu_*
+boot_images/*.fd
+
+# Logs and traces
+listener.log
+pixel_os_listener.log
+.update_proposals.log
+qemu_debug.log
+qemu_test.log
+
+# Generated payloads
+/generate_*.py
+/test_*.py
+*_manifest.json
+
+# Large models (exceed 50MB)
+models/*.pt
+models/*.pth
+models/*.bin
+
+# Trace directories
+traces/evolver*/
+traces/evolver_fix/
+traces/evolver_level5c/
+traces/evolver_test/
+traces/evolver_full/
+
+# va_container.py run cache (tools/va_container.py cmd_run persistent extraction cache)
+.va_run_cache/
+
+# Autonomous repo artifacts
+autonomous_repo_orchestrator/
+systems/*.mkv
+sync/node_modules/
+initramfs-cognitive/output/
+
+# Rust build artifacts
+target/
+
+# Large cognitive-container encode artifacts / kernel binaries
+ubuntu_cognitive_pxc1_v1/
+ubuntu_cognitive_pxc1_v2/
+ubuntu_desktop_pxc1_v1/
+ubuntu_desktop_pxc1_v1_snapshot/
+tools/pxc1/target/
+ubuntu_vmlinuz
+*.nut.meta.json
+initramfs-cognitive/modules/
+initramfs-cognitive/virtio_blk.ko
+
+# Pixel boot instance storage (large raw/qcow2 images)
+.pixel_instances/
+
+# Local pixel_layer.py overlay stacks (per-user working state, not source)
+.pixel_layers/
+
+# Backend run logs (can grow unbounded across long-running VM sessions)
+logs/
+.worktrees/
+.ckpt/
+
+# Phase 27: browser boot receipts are load-bearing evidence, never ignore
+!browser_boot/**/receipts/*.log

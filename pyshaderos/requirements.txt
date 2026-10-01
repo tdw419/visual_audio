@@ -1,0 +1,14 @@
+numpy
+lancedb
+python-dotenv
+fastapi
+uvicorn
+requests
+pandas
+transformers
+torch
+tqdm
+websockets
+sentence-transformers
+visualpython
+wgpu

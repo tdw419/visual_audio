@@ -1,0 +1,38 @@
+docs(arc): re-verify the 52-file arc at HEAD 194844c after TEST-COL-1 — green, but not reliably green
+
+Trigger: the monitor saw HEAD move 8943601 -> 194844c. 039ce3b changed pytest.ini,
+tests/conftest.py, tests/test_bk8_fs_pix_sha256.py and three glyph_dispatch/src modules —
+all inside the arc's dependency closure — so the arc was re-run rather than assumed.
+
+Leg A (52 files, /usr/bin/python3), five back-to-back runs at the SAME head:
+  run1 rc=1    1 failed / 323 passed / 1 skipped (159.70 s)
+               FAILED tests/test_gh12_autoatlas.py::test_registered_tile_persists_and_replays_offline
+               AssertionError: no candidate verified in 6 attempts; last: no-halt: 5000 steps without HALT
+               ('E_ATLAS_UNVERIFIED' != 'OK')            output/arc_legA_194844c.txt
+  run2 rc=139  Fatal Python error: Segmentation fault at ~44%+23 dots
+               tools/glyph_isa_v2.py:561 in step <- :1114 in run <- tools/glyph_gpt/generate.py:370
+               in run_generated <- tools/glyph_gpt/atlas.py:49 in register <- :239 in
+               build_default_atlas <- tests/test_gh22_device_driver_abi.py:155 in _bake <- :174
+               output/arc_legA_194844c_run2.txt
+  run3 rc=0    324 passed / 1 skipped (141.47 s)        output/arc_legA_194844c_run3.txt
+  run4 rc=0    324 passed / 1 skipped (140.75 s)        output/arc_legA_194844c_run4.txt
+  run5 rc=0    324 passed / 1 skipped (139.13 s)        output/arc_legA_194844c_run5.txt
+
+Leg B (osskel/substor/obs1/wf1/spatial_rv32i_cpu): 83 passed in 8.51 s, rc=0.
+
+Isolation probes (the discriminator): both suspect modules pass 3/3 run alone at the same head —
+gh12 admission leg 3/3 rc=0 (output/gh12_isolated_rep{1,2,3}.txt), gh22 bake leg 3/3 rc=0, ~0.9 s each
+(output/gh22_isolated_rep{1,2,3}.txt). Both anomalies are context-dependent, not file-local.
+
+Label: n=5 runs, 2 disturbed — two one-off observations, NOT a rate; no causal claim against the
+TEST-COL-1 change (three green runs sit at the same head). The segfault's mechanism is NOT diagnosed;
+every frame is pure Python. pytest-randomly IS installed and -q hides the seed banner, so run-to-run
+order variation is a hypothesis, not evidence; run3's -p no:randomly is a confound, not a fix.
+
+Filed: .builder_queue/DEFECT-22_arc_legA_instability.json (OPEN, needs a reproducer) and
+.builder_queue/REPAIR_PENDING_gh12_ollama_gate_nondeterminism.md (the gh12 leg contains an LLM
+sampling step — a 4-option design question for Jericho, not a builder pick).
+Receipt: systems/RECEIPT_ARC_LEGA_INTERMITTENT_194844c.md. Driver: .builder_queue/arc_legA_rerun.sh.
+
+NOT verified: the segfault's cause, the full tests/ suite to completion (still unbounded), any
+WGSL/GPU parity leg, and the OSS worktree.

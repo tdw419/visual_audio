@@ -1,0 +1,55 @@
+{
+ "guest_path": "/var/tmp/gp3_1789615295/multiframe/big.bin",
+ "size": 40000000,
+ "extents": 2,
+ "frames": [
+  133,
+  134
+ ],
+ "spans": [
+  {
+   "disk_bytes": [
+    8931835904,
+    8965390336
+   ],
+   "start": {
+    "frame": 134,
+    "x": 0,
+    "y": 388,
+    "channel": "R",
+    "intra_byte": 6356992
+   },
+   "end": {
+    "frame": 134,
+    "x": 4095,
+    "y": 2435,
+    "channel": "A",
+    "intra_byte": 39911423
+   },
+   "blocks": 8192,
+   "logical_first": 0
+  },
+  {
+   "disk_bytes": [
+    8894791680,
+    8901238784
+   ],
+   "start": {
+    "frame": 133,
+    "x": 0,
+    "y": 2223,
+    "channel": "R",
+    "intra_byte": 36421632
+   },
+   "end": {
+    "frame": 133,
+    "x": 2047,
+    "y": 2616,
+    "channel": "A",
+    "intra_byte": 42868735
+   },
+   "blocks": 1574,
+   "logical_first": 8192
+  }
+ ]
+}

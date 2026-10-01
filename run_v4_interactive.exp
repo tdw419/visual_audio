@@ -1,0 +1,52 @@
+#!/usr/bin/expect -f
+
+set timeout 60
+log_user 0
+log_file /tmp/qemu_serial_interactive.log
+
+# Start QEMU with pty serial
+spawn qemu-system-x86_64 -m 1G -enable-kvm -cpu host -display none \
+    -d int,cpu_reset -D /tmp/qemu_int.log \
+    -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
+    -drive if=pflash,format=raw,file=/tmp/my_vars.fd \
+    -drive id=bootdisk,format=raw,file=/tmp/ubuntu_v4_efi.img,if=none \
+    -device ide-hd,drive=bootdisk,bootindex=1 \
+    -drive id=rootdisk,file=ubuntu-24.04-server-cloudimg-amd64.raw,format=raw,if=none \
+    -device virtio-blk-pci,drive=rootdisk,bootindex=2 \
+    -serial pty
+
+# Log everything
+log_user 1
+
+# Wait for login prompt
+expect "ubuntu login:"
+send "root\r"
+
+# Wait for password prompt
+expect "Password:"
+send "israel\r"
+
+# Wait for shell prompt
+expect {
+    timeout { puts "Timeout waiting for shell"; exit 1 }
+    -re "root@.*:~#" {}
+}
+
+# Run verification commands
+send "uname -a\r"
+expect -re "root@.*:~#"
+
+send "cat /etc/os-release\r"
+expect -re "root@.*:~#"
+
+send "ls /\r"
+expect -re "root@.*:~#"
+
+send "systemctl is-system-running\r"
+expect -re "root@.*:~#"
+
+# Exit and shutdown
+send "poweroff\r"
+expect eof
+
+puts "\n=== Login successful! ==="

@@ -1,0 +1,5 @@
+# Create an interaction region mapped via Hilbert curve
+ctrl = region(shape=(16, 16), layout="hilbert")
+
+# Express the semantic intent to list files at a sandboxed relative path
+sys_ls(path=".", control_region=ctrl)

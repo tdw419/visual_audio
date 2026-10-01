@@ -1,0 +1,31 @@
+{
+ "method": "60% prompt, FSM-masked decode, oracle word-exact contract",
+ "checkpoint": "checkpoint.pt (retrained post-GH-23, 100 epochs)",
+ "completions": 100,
+ "syntactic_pass": 15,
+ "semantic_pass": 9,
+ "greedy_completions": 20,
+ "greedy_semantic_pass": 1,
+ "per_tile_first_try": [
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+  true,
+  false,
+  false,
+  false,
+  false,
+  true,
+  false,
+  false,
+  true
+ ]
+}

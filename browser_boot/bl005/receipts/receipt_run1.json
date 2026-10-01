@@ -1,0 +1,26 @@
+{
+ "task": "BL005",
+ "page_url": "http://127.0.0.1:8095/bl005.html",
+ "fetch_phase_ms": 1520,
+ "mkv_range_fetches": 257,
+ "manifest_fetches": 1,
+ "forbidden_requests": [],
+ "crc_failures": 0,
+ "sha256_assembled": "3089f7dfa96f5579d0ed5bb26359ae34f4ec6a44f81d9e50e3539d36efee0c80",
+ "sha256_manifest": "3089f7dfa96f5579d0ed5bb26359ae34f4ec6a44f81d9e50e3539d36efee0c80",
+ "sha256_match": true,
+ "userspace_reached": true,
+ "boot_failed": false,
+ "boot_ms": 18672,
+ "frame_count": 257,
+ "frame_avg_ms": 3.971,
+ "frame_min_ms": 2.050000011920929,
+ "frame_max_ms": 16.549999982118607,
+ "serial_tail": "Sep  4 22:05 \u001b[1;35mtty43\u001b[m\r\ncrw-------    1 0        0           4,  44 Sep  4 22:05 \u001b[1;35mtty44\u001b[m\r\ncrw-------    1 0        0           4,  45 Sep  4 22:05 \u001b[1;35mtty45\u001b[m\r\ncrw-------    1 0        0           4,  46 Sep  4 22:05 \u001b[1;35mtty46\u001b[m\r\ncrw-------    1 0        0           4,  47 Sep  4 22:05 \u001b[1;35mtty47\u001b[m\r\ncrw-------    1 0        0           4,  48 Sep  4 22:05 \u001b[1;35mtty48\u001b[m\r\ncrw-------    1 0        0           4,  49 Sep  4 22:05 \u001b[1;35mtty49\u001b[m\r\ncrw-------    1 0        0           4,   5 Sep  4 22:05 \u001b[1;35mtty5\u001b[m\r\ncrw-------    1 0        0           4,  50 Sep  4 22:05 \u001b[1;35mtty50\u001b[m\r\ncrw-------    1 0        0           4,  51 Sep  4 22:05 \u001b[1;35mtty51\u001b[m\r\ncrw-------    1 0        0           4,  52 Sep  4 22:05 \u001b[1;35mtty52\u001b[m\r\ncrw-------    1 0        0           4,  53 Sep  4 22:05 \u001b[1;35mtty53\u001b[m\r\ncrw-------    1 0        0           4,  54 Sep  4 22:05 \u001b[1;35mtty54\u001b[m\r\ncrw-------    1 0        0           4,  55 Sep  4 22:05 \u001b[1;35mtty55\u001b[m\r\ncrw-------    1 0        0           4,  56 Sep  4 22:05 \u001b[1;35mtty56\u001b[m\r\ncrw-------    1 0        0           4,  57 Sep  4 22:05 \u001b[1;35mtty57\u001b[m\r\ncrw-------    1 0        0           4,  58 Sep  4 22:05 \u001b[1;35mtty58\u001b[m\r\ncrw-------    1 0        0           4,  59 Sep  4 22:05 \u001b[1;35mtty59\u001b[m\r\ncrw-------    1 0        0           4,   6 Sep  4 22:05 \u001b[1;35mtty6\u001b[m\r\ncrw-------    1 0        0           4,  60 Sep  4 22:05 \u001b[1;35mtty60\u001b[m\r\ncrw-------    1 0        0           4,  61 Sep  4 22:05 \u001b[1;35mtty61\u001b[m\r\ncrw-------    1 0        0           4,  62 Sep  4 22:05 \u001b[1;35mtty62\u001b[m\r\ncrw-------    1 0        0           4,  63 Sep  4 22:05 \u001b[1;35mtty63\u001b[m\r\ncrw-------    1 0        0           4,   7 Sep  4 22:05 \u001b[1;35mtty7\u001b[m\r\ncrw-------    1 0        0           4,   8 Sep  4 22:05 \u001b[1;35mtty8\u001b[m\r\ncrw-------    1 0        0           4,   9 Sep  4 22:05 \u001b[1;35mtty9\u001b[m\r\ncrw-------    1 0        0           4,  64 Sep  4 22:05 \u001b[1;35mttyS0\u001b[m\r\ncrw-------    1 0        0           4,  65 Sep  4 22:05 \u001b[1;35mttyS1\u001b[m\r\ncrw-------    1 0        0           4,  66 Sep  4 22:05 \u001b[1;35mttyS2\u001b[m\r\ncrw-------    1 0        0           4,  67 Sep  4 22:05 \u001b[1;35mttyS3\u001b[m\r\ncrw-rw-rw-    1 0        0           1,   9 Sep  4 22:05 \u001b[1;35murandom\u001b[m\r\ncrw-------    1 0        0           7,   0 Sep  4 22:05 \u001b[1;35mvcs\u001b[m\r\ncrw-------    1 0        0           7,   1 Sep  4 22:05 \u001b[1;35mvcs1\u001b[m\r\ncrw-------    1 0        0           7, 128 Sep  4 22:05 \u001b[1;35mvcsa\u001b[m\r\ncrw-------    1 0        0           7, 129 Sep  4 22:05 \u001b[1;35mvcsa1\u001b[m\r\ncrw-------    1 0        0           7,  64 Sep  4 22:05 \u001b[1;35mvcsu\u001b[m\r\ncrw-------    1 0        0           7,  65 Sep  4 22:05 \u001b[1;35mvcsu1\u001b[m\r\ncrw-------    1 0        0          10, 256 Sep  4 22:05 \u001b[1;35mvga_arbiter\u001b[m\r\ncrw-rw-rw-    1 0        0           1,   5 Sep  4 22:05 \u001b[1;35mzero\u001b[m\r\nBL002_DEV_LISTING_END\r\n[   15.119361] ext2 filesystem being mounted at /newroot supports timestamps until 2038-01-19 (0x7fffffff)\r\nBL002_ROOT_MOUNTED\r\n\r\n~ # \u001b[6n",
+ "console_tail": [
+  "BL005_FETCH_START",
+  "BL005_FETCH_DONE frames=257 avg_ms=3.971 crc_failures=0 sha256=3089f7dfa96f5579d0ed5bb26359ae34f4ec6a44f81d9e50e3539d36efee0c80",
+  "BL005_EMULATOR_READY",
+  "BL005_USERSPACE_REACHED after 19680ms"
+ ]
+}

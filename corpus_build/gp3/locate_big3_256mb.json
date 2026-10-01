@@ -1,0 +1,33 @@
+{
+ "guest_path": "/var/tmp/gp3_1789615295/multiframe3/big3.bin",
+ "size": 268435456,
+ "extents": 1,
+ "frames": [
+  136,
+  140
+ ],
+ "spans": [
+  {
+   "disk_bytes": [
+    9116385280,
+    9384820736
+   ],
+   "start": {
+    "frame": 136,
+    "x": 0,
+    "y": 3460,
+    "channel": "R",
+    "intra_byte": 56688640
+   },
+   "end": {
+    "frame": 140,
+    "x": 4095,
+    "y": 3459,
+    "channel": "A",
+    "intra_byte": 56688639
+   },
+   "blocks": 65536,
+   "logical_first": 0
+  }
+ ]
+}

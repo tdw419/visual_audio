@@ -1,0 +1,77 @@
+{
+ "guest_path": "/var/tmp/gp3_1789615295/sparse/sparse.bin",
+ "size": 67108864,
+ "extents": 3,
+ "frames": [
+  131,
+  132
+ ],
+ "spans": [
+  {
+   "disk_bytes": [
+    8831172608,
+    8831176704
+   ],
+   "start": {
+    "frame": 132,
+    "x": 0,
+    "y": 2436,
+    "channel": "R",
+    "intra_byte": 39911424
+   },
+   "end": {
+    "frame": 132,
+    "x": 1023,
+    "y": 2436,
+    "channel": "A",
+    "intra_byte": 39915519
+   },
+   "blocks": 1,
+   "logical_first": 0
+  },
+  {
+   "disk_bytes": [
+    8839561216,
+    8839565312
+   ],
+   "start": {
+    "frame": 132,
+    "x": 0,
+    "y": 2948,
+    "channel": "R",
+    "intra_byte": 48300032
+   },
+   "end": {
+    "frame": 132,
+    "x": 1023,
+    "y": 2948,
+    "channel": "A",
+    "intra_byte": 48304127
+   },
+   "blocks": 1,
+   "logical_first": 8192
+  },
+  {
+   "disk_bytes": [
+    8761749504,
+    8761753600
+   ],
+   "start": {
+    "frame": 131,
+    "x": 3072,
+    "y": 2294,
+    "channel": "R",
+    "intra_byte": 37597184
+   },
+   "end": {
+    "frame": 131,
+    "x": 4095,
+    "y": 2294,
+    "channel": "A",
+    "intra_byte": 37601279
+   },
+   "blocks": 1,
+   "logical_first": 16383
+  }
+ ]
+}

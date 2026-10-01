@@ -1,0 +1,115 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>BL003 — OPFS-backed disk persistence</title>
+<style>
+  body { background:#111; color:#ddd; font:14px monospace; margin:0; padding:8px; }
+  #serial { border-top:1px solid #444; margin-top:8px; padding-top:8px;
+            white-space:pre-wrap; max-height:80vh; overflow:auto; color:#9cf; }
+  h1 { font-size:14px; margin:0 0 6px; color:#fc0; }
+</style>
+</head>
+<body>
+<h1>BL003 — OPFS overlay behind v86 hda.buffer</h1>
+<div id="serial"></div>
+
+<script src="libv86.js"></script>
+<script>
+"use strict";
+window.__serialBuf = "";
+window.__booted = false;
+window.__started = Date.now();
+window.__diskSource = null;
+
+var serialEl = document.getElementById("serial");
+
+var USERSPACE_MARKERS = [/BL002_ROOT_MOUNTED(?!.*BL002_ROOT_MOUNT_FAILED)/];
+var FAILURE_MARKERS = [/BL002_ROOT_MOUNT_FAILED/, /can't access tty/];
+
+function pushSerial(text) {
+  window.__serialBuf += text;
+  serialEl.textContent = window.__serialBuf.slice(-12000);
+  serialEl.scrollTop = serialEl.scrollHeight;
+  if (!window.__booted) {
+    for (var i = 0; i < FAILURE_MARKERS.length; i++) {
+      if (FAILURE_MARKERS[i].test(window.__serialBuf)) window.__bootFailed = true;
+    }
+    for (var i = 0; i < USERSPACE_MARKERS.length; i++) {
+      if (USERSPACE_MARKERS[i].test(window.__serialBuf)) {
+        window.__booted = true;
+        window.__bootMs = Date.now() - window.__started;
+        console.log("BL003_USERSPACE_REACHED after " + window.__bootMs + "ms");
+        break;
+      }
+    }
+  }
+}
+
+async function loadDiskBuffer() {
+  const root = await navigator.storage.getDirectory();
+  try {
+    const handle = await root.getFileHandle("alpine_overlay.img");
+    const file = await handle.getFile();
+    const buf = await file.arrayBuffer();
+    window.__diskSource = "opfs";
+    console.log("BL003_DISK_SOURCE opfs bytes=" + buf.byteLength);
+    return buf;
+  } catch (e) {
+    const resp = await fetch("alpine_i386_reconstructed.img");
+    const buf = await resp.arrayBuffer();
+    window.__diskSource = "http";
+    console.log("BL003_DISK_SOURCE http bytes=" + buf.byteLength);
+    return buf;
+  }
+}
+
+window.__persistDisk = async function () {
+  const root = await navigator.storage.getDirectory();
+  const handle = await root.getFileHandle("alpine_overlay.img", { create: true });
+  const writable = await handle.createWritable();
+  await writable.write(window.__diskBuf);
+  await writable.close();
+  console.log("BL003_PERSISTED bytes=" + window.__diskBuf.byteLength);
+};
+
+window.__clearOverlay = async function () {
+  const root = await navigator.storage.getDirectory();
+  try {
+    await root.removeEntry("alpine_overlay.img");
+    console.log("BL003_OVERLAY_CLEARED");
+  } catch (e) {
+    console.log("BL003_OVERLAY_CLEAR_NOOP " + e.message);
+  }
+};
+
+(async () => {
+  const diskBuf = await loadDiskBuffer();
+  window.__diskBuf = diskBuf;
+
+  const emulator = new V86({
+    wasm_path: "v86.wasm",
+    memory_size: 128 * 1024 * 1024,
+    vga_memory_size: 8 * 1024 * 1024,
+    bios: { url: "seabios.bin" },
+    vga_bios: { url: "vgabios.bin" },
+    bzimage: { url: "vmlinuz-lts" },
+    initrd: { url: "initramfs32.cpio.gz" },
+    cmdline: "console=ttyS0 rdinit=/init noapic nolapic acpi=off nosmp",
+    hda: { buffer: diskBuf },
+    autostart: true,
+    disable_keyboard: true,
+    disable_mouse: true,
+  });
+  window.__emulator = emulator;
+
+  emulator.add_listener("serial0-output-byte", function (byte) {
+    pushSerial(String.fromCharCode(byte));
+  });
+  emulator.add_listener("emulator-ready", function () {
+    console.log("BL003_EMULATOR_READY");
+  });
+})();
+</script>
+</body>
+</html>

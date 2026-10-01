@@ -1,0 +1,40 @@
+{
+ "convention": "PXC1 (rung-4 four-plane interleave), truncated frame",
+ "planes": 4,
+ "base_lba": 17,
+ "sector": 512,
+ "chunk_sectors": 8,
+ "group_bytes": 16384,
+ "bank_bytes": 65536,
+ "payload_len": 13631488,
+ "groups": 832,
+ "banks": 208,
+ "plane_bytes": 3407872,
+ "plane_sectors": 6656,
+ "subimages": [
+  {
+   "start_group": 0,
+   "groups": 1,
+   "dst": "0x20000",
+   "src": "kernel setup+header"
+  },
+  {
+   "start_group": 1,
+   "groups": 262,
+   "dst": "0x100000",
+   "src": "kernel pm payload"
+  },
+  {
+   "start_group": 263,
+   "groups": 566,
+   "dst": "0x10000000",
+   "src": "initrd"
+  }
+ ],
+ "filler_groups": 3,
+ "sink": "0x34000",
+ "payload_crc32": "393950AA",
+ "payload_sha256": "e6ebe1ab6574a01154551f964e249eea560618d90dbf1c3532460e0dabe4ac0e",
+ "initrd_bytes": 9260807,
+ "pm_bytes": 4280992
+}

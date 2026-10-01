@@ -1,0 +1,18 @@
+{
+  "total_steps": 35000000,
+  "stall_detected": true,
+  "stall_step": 35000000,
+  "unique_pc_count": 2,
+  "top_pcs": [
+    [
+      "0xffffffff804d7b8c",
+      1
+    ],
+    [
+      "0xffffffff808026c0",
+      1
+    ]
+  ],
+  "csr_state": {
+    "pc": "0xffffffff808026c0",
+    "halted": 

@@ -1,0 +1,10 @@
+{
+  "schema": "va-syscall-corpus/1",
+  "effects": [
+    {
+      "path": "/var/tmp/gp1/data.bin.gz",
+      "bytes": 200062,
+      "sha256": "860b0fdb3e5a68220f29c08d381c94244818e4f849213c6956e131b44eaadca5"
+    }
+  ]
+}

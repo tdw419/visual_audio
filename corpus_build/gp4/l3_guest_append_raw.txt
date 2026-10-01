@@ -1,0 +1,6 @@
+📤 Running Hermes in guest: echo GP4N2-1789617660 >> /var/tmp/gp4_1789617660/self_log.txt; echo APPENDED-1789617660
+
+✅ Success
+
+Output:
+APPENDED-1789617660

@@ -1,0 +1,11 @@
+{
+ "guest_path": "/var/tmp/gp3_1789615295/hardlink/orig.txt",
+ "size": 26,
+ "recon_sha256": "7c7616930d2c9ba81909e07177fb8c9703154dfa78aea3e73a7cc09069b76c0d",
+ "expected_sha256": "7c7616930d2c9ba81909e07177fb8c9703154dfa78aea3e73a7cc09069b76c0d",
+ "match": true,
+ "frames_read": [
+  129
+ ],
+ "note": "ok"
+}

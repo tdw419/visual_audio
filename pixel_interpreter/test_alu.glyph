@@ -1,0 +1,38 @@
+; test_alu.glyph
+; Exercises the new bitwise/shift/register-memory ALU opcodes added for
+; wasm2glyph Tier-1 prep: AND, OR, XOR, SHL, SHR, ADD_MEM, SUB_MEM.
+; Each result is stashed in a distinct memory cell for verification.
+
+SET 12          ; 0b1100
+AND 10          ; 0b1010 -> 8
+STORE (200, 0)  ; expect 8
+
+SET 12
+OR 3            ; 0b1100 | 0b0011 -> 15
+STORE (201, 0)  ; expect 15
+
+SET 12
+XOR 10          ; 0b1100 ^ 0b1010 -> 6
+STORE (202, 0)  ; expect 6
+
+SET 3
+SHL 4           ; 3 << 4 -> 48
+STORE (203, 0)  ; expect 48
+
+SET 48
+SHR 4           ; 48 >> 4 -> 3
+STORE (204, 0)  ; expect 3
+
+SET 100
+STORE (210, 0)  ; a memory cell holding 100
+SET 5
+ADD_MEM (210, 0) ; 5 + mem[210,0]=100 -> 105
+STORE (205, 0)   ; expect 105
+
+SET 50
+STORE (211, 0)   ; a memory cell holding 50
+SET 200
+SUB_MEM (211, 0) ; 200 - mem[211,0]=50 -> 150
+STORE (206, 0)   ; expect 150
+
+HALT

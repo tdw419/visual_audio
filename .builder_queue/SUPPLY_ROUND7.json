@@ -1,0 +1,20 @@
+{
+  "round": 7,
+  "date": "2026-09-23 ~09:0x CDT",
+  "items": [
+    {
+      "id": 12,
+      "title": "DTF-3: FS grow — SYS append + file resize with FSTAB compaction (backlog BK-7, gate binding)",
+      "brief": "Files that grow. SYS append + resize with FSTAB compaction (moves blocks, updates start/len); delete creates a hole, new create reuses it. Touches GH-8b FSTAB + FILE_WRITE/READ handlers; worktree isolation per AGENTS.md if implementer judges it core. WGSL twin: FS handlers are host-side; record twin-boundary note per SYSCALL_ABI_SPEC convention.",
+      "gate": "tests/test_bk7_fs_grow.py — write, append 2x, read back whole byte-exact; delete creates hole; new create reuses it. RED-first (file does not exist; row authorizes creating it). Full defect_d + fs suites green post-landing. Receipt: RECEIPT_DTF3_fs_grow.md.",
+      "note": "Ratified amendment row; BK-7 gate text binding as written. Prereq for DTF-4 (cat/head on non-trivial fixtures)."
+    },
+    {
+      "id": 13,
+      "title": "BK-19: complete VGA 8x16 atlas — the 10 missing printable-ASCII glyphs (ratified under build-only mode)",
+      "brief": "Add canonical IBM VGA ROM bitmaps for [ \\ ] ^ _ ` { | } ~ to tools/vga_font_8x16.py (header claims 'subset: printable ASCII 32-126'; measured 85/95, bracket/brace family absent). Bump the '85 glyphs' coverage numbers in tools/glyph_text_console.py:20 and docstrings to 95. Operator spot-checked and confirmed the gap live 2026-09-23.",
+      "gate": "RED-first: console render of '[code]{sample}' with current atlas shows '?' for all 10 chars (assert decode-back equality with the ?-substituted string). GREEN: same string decodes back exactly, all 95 printable ASCII render; WGSL twin band byte-identical for the same byte stream; console + twin + ISA regressions green; batch invariant intact. Receipt: RECEIPT_BK19_font_atlas.md."
+    }
+  ],
+  "rule": "One active ticket at a time, lowest first (12 then 13). After these: queue returns to empty; DTF-4 (coreutils, BK-11) is next planned supply. BK-18 (sharded runner) scheduled as the round after DTF-4 — before any further suite-wide work."
+}

@@ -1,0 +1,13 @@
+{
+  "schema": "va-syscall-corpus/1",
+  "captured_utc": "2026-09-17T04:32:00Z",
+  "slug": "mmap_rw_page",
+  "task_prompt": "Run exactly: bash /var/tmp/run_cap3.sh",
+  "dispatch": "guest_bridge.py hermes_run",
+  "guest": {
+    "kernel": "6.8.0-136-generic",
+    "strace": "6.8"
+  },
+  "workload": "4KB file mmap: slice write, flush, seek+read back",
+  "hermes_reply": "script executed via guest channel; see trace.log for ground truth"
+}

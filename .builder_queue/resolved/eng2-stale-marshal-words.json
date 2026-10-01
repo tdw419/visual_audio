@@ -1,0 +1,9 @@
+{
+  "id": "ENG-2-bk3-unclear-sysret-mmio",
+  "found": "2026-09-11",
+  "found_by": "builder cron af3e62239ce2 during BK-4 join work",
+  "severity": "latent-kernel-hygiene",
+  "claim": "BK-3's signals.py :__kdone tail zeroes word 8204 (SYS_N) but never 8205 (SYS_A0) nor 8201 (SYSCALL_PC). Harmless in BK-3's landed image only because every task path HALTs before any further trap; any future BK-3 extension that traps after kdone re-entry would read stale marshaling words. BK-4's :__finish_join zeroes 8204+8205 and deliberately RE-POINTS 8201 (that is its mechanism).",
+  "proposed_gate": "fold into the next BK-3-touching ticket (do not reopen a green, committed gate for hygiene alone): zero 8201/8205 in :__kdone alongside 8204; existing 5/5 gate must stay green unchanged.",
+  "status": "candidate — hygiene-only, attach to next BK-3 edit"
+}

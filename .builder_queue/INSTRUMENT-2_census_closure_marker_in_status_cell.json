@@ -1,0 +1,37 @@
+{
+ "id": "INSTRUMENT-2",
+ "title": "supply_census classifies a row CLOSED when its own status cell cites ANOTHER row's closure marker",
+ "status": "CLOSED 2026-09-14 (builder cron af3e62239ce2) - fixed: citation boundary in is_closed (CITATION_CUE); rule declared in one place and pinned by tests/test_supply_census_instrument2.py L6/L7a/L7b/L7c/L8; receipt systems/RECEIPT_INSTRUMENT2_CENSUS_CITATION_BOUNDARY.md",
+ "filed": "2026-09-14",
+ "filed_by": "builder cron af3e62239ce2 (orchestrator tick, DEFECT-23-ROOT step 1)",
+ "severity": "high \u2014 this is the sensor that decides 'work vs hold' every tick; a false CLOSED hides an open row (the same failure mode SUPPLY-CENSUS-1 was built to stop, reached by a different route)",
+ "class": "instrument / classifier precedence (twin of the TEST-COL-1 + DEFECT-25 cell-drift defects the census already documents)",
+ "measured": {
+  "trigger": "The status cell of systems/GLYPH_SELF_HOSTING_ROADMAP.md:360 (DEFECT-23-ROOT) was written this tick as '\u23f3 queued ... PARTIAL ... landed 67be5c9 ... BLOCKED-ON-DESIGN ...' and its trailing parenthetical cited two OTHER rows' closures with the phrase 'both are \u2705 done'.",
+  "RED": "python3 tools/supply_census.py -> 'TOTAL=74 OPEN=0' immediately after commit a42e696 \u2014 the row that is open, queued and marked BLOCKED-ON-DESIGN read as CLOSED, and the loop would have seen 0 open rows.",
+  "GREEN": "same command after removing the closure token from that cell (commit 3356436) -> 'TOTAL=74 OPEN=1 :: DEFECT-23-ROOT'. Only the wording changed; no row was added, closed or re-ordered.",
+  "note": "The census DOES report 'MULTI_STATUS_CELLS=1 (DEFECT-25)', i.e. it detects cells carrying more than one status token \u2014 but it still resolved MY cell to CLOSED by the closure marker's presence, so detection and resolution disagree. DEFECT-25's own cell is multi-status and resolves to closed (correctly); mine resolved to closed (incorrectly)."
+ },
+ "why_not_fixed_here": "Correcting a classifier's precedence rule is a change to a live instrument whose gate (tests/test_supply_census.py L1-L5) currently pins the OLD behaviour in places; doing it inside the DEFECT-23-ROOT instrument step would mix two units of work and could weaken a live guard (skeleton rule 4). Filed instead, with the RED/GREEN pair above as the reproducer.",
+ "proposed_gate": {
+  "file": "tests/test_supply_census.py (extend; L1-L5 must stay green)",
+  "L6": "a fixture row whose status cell is '\u23f3 queued \u2026 BLOCKED-ON-DESIGN \u2026' and whose prose cites another row's closure ('both are \u2705 done') must read OPEN (today: CLOSED \u2014 paste this RED against the pre-fix classifier)",
+  "L7": "non-vacuity: a genuinely closed row (own cell carries the closure marker, no \u23f3) must still read CLOSED, and an exclusions-only/ambiguous cell must not become OPEN by accident",
+  "L8": "the multi-status resolution rule must be stated in one place and asserted: when a cell carries both an open token and a closure token, the row's state is decided by a declared precedence (proposal: open token wins, with the cell reported as MULTI_STATUS) \u2014 not by whichever marker the scanner finds first"
+ },
+ "risk_if_ignored": "Any future status fragment that mentions another row's closure (a common documentation habit \u2014 this repo's own row texts cross-reference landed rows constantly) can silently close the very row it is describing. The loop then either holds with real supply or promotes a duplicate row.",
+ "evidence_paths": [
+  "output/defect23_pte_acceptance_probe_ORCH.txt",
+  ".builder_queue/REPAIR_PENDING_defect23_pte_acceptance_rule.md"
+ ],
+ "ruling": null,
+ "resolution": {
+  "landed": "tools/supply_census.py is_closed() - three forms (FLAT/TRANSITION/SPELLED) + citation boundary (both|all|each|they|those|these ... are|were|is|was|have|has before the marker => does not close THIS row)",
+  "gate": "python3 -m pytest tests/test_supply_census.py tests/test_supply_census_instrument2.py -q -> 12 passed",
+  "red_first": "output/instrument2_RED_first.txt (HEAD classifier: old gate 7 passed, new L6+L8 RED)",
+  "non_vacuity": "output/instrument2_nonvacuity.txt (neutered CITATION_CUE -> L6 RED, DISCRIMINATING)",
+  "equivalence": "live roadmap + frozen snapshot: flips none (no row re-classified)",
+  "receipt": "systems/RECEIPT_INSTRUMENT2_CENSUS_CITATION_BOUNDARY.md",
+  "honest_bound": "lexical cue covers the measured trigger vocabulary, not citation semantics generally; live corpus does not exercise the new path (commit 3356436 already reworded the trigger cell)"
+ }
+}

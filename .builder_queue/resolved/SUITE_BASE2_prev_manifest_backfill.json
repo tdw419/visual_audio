@@ -1,0 +1,24 @@
+{
+  "head_sha": "ba54fb4",
+  "timestamp": "2026-09-13T20:01:00-05:00",
+  "files": 257,
+  "collected": 1669,
+  "verdicts": {
+    "PASS": 243,
+    "FAIL": 7,
+    "TIMEOUT": 7,
+    "COLLECT-HANG": 0,
+    "OOM": 0,
+    "CRASH": 0,
+    "ERROR": 0,
+    "SKIPPED": 0
+  },
+  "roots": [
+    "tests"
+  ],
+  "workers": 4,
+  "timeout_s": 150.0,
+  "import_grace_s": 60.0,
+  "python_bin": "/usr/bin/python3",
+  "_provenance": "BACKFILLED by the orchestrator from output/SUITE_DEFECT28F3_SINK.jsonl (257 records, sweep at HEAD ba54fb4); not produced by --manifest (the mechanism landed at 05b2860). timestamp is the sink file mtime."
+}

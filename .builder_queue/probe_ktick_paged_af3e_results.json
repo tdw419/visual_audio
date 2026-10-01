@@ -1,0 +1,115 @@
+{
+ "results": {
+  "C1_no_translation_rewrite_faults": {
+   "exit_status": 1,
+   "fault_addr": 33804,
+   "fault_reason": "pte_invalid pte=0x0 vaddr=0x840c mode=USER op=ST site=glyph_isa_v2",
+   "faulted": true,
+   "final_pc": [
+    0,
+    30
+   ],
+   "halt_reason": null,
+   "kf_word_after": 1966080,
+   "ktick_word_after": 0,
+   "mode_final": "SUPER",
+   "output": [],
+   "program": ":__entry\nLDI r15 8211\nLDI r14 1536\nST r15 r14\nLDI r5 1310720\nLDI r6 8451\nST r6 r5\nLDI r5 1\nLDI r6 8452\nST r6 r5\nHALT\n",
+   "regs_snapshot": {
+    "r10": 0,
+    "r6": 8451
+   },
+   "tcount_word_after": 0,
+   "tick_pc_after": 0
+  },
+  "C2_honest_tick_rotguard": {
+   "exit_status": 0,
+   "fault_addr": 0,
+   "fault_reason": null,
+   "faulted": false,
+   "final_pc": [
+    16,
+    0
+   ],
+   "halt_reason": null,
+   "kf_word_after": 1966080,
+   "ktick_word_after": 2621440,
+   "mode_final": "USER",
+   "output": [],
+   "program": ":__entry\nLDI r15 8211\nLDI r14 1536\nST r15 r14\nADD r0 r0\nHALT\n",
+   "regs_snapshot": {
+    "r10": 0,
+    "r6": 0
+   },
+   "tcount_word_after": 2,
+   "tick_pc_after": 0
+  },
+  "D1_ktick_paged_disable": {
+   "exit_status": 0,
+   "fault_addr": 0,
+   "fault_reason": null,
+   "faulted": false,
+   "final_pc": [
+    36,
+    0
+   ],
+   "halt_reason": null,
+   "kf_word_after": 1966080,
+   "ktick_word_after": 0,
+   "mode_final": "USER",
+   "output": [],
+   "program": ":__entry\nLDI r15 8211\nLDI r14 1536\nST r15 r14\nLDI r5 0\nLDI r6 8451\nST r6 r5\nLDI r5 1\nLDI r6 8452\nST r6 r5\nHALT\n",
+   "regs_snapshot": {
+    "r10": 0,
+    "r6": 8452
+   },
+   "tcount_word_after": 1,
+   "tick_pc_after": 0
+  },
+  "T1_ktick_paged_rearm_vector": {
+   "exit_status": 0,
+   "fault_addr": 0,
+   "fault_reason": null,
+   "faulted": false,
+   "final_pc": [
+    36,
+    0
+   ],
+   "halt_reason": null,
+   "kf_word_after": 1966080,
+   "ktick_word_after": 1310720,
+   "mode_final": "USER",
+   "output": [],
+   "program": ":__entry\nLDI r15 8211\nLDI r14 1536\nST r15 r14\nLDI r5 1310720\nLDI r6 8451\nST r6 r5\nLDI r5 1\nLDI r6 8452\nST r6 r5\nHALT\n",
+   "regs_snapshot": {
+    "r10": 0,
+    "r6": 8452
+   },
+   "tcount_word_after": 1,
+   "tick_pc_after": 0
+  },
+  "T2_ktick_paged_rearm_plus_payload": {
+   "exit_status": 1,
+   "fault_addr": 0,
+   "fault_reason": "pte_invalid pte=0x0 vaddr=0x0 mode=USER op=ST site=glyph_isa_v2",
+   "faulted": true,
+   "final_pc": [
+    0,
+    30
+   ],
+   "halt_reason": null,
+   "kf_word_after": 1966080,
+   "ktick_word_after": 1310720,
+   "mode_final": "SUPER",
+   "output": [],
+   "program": ":__entry\nLDI r15 8211\nLDI r14 1536\nST r15 r14\nLDI r5 1310720\nLDI r6 8451\nST r6 r5\nLDI r5 1\nLDI r6 8452\nST r6 r5\nLDI r5 16208720\nLDI r6 0\nST r6 r5\nLDI r5 6\nLDI r6 1\nST r6 r5\nLDI r5 20816\nLDI r6 2\nST r6 r5\nLDI r5 0\nLDI r6 3\nST r6 r5\nHALT\n",
+   "regs_snapshot": {
+    "r10": 0,
+    "r6": 0
+   },
+   "tcount_word_after": 1,
+   "tick_pc_after": 0
+  }
+ },
+ "results_md5": "26abc99d54d9bfceb346fe418a334902"
+}

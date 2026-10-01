@@ -1,0 +1,39 @@
+fix(suite): SUITE-FIX-1 cluster (3) — ollama memory test ports to the canonical session API (0/2 -> 2/2)
+
+The roadmap classified tests/test_ollama_contextual_memory_simple.py as cluster (4)
+"fails on an unmocked/offline endpoint (ENVIRONMENT)" and directed a skip-with-reason.
+Refuted by measurement: the file fails in 0.18 s with
+
+  tests/test_ollama_contextual_memory_simple.py:31: AttributeError: 'OllamaMemoryManager' object has no attribute 'add_message'
+  tests/test_ollama_contextual_memory_simple.py:76: AttributeError: 'OllamaMemoryManager' object has no attribute 'add_message'
+  2 failed in 0.18s
+
+-- no socket is opened, so it is API drift (cluster (3) class), not an environment
+condition. The message API is session-scoped by the module's own contract
+(tools/ollama_memory_manager.py:20-25); the test called manager.add_message() and read
+session.messages, neither of which exists. Consumer-side port, module LOCKED and untouched.
+
+RED (orchestrator's run on the 4863635 blob, output/suite_fix1_ollama_memory_red_orch.txt):
+  2 failed in 0.18s   [AttributeError at :31 and :76]
+
+GREEN (orchestrator's run, post-port):
+  2 passed, 2 warnings in 0.16s, rc=0
+
+Non-vacuity (orchestrator's own probe): neutering INSERT INTO messages in
+ConversationSession.add_message turns BOTH ported legs RED (2 failed in 0.18s); module
+restored, md5 28998c374c92acd817c61c998a5bdc9a before == after.
+
+Row gate sweep (257 files / 1618 collected / PASS 243 / FAIL 10 / TIMEOUT 4, 467.38 s,
+output/SUITE_FIX1_C34_SINK.jsonl) shows exactly two per-file deltas vs the previous sink:
+this file FAIL->PASS, and tests/test_glyph_orchestrator_speak_to_driver.py PASS->FAIL --
+a regression from 4863635 (its end-to-end leg never grants GLYPH_RUN_ALLOW and :83 asserts
+the 0o755 chmod the ruling removed), which falsifies that ruling's "breaks zero existing
+tests" premise. Repaired in the next commit, not hidden here.
+
+Receipt systems/RECEIPT_SUITE_FIX1_OLLAMA_MEMORY_DRIFT.md; brief
+.builder_queue/brief_suite_fix1_ollama_memory_drift.md (check_brief PASS).
+NOT verified: tools/ollama_memory_manager.py behaviour beyond these two paths;
+tests/verify_ollama_memory.py carries the same drift and is left untouched (not collected);
+cluster (4) tolerances and the 4 TIMEOUT files are untouched.
+
+Row SUITE-FIX-1 stays OPEN for cluster (4) + leg 1b (BLOCKED-ON-DESIGN).

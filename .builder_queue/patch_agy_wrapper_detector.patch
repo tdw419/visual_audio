@@ -1,0 +1,23 @@
+--- a/scripts/agy_implement.sh
++++ b/scripts/agy_implement.sh
+@@ -120,7 +120,19 @@
+ # carries no gate evidence, and the orchestrator historically accepted it (09:09 on
+ # 2026-09-12 — an agy reply with zero evidence lines was committed past). Require the
+ # contract in the guardrail to actually appear, so "no evidence" is a hard error.
+-if [[ $RC -eq 0 ]] && ! grep -q "DIFF SUMMARY" "$LOG"; then
++# INSTRUMENT-2: accept literal DIFF SUMMARY or complete gate evidence (cmd + tail + diff).
++check_evidence() {
++    local target="$1"
++    if [[ -x "$REPO/tools/agy_evidence_check.sh" ]]; then
++        "$REPO/tools/agy_evidence_check.sh" "$target"
++        return $?
++    fi
++    grep -q "DIFF SUMMARY" "$target" && return 0
++    grep -qE "(-m[[:space:]]+pytest|\bpytest\b)" "$target" && \
++        grep -qE "([0-9]+[[:space:]]+(passed|failed|xfailed)|no tests ran)" "$target" && \
++        grep -qE "(git[[:space:]]+(diff|status)|diff[[:space:]]+--git|[0-9]+[[:space:]]+files?[[:space:]]+changed)" "$target"
++}
++if [[ $RC -eq 0 ]] && ! check_evidence "$LOG"; then
+     echo "agy_implement: UNVERIFIED — reply carries no DIFF SUMMARY block (no gate evidence) — FAIL" >&2
+     RC=3
+ fi

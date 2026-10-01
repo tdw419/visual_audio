@@ -1,0 +1,24 @@
+{
+  "id": "DEFECT-18-tick-contract-vs-identity-map",
+  "found": "2026-09-12",
+  "found_by": "builder cron af3e62239ce2 during BK-11 coreutils work",
+  "severity": "soundness \u2014 blocks BK-11 as specified",
+  "status": "SUPERSEDED for the BK-11 leg-2 symptom 2026-09-12 \u2014 the real cause is DEFECT-19 (GH-9 loader copy-span collision, measured: option (a) prototype made 7/7 ticks transparent and leg 2 was STILL red). OPEN AS HARDENING, not as BK-11's blocker: option (a) remains the right fix for the tick-scratch-vs-identity-map class (measured 6/6 restores) and DEFECT-17 rides with it. Schedule after BK-11 closes. Ruling: .builder_queue/RULING_20260912_defect19_bk13_worktree.md",
+  "claim": "The GH-9/loader tick handler (baker.py _gh9_kernel_program_text, timer_quantum>0) uses glyph r25/r26/r27 (r28 before DEFECT-16e) as scratch; the documented discipline (tools/glyph_gpt/signals.py:35, GH-16 Bug-8) is 'r25-r28 ONLY \u2014 no task body ever touches them'. But tools/rv64i_to_glyph.py maps RV registers IDENTITY onto glyph registers, so RV x25/x26/x27/x28 (s9/s10/s11/t3) ARE glyph r25..r28. Any transpiled C task body that keeps a live value in s9/s10/s11/t3 across a tick is silently corrupted.",
+  "measured": {
+    "gate_green_with_defect16c_patch": "output/bk11_gate_fresh.txt \u2014 BK-11 gate 6/6 GREEN",
+    "leg2_red_with_defect16c_patch": "output/bk11_arc_regression.txt \u2014 test_bk1_leg2_tight_quantum_preemption result 0x0 != 0x3b00112a",
+    "leg2_green_without_patch": "output/bk11_nolbu_check.txt \u2014 HEAD + DEFECT-16/16b + DEFECT-16e: test_bk1_argv.py 5/5 green; BK-11 gate fails on wc only",
+    "bisect": "HEAD + LBU/LHU hunks only also fails leg2 -> the LBU/LHU hunk is the leg-2 breaker, not the branch hunks",
+    "not_a_stack_leak": "output/bk11_lbu_balance_red.txt \u2014 BK-1 program emits PUSH=6/POP=6, LBU dests r15/r14 (no rd/scratch collision)",
+    "not_a_window_cap": "output/bk11_window_capacity.txt \u2014 WINDOW_N_INSTRS 96..192 and timer_quantum 2..60 all corrupt identically; corruption is on the FIRST tick, quantum-invariant",
+    "no_isa_escape": "OpcodeMapV2.OPCODES (tools/glyph_isa_v2.py) has no absolute-address LD/ST and no memory-indirect jump, so a register-preserving tick handler is impossible while r0..r30 are all RV value registers (r31 = HW call stack)"
+  },
+  "options": {
+    "a": "ENGINE: snapshot the USER register file on tick, restore on return to USER (machinery already exists for SYSCALL: _syscall_regs; WGSL saved_registers[32] from BK-2). Preemption sound for any program; keeps kernel r25-r28 discipline and the identity map. RECOMMENDED.",
+    "b": "TRANSPILER: spill RV x25..x28 to memory so the identity map stops claiming glyph r25..r28. Invalidates identity-map/WGSL-parity claims in landed receipts.",
+    "c": "SCOPE: declare preemption unsupported for transpiled C; drop the 'without r25..r28 clobber' claim from BK-1's receipt."
+  },
+  "blocked_work": "DEFECT-16c LBU/LHU scratch-clobber patch (required for BK-11's wc leg) held verbatim at .builder_queue/held_patches/defect16c_lbu_lhu.patch",
+  "see": ".builder_queue/REPAIR_PENDING_defect18_tick_identity_map.md"
+}

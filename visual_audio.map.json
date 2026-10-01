@@ -1,0 +1,2274 @@
+{
+  "container": "visual_audio.mkv",
+  "envelope": "Cartridge",
+  "order": 8,
+  "grid_side": 256,
+  "capacity": 65536,
+  "entries": [
+    {
+      "name": "pixel_thought_1786676352",
+      "role": "thought",
+      "x": 0,
+      "y": 0,
+      "frame_start": 2,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_thought_1786677239",
+      "role": "thought",
+      "x": 1,
+      "y": 0,
+      "frame_start": 3,
+      "frame_count": 1
+    },
+    {
+      "name": "bootstrap/va_container.py",
+      "role": "bootstrap",
+      "x": 1,
+      "y": 1,
+      "frame_start": 4,
+      "frame_count": 1
+    },
+    {
+      "name": "semantic_cpu_emulator.py",
+      "role": "semantic_code",
+      "x": 0,
+      "y": 1,
+      "frame_start": 5,
+      "frame_count": 1
+    },
+    {
+      "name": "utils.py",
+      "role": "tools",
+      "x": 0,
+      "y": 2,
+      "frame_start": 6,
+      "frame_count": 1
+    },
+    {
+      "name": "test_utils.py",
+      "role": "tools",
+      "x": 0,
+      "y": 3,
+      "frame_start": 7,
+      "frame_count": 1
+    },
+    {
+      "name": "test_multi.py",
+      "role": "tools",
+      "x": 1,
+      "y": 3,
+      "frame_start": 8,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_hermes_bridge.py",
+      "role": "tools",
+      "x": 1,
+      "y": 2,
+      "frame_start": 9,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_hermes_bridge_test.py",
+      "role": "tools",
+      "x": 2,
+      "y": 2,
+      "frame_start": 10,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_hermes_bridge_spatial.py",
+      "role": "tools",
+      "x": 2,
+      "y": 3,
+      "frame_start": 11,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_hermes_bridge_context.py",
+      "role": "tools",
+      "x": 3,
+      "y": 3,
+      "frame_start": 12,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_mind_repl.py",
+      "role": "tools",
+      "x": 3,
+      "y": 2,
+      "frame_start": 13,
+      "frame_count": 1
+    },
+    {
+      "name": "bootstrap/pixel_hermes_bridge_context.py",
+      "role": "bootstrap",
+      "x": 3,
+      "y": 1,
+      "frame_start": 14,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/va_container.py",
+      "role": "tools",
+      "x": 2,
+      "y": 1,
+      "frame_start": 15,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/mkv_infinite_map.py",
+      "role": "tools",
+      "x": 2,
+      "y": 0,
+      "frame_start": 166,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/dense_encoder.py",
+      "role": "tools",
+      "x": 3,
+      "y": 0,
+      "frame_start": 17,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_hermes_demo.py",
+      "role": "tools",
+      "x": 4,
+      "y": 0,
+      "frame_start": 18,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_self_improve.py",
+      "role": "tools",
+      "x": 4,
+      "y": 1,
+      "frame_start": 19,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_self_aware_agent.py",
+      "role": "tools",
+      "x": 5,
+      "y": 1,
+      "frame_start": 20,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_tool_registry.py",
+      "role": "tools",
+      "x": 5,
+      "y": 0,
+      "frame_start": 21,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_os_listener.py",
+      "role": "tools",
+      "x": 6,
+      "y": 0,
+      "frame_start": 22,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_screen.py",
+      "role": "tools",
+      "x": 7,
+      "y": 0,
+      "frame_start": 23,
+      "frame_count": 1
+    },
+    {
+      "name": "glyph_isa_v2.py",
+      "role": "tools",
+      "x": 7,
+      "y": 1,
+      "frame_start": 24,
+      "frame_count": 1
+    },
+    {
+      "name": "spoken_screen.py",
+      "role": "tools",
+      "x": 6,
+      "y": 1,
+      "frame_start": 25,
+      "frame_count": 1
+    },
+    {
+      "name": "boot_manifest.py",
+      "role": "tools",
+      "x": 6,
+      "y": 2,
+      "frame_start": 26,
+      "frame_count": 1
+    },
+    {
+      "name": "wordbase_compat.py",
+      "role": "tools",
+      "x": 7,
+      "y": 2,
+      "frame_start": 27,
+      "frame_count": 1
+    },
+    {
+      "name": "word_compiler.py",
+      "role": "tools",
+      "x": 7,
+      "y": 3,
+      "frame_start": 28,
+      "frame_count": 1
+    },
+    {
+      "name": "speak.py",
+      "role": "tools",
+      "x": 6,
+      "y": 3,
+      "frame_start": 29,
+      "frame_count": 1
+    },
+    {
+      "name": "src/upic_engine.py",
+      "role": "tools",
+      "x": 5,
+      "y": 3,
+      "frame_start": 30,
+      "frame_count": 1
+    },
+    {
+      "name": "src/codec/phy.py",
+      "role": "tools",
+      "x": 5,
+      "y": 2,
+      "frame_start": 31,
+      "frame_count": 1
+    },
+    {
+      "name": "src/codec/phy_ecc.py",
+      "role": "tools",
+      "x": 4,
+      "y": 2,
+      "frame_start": 32,
+      "frame_count": 1
+    },
+    {
+      "name": "src/codec/phoneme_ecc.py",
+      "role": "tools",
+      "x": 4,
+      "y": 3,
+      "frame_start": 33,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/wordbase.py",
+      "role": "tools",
+      "x": 4,
+      "y": 4,
+      "frame_start": 34,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/neural_synthesis.py",
+      "role": "tools",
+      "x": 4,
+      "y": 5,
+      "frame_start": 35,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/ipa_to_arpabet.py",
+      "role": "tools",
+      "x": 5,
+      "y": 5,
+      "frame_start": 36,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/ipa_tokenizer.py",
+      "role": "tools",
+      "x": 5,
+      "y": 4,
+      "frame_start": 37,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/xsampa_to_arpabet.py",
+      "role": "tools",
+      "x": 6,
+      "y": 4,
+      "frame_start": 38,
+      "frame_count": 1
+    },
+    {
+      "name": "src/pixel_tokenizer.py",
+      "role": "tools",
+      "x": 7,
+      "y": 4,
+      "frame_start": 39,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/mkv_glyph_emulator.py",
+      "role": "tools",
+      "x": 7,
+      "y": 5,
+      "frame_start": 40,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/phonemes.py",
+      "role": "tools",
+      "x": 6,
+      "y": 5,
+      "frame_start": 41,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_6_6",
+      "role": "terrain_tile",
+      "x": 6,
+      "y": 6,
+      "frame_start": 42,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_7_6",
+      "role": "terrain_tile",
+      "x": 7,
+      "y": 6,
+      "frame_start": 43,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_7_7",
+      "role": "terrain_tile",
+      "x": 7,
+      "y": 7,
+      "frame_start": 44,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_6_7",
+      "role": "terrain_tile",
+      "x": 6,
+      "y": 7,
+      "frame_start": 45,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_5_7",
+      "role": "terrain_tile",
+      "x": 5,
+      "y": 7,
+      "frame_start": 46,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_5_6",
+      "role": "terrain_tile",
+      "x": 5,
+      "y": 6,
+      "frame_start": 47,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_4_6",
+      "role": "terrain_tile",
+      "x": 4,
+      "y": 6,
+      "frame_start": 48,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_4_7",
+      "role": "terrain_tile",
+      "x": 4,
+      "y": 7,
+      "frame_start": 49,
+      "frame_count": 1
+    },
+    {
+      "name": "visual_audio_container.py",
+      "role": "tools",
+      "x": 3,
+      "y": 7,
+      "frame_start": 50,
+      "frame_count": 1
+    },
+    {
+      "name": "pixel_build.py.pixel",
+      "role": "code",
+      "x": 2,
+      "y": 7,
+      "frame_start": 51,
+      "frame_count": 2
+    },
+    {
+      "name": "terrain_chunk_7_8",
+      "role": "terrain_tile",
+      "x": 2,
+      "y": 6,
+      "frame_start": 53,
+      "frame_count": 1
+    },
+    {
+      "name": "post_office.json.7_8",
+      "role": "architecture",
+      "x": 3,
+      "y": 6,
+      "frame_start": 54,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_8_7",
+      "role": "terrain_tile",
+      "x": 3,
+      "y": 5,
+      "frame_start": 55,
+      "frame_count": 1
+    },
+    {
+      "name": "cognitive_payload.json.8_7",
+      "role": "architecture",
+      "x": 3,
+      "y": 4,
+      "frame_start": 56,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_8_8",
+      "role": "terrain_tile",
+      "x": 2,
+      "y": 4,
+      "frame_start": 57,
+      "frame_count": 1
+    },
+    {
+      "name": "village_center.py.8_8",
+      "role": "architecture",
+      "x": 2,
+      "y": 5,
+      "frame_start": 58,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_8_9",
+      "role": "terrain_tile",
+      "x": 1,
+      "y": 5,
+      "frame_start": 59,
+      "frame_count": 1
+    },
+    {
+      "name": "ai_council.py.8_9",
+      "role": "architecture",
+      "x": 1,
+      "y": 4,
+      "frame_start": 60,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_9_8",
+      "role": "terrain_tile",
+      "x": 0,
+      "y": 4,
+      "frame_start": 61,
+      "frame_count": 1
+    },
+    {
+      "name": "codec_adapter.py.9_8",
+      "role": "architecture",
+      "x": 0,
+      "y": 5,
+      "frame_start": 62,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_8_6",
+      "role": "terrain_tile",
+      "x": 0,
+      "y": 6,
+      "frame_start": 63,
+      "frame_count": 1
+    },
+    {
+      "name": "cognitive_payload.json.8_6",
+      "role": "architecture",
+      "x": 1,
+      "y": 6,
+      "frame_start": 64,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_9_7",
+      "role": "terrain_tile",
+      "x": 1,
+      "y": 7,
+      "frame_start": 65,
+      "frame_count": 1
+    },
+    {
+      "name": "ai_council.py.9_7",
+      "role": "architecture",
+      "x": 0,
+      "y": 7,
+      "frame_start": 66,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_3_6",
+      "role": "terrain_tile",
+      "x": 0,
+      "y": 8,
+      "frame_start": 67,
+      "frame_count": 1
+    },
+    {
+      "name": "ai_council.py.3_6",
+      "role": "architecture",
+      "x": 0,
+      "y": 9,
+      "frame_start": 68,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_5_8",
+      "role": "terrain_tile",
+      "x": 1,
+      "y": 9,
+      "frame_start": 69,
+      "frame_count": 1
+    },
+    {
+      "name": "neural_synthesis.py.5_8",
+      "role": "architecture",
+      "x": 1,
+      "y": 8,
+      "frame_start": 70,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_5_9",
+      "role": "terrain_tile",
+      "x": 2,
+      "y": 8,
+      "frame_start": 71,
+      "frame_count": 1
+    },
+    {
+      "name": "ai_council.py.5_9",
+      "role": "architecture",
+      "x": 3,
+      "y": 8,
+      "frame_start": 72,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_log_1786712621",
+      "role": "governance",
+      "x": 3,
+      "y": 9,
+      "frame_start": 73,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_log_1786712622",
+      "role": "governance",
+      "x": 2,
+      "y": 9,
+      "frame_start": 184,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_log_1786712623",
+      "role": "governance",
+      "x": 2,
+      "y": 10,
+      "frame_start": 211,
+      "frame_count": 1
+    },
+    {
+      "name": "ollama_prompt.py.pixel",
+      "role": "code",
+      "x": 3,
+      "y": 10,
+      "frame_start": 76,
+      "frame_count": 2
+    },
+    {
+      "name": "governance_log_1786712655",
+      "role": "governance",
+      "x": 3,
+      "y": 11,
+      "frame_start": 78,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_log_1786712656",
+      "role": "governance",
+      "x": 2,
+      "y": 11,
+      "frame_start": 79,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_log_1786712657",
+      "role": "governance",
+      "x": 1,
+      "y": 11,
+      "frame_start": 80,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_post_office_1786712686369652",
+      "role": "governance",
+      "x": 1,
+      "y": 10,
+      "frame_start": 81,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_cognitive_payload_1786712686725017",
+      "role": "governance",
+      "x": 0,
+      "y": 10,
+      "frame_start": 82,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_1786712687117335",
+      "role": "governance",
+      "x": 0,
+      "y": 11,
+      "frame_start": 173,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_1786712687512201",
+      "role": "governance",
+      "x": 0,
+      "y": 12,
+      "frame_start": 187,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_codec_adapter_1786712687883182",
+      "role": "governance",
+      "x": 1,
+      "y": 12,
+      "frame_start": 85,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_cognitive_payload_1786712688261122",
+      "role": "governance",
+      "x": 1,
+      "y": 13,
+      "frame_start": 86,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_1786712688629295",
+      "role": "governance",
+      "x": 0,
+      "y": 13,
+      "frame_start": 191,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_1786712688998950",
+      "role": "governance",
+      "x": 0,
+      "y": 14,
+      "frame_start": 196,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_neural_synthesis_1786712689374068",
+      "role": "governance",
+      "x": 0,
+      "y": 15,
+      "frame_start": 89,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_1786712689723124",
+      "role": "governance",
+      "x": 1,
+      "y": 15,
+      "frame_start": 214,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/pixel_explorer_agent.py",
+      "role": "tools",
+      "x": 1,
+      "y": 14,
+      "frame_start": 167,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/city_planner_agent.py",
+      "role": "tools",
+      "x": 2,
+      "y": 14,
+      "frame_start": 92,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/spatial_governor.py",
+      "role": "tools",
+      "x": 2,
+      "y": 15,
+      "frame_start": 93,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/procedural_generator.py",
+      "role": "tools",
+      "x": 3,
+      "y": 15,
+      "frame_start": 94,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_3_14",
+      "role": "terrain_tile",
+      "x": 3,
+      "y": 14,
+      "frame_start": 95,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_3_13",
+      "role": "terrain_tile",
+      "x": 3,
+      "y": 13,
+      "frame_start": 96,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_2_13",
+      "role": "terrain_tile",
+      "x": 2,
+      "y": 13,
+      "frame_start": 97,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_2_12",
+      "role": "terrain_tile",
+      "x": 2,
+      "y": 12,
+      "frame_start": 98,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_3_12",
+      "role": "terrain_tile",
+      "x": 3,
+      "y": 12,
+      "frame_start": 99,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_4_13",
+      "role": "terrain_tile",
+      "x": 4,
+      "y": 12,
+      "frame_start": 100,
+      "frame_count": 1
+    },
+    {
+      "name": "codec_adapter.py.4_13",
+      "role": "architecture",
+      "x": 5,
+      "y": 12,
+      "frame_start": 101,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_8_10",
+      "role": "terrain_tile",
+      "x": 5,
+      "y": 13,
+      "frame_start": 102,
+      "frame_count": 1
+    },
+    {
+      "name": "neural_synthesis.py.8_10",
+      "role": "architecture",
+      "x": 4,
+      "y": 13,
+      "frame_start": 103,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_9_9",
+      "role": "terrain_tile",
+      "x": 4,
+      "y": 14,
+      "frame_start": 104,
+      "frame_count": 1
+    },
+    {
+      "name": "cognitive_payload.json.9_9",
+      "role": "architecture",
+      "x": 4,
+      "y": 15,
+      "frame_start": 105,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_7_9",
+      "role": "terrain_tile",
+      "x": 5,
+      "y": 15,
+      "frame_start": 106,
+      "frame_count": 1
+    },
+    {
+      "name": "flow_meter.py.7_9",
+      "role": "architecture",
+      "x": 5,
+      "y": 14,
+      "frame_start": 107,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_10_8",
+      "role": "terrain_tile",
+      "x": 6,
+      "y": 14,
+      "frame_start": 108,
+      "frame_count": 1
+    },
+    {
+      "name": "village_center.py.10_8",
+      "role": "architecture",
+      "x": 6,
+      "y": 15,
+      "frame_start": 109,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_8_5",
+      "role": "terrain_tile",
+      "x": 7,
+      "y": 15,
+      "frame_start": 110,
+      "frame_count": 1
+    },
+    {
+      "name": "cognitive_payload.json.8_5",
+      "role": "architecture",
+      "x": 7,
+      "y": 14,
+      "frame_start": 111,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_9_6",
+      "role": "terrain_tile",
+      "x": 7,
+      "y": 13,
+      "frame_start": 112,
+      "frame_count": 1
+    },
+    {
+      "name": "neural_synthesis.py.9_6",
+      "role": "architecture",
+      "x": 6,
+      "y": 13,
+      "frame_start": 113,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_3_7",
+      "role": "terrain_tile",
+      "x": 6,
+      "y": 12,
+      "frame_start": 114,
+      "frame_count": 1
+    },
+    {
+      "name": "village_center.py.3_7",
+      "role": "architecture",
+      "x": 7,
+      "y": 12,
+      "frame_start": 115,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_3_8",
+      "role": "terrain_tile",
+      "x": 7,
+      "y": 11,
+      "frame_start": 116,
+      "frame_count": 1
+    },
+    {
+      "name": "flow_meter.py.3_8",
+      "role": "architecture",
+      "x": 7,
+      "y": 10,
+      "frame_start": 117,
+      "frame_count": 1
+    },
+    {
+      "name": "terrain_chunk_2_7",
+      "role": "terrain_tile",
+      "x": 6,
+      "y": 10,
+      "frame_start": 118,
+      "frame_count": 1
+    },
+    {
+      "name": "ai_council.py.2_7",
+      "role": "architecture",
+      "x": 6,
+      "y": 11,
+      "frame_start": 119,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_post_office_1786712907787520",
+      "role": "governance",
+      "x": 5,
+      "y": 11,
+      "frame_start": 120,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_cognitive_payload_1786712908271459",
+      "role": "governance",
+      "x": 4,
+      "y": 11,
+      "frame_start": 121,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_1786712908768000",
+      "role": "governance",
+      "x": 4,
+      "y": 10,
+      "frame_start": 175,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_1786712909269524",
+      "role": "governance",
+      "x": 5,
+      "y": 10,
+      "frame_start": 189,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_codec_adapter_1786712909766946",
+      "role": "governance",
+      "x": 5,
+      "y": 9,
+      "frame_start": 124,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_cognitive_payload_1786712910217494",
+      "role": "governance",
+      "x": 4,
+      "y": 9,
+      "frame_start": 125,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_1786712910725293",
+      "role": "governance",
+      "x": 4,
+      "y": 8,
+      "frame_start": 193,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_1786712911201188",
+      "role": "governance",
+      "x": 5,
+      "y": 8,
+      "frame_start": 198,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_neural_synthesis_1786712911640155",
+      "role": "governance",
+      "x": 6,
+      "y": 8,
+      "frame_start": 128,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_1786712912110597",
+      "role": "governance",
+      "x": 6,
+      "y": 9,
+      "frame_start": 217,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_codec_adapter_1786712912642667",
+      "role": "governance",
+      "x": 7,
+      "y": 9,
+      "frame_start": 130,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_neural_synthesis_1786712913167536",
+      "role": "governance",
+      "x": 7,
+      "y": 8,
+      "frame_start": 131,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_cognitive_payload_1786712913665194",
+      "role": "governance",
+      "x": 8,
+      "y": 8,
+      "frame_start": 132,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_flow_meter_1786712914114751",
+      "role": "governance",
+      "x": 8,
+      "y": 9,
+      "frame_start": 133,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_1786712914628012",
+      "role": "governance",
+      "x": 9,
+      "y": 9,
+      "frame_start": 245,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_cognitive_payload_1786712915109221",
+      "role": "governance",
+      "x": 9,
+      "y": 8,
+      "frame_start": 135,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_neural_synthesis_1786712915610250",
+      "role": "governance",
+      "x": 10,
+      "y": 8,
+      "frame_start": 136,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_1786712916114894",
+      "role": "governance",
+      "x": 11,
+      "y": 8,
+      "frame_start": 250,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_flow_meter_1786712916667003",
+      "role": "governance",
+      "x": 11,
+      "y": 9,
+      "frame_start": 138,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_1786712917210299",
+      "role": "governance",
+      "x": 10,
+      "y": 9,
+      "frame_start": 265,
+      "frame_count": 1
+    },
+    {
+      "name": "boot_ubuntu_from_mkv.py.pixel",
+      "role": "code",
+      "x": 10,
+      "y": 10,
+      "frame_start": 140,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/village_center_handler.py",
+      "role": "tools",
+      "x": 11,
+      "y": 10,
+      "frame_start": 354,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/ai_council_handler.py",
+      "role": "tools",
+      "x": 11,
+      "y": 11,
+      "frame_start": 165,
+      "frame_count": 1
+    },
+    {
+      "name": "coordination_report_3_7_1786713771",
+      "role": "governance",
+      "x": 10,
+      "y": 11,
+      "frame_start": 147,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_2_7_1786713774",
+      "role": "governance",
+      "x": 9,
+      "y": 11,
+      "frame_start": 148,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/simple_executor.py",
+      "role": "tools",
+      "x": 9,
+      "y": 10,
+      "frame_start": 149,
+      "frame_count": 1
+    },
+    {
+      "name": "coordination_report_3_7_1786716243",
+      "role": "governance",
+      "x": 8,
+      "y": 10,
+      "frame_start": 150,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_2_7_1786716246",
+      "role": "governance",
+      "x": 8,
+      "y": 11,
+      "frame_start": 151,
+      "frame_count": 1
+    },
+    {
+      "name": "coordination_report_3_7_1786716265",
+      "role": "governance",
+      "x": 8,
+      "y": 12,
+      "frame_start": 152,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786716265634",
+      "role": "governance",
+      "x": 9,
+      "y": 12,
+      "frame_start": 254,
+      "frame_count": 1
+    },
+    {
+      "name": "coordination_report_3_7_1786716275",
+      "role": "governance",
+      "x": 9,
+      "y": 13,
+      "frame_start": 154,
+      "frame_count": 1
+    },
+    {
+      "name": "coordination_report_3_7_1786716353",
+      "role": "governance",
+      "x": 8,
+      "y": 13,
+      "frame_start": 156,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786716354226",
+      "role": "governance",
+      "x": 8,
+      "y": 14,
+      "frame_start": 258,
+      "frame_count": 1
+    },
+    {
+      "name": "utility_shed.11_8",
+      "role": "architecture",
+      "x": 8,
+      "y": 15,
+      "frame_start": 355,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_2_7_1786716358",
+      "role": "governance",
+      "x": 9,
+      "y": 15,
+      "frame_start": 159,
+      "frame_count": 1
+    },
+    {
+      "name": "coordination_report_3_7_1786716362",
+      "role": "governance",
+      "x": 9,
+      "y": 14,
+      "frame_start": 160,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786716363387",
+      "role": "governance",
+      "x": 10,
+      "y": 14,
+      "frame_start": 262,
+      "frame_count": 1
+    },
+    {
+      "name": "cache_invalidation_check.txt",
+      "role": "test",
+      "x": 10,
+      "y": 15,
+      "frame_start": 162,
+      "frame_count": 1
+    },
+    {
+      "name": "faction_state",
+      "role": "faction",
+      "x": 11,
+      "y": 15,
+      "frame_start": 489,
+      "frame_count": 1
+    },
+    {
+      "name": "tools/faction_tracker.py",
+      "role": "tools",
+      "x": 11,
+      "y": 14,
+      "frame_start": 353,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_test_move_1786718343579",
+      "role": "governance",
+      "x": 11,
+      "y": 13,
+      "frame_start": 177,
+      "frame_count": 1
+    },
+    {
+      "name": "coordination_report_8_8_1786718347",
+      "role": "governance",
+      "x": 10,
+      "y": 13,
+      "frame_start": 172,
+      "frame_count": 1
+    },
+    {
+      "name": "coordination_report_8_8_1786718348",
+      "role": "governance",
+      "x": 10,
+      "y": 12,
+      "frame_start": 174,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_8_9_1786720167",
+      "role": "governance",
+      "x": 11,
+      "y": 12,
+      "frame_start": 183,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_8_9_1786720169",
+      "role": "governance",
+      "x": 12,
+      "y": 12,
+      "frame_start": 185,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_8_9_1786720169693",
+      "role": "governance",
+      "x": 13,
+      "y": 12,
+      "frame_start": 200,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_8_9_1786720170",
+      "role": "governance",
+      "x": 13,
+      "y": 13,
+      "frame_start": 188,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_9_7_1786720176",
+      "role": "governance",
+      "x": 12,
+      "y": 13,
+      "frame_start": 190,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_9_7_1786720177",
+      "role": "governance",
+      "x": 12,
+      "y": 14,
+      "frame_start": 192,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_3_6_1786720182",
+      "role": "governance",
+      "x": 12,
+      "y": 15,
+      "frame_start": 194,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_3_6_1786720183247",
+      "role": "governance",
+      "x": 13,
+      "y": 15,
+      "frame_start": 208,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_3_6_1786720184",
+      "role": "governance",
+      "x": 13,
+      "y": 14,
+      "frame_start": 197,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_8_9_1786720206",
+      "role": "governance",
+      "x": 14,
+      "y": 14,
+      "frame_start": 199,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_user_test_1786720702831",
+      "role": "governance",
+      "x": 14,
+      "y": 15,
+      "frame_start": 206,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_user_test_1786720703543",
+      "role": "governance",
+      "x": 15,
+      "y": 15,
+      "frame_start": 247,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_8_8_1786720718932",
+      "role": "governance",
+      "x": 15,
+      "y": 14,
+      "frame_start": 219,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_8_8_1786720719657",
+      "role": "governance",
+      "x": 15,
+      "y": 13,
+      "frame_start": 223,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_3_6_1786720733",
+      "role": "governance",
+      "x": 14,
+      "y": 13,
+      "frame_start": 207,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_5_9_1786720739",
+      "role": "governance",
+      "x": 14,
+      "y": 12,
+      "frame_start": 209,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_5_9_1786720740490",
+      "role": "governance",
+      "x": 15,
+      "y": 12,
+      "frame_start": 233,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_5_9_1786720741",
+      "role": "governance",
+      "x": 15,
+      "y": 11,
+      "frame_start": 212,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_5_9_1786720742626",
+      "role": "governance",
+      "x": 15,
+      "y": 10,
+      "frame_start": 236,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_5_9_1786720743",
+      "role": "governance",
+      "x": 14,
+      "y": 10,
+      "frame_start": 215,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_5_9_1786720744621",
+      "role": "governance",
+      "x": 14,
+      "y": 11,
+      "frame_start": 238,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_8_8_1786720754423",
+      "role": "governance",
+      "x": 13,
+      "y": 11,
+      "frame_start": 229,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_8_8_1786720755109",
+      "role": "governance",
+      "x": 12,
+      "y": 11,
+      "frame_start": 227,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_8_8_1786720777073",
+      "role": "governance",
+      "x": 12,
+      "y": 10,
+      "frame_start": 231,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_8_8_1786720777824",
+      "role": "governance",
+      "x": 13,
+      "y": 10,
+      "frame_start": 241,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_8_9_1786720784",
+      "role": "governance",
+      "x": 13,
+      "y": 9,
+      "frame_start": 228,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_8_9_1786720785",
+      "role": "governance",
+      "x": 12,
+      "y": 9,
+      "frame_start": 230,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_5_9_1786720803",
+      "role": "governance",
+      "x": 12,
+      "y": 8,
+      "frame_start": 232,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_5_9_1786720805",
+      "role": "governance",
+      "x": 13,
+      "y": 8,
+      "frame_start": 234,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_5_9_1786720805865",
+      "role": "governance",
+      "x": 14,
+      "y": 8,
+      "frame_start": 243,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_5_9_1786720807",
+      "role": "governance",
+      "x": 14,
+      "y": 9,
+      "frame_start": 237,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_5_9_1786720838",
+      "role": "governance",
+      "x": 15,
+      "y": 9,
+      "frame_start": 242,
+      "frame_count": 1
+    },
+    {
+      "name": "coordination_report_10_8_1786720845",
+      "role": "governance",
+      "x": 15,
+      "y": 8,
+      "frame_start": 244,
+      "frame_count": 1
+    },
+    {
+      "name": "coordination_report_3_7_1786720854",
+      "role": "governance",
+      "x": 15,
+      "y": 7,
+      "frame_start": 248,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786720854846",
+      "role": "governance",
+      "x": 14,
+      "y": 7,
+      "frame_start": 269,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786720857351",
+      "role": "governance",
+      "x": 14,
+      "y": 6,
+      "frame_start": 271,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786720858147",
+      "role": "governance",
+      "x": 15,
+      "y": 6,
+      "frame_start": 275,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786720860579",
+      "role": "governance",
+      "x": 15,
+      "y": 5,
+      "frame_start": 277,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786720861391",
+      "role": "governance",
+      "x": 15,
+      "y": 4,
+      "frame_start": 281,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786720863939",
+      "role": "governance",
+      "x": 14,
+      "y": 4,
+      "frame_start": 283,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786720864758",
+      "role": "governance",
+      "x": 14,
+      "y": 5,
+      "frame_start": 287,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_2_7_1786720872",
+      "role": "governance",
+      "x": 13,
+      "y": 5,
+      "frame_start": 263,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_2_7_1786720873112",
+      "role": "governance",
+      "x": 13,
+      "y": 4,
+      "frame_start": 332,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786720881823",
+      "role": "governance",
+      "x": 12,
+      "y": 4,
+      "frame_start": 289,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786720882756",
+      "role": "governance",
+      "x": 12,
+      "y": 5,
+      "frame_start": 293,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786720887166",
+      "role": "governance",
+      "x": 12,
+      "y": 6,
+      "frame_start": 295,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786720888032",
+      "role": "governance",
+      "x": 13,
+      "y": 6,
+      "frame_start": 299,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786720893534",
+      "role": "governance",
+      "x": 13,
+      "y": 7,
+      "frame_start": 310,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786720894342",
+      "role": "governance",
+      "x": 12,
+      "y": 7,
+      "frame_start": 303,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786720899724",
+      "role": "governance",
+      "x": 11,
+      "y": 7,
+      "frame_start": 312,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786720900575",
+      "role": "governance",
+      "x": 11,
+      "y": 6,
+      "frame_start": 307,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786720912490",
+      "role": "governance",
+      "x": 10,
+      "y": 6,
+      "frame_start": 314,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786720913366",
+      "role": "governance",
+      "x": 10,
+      "y": 7,
+      "frame_start": 324,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786720918699",
+      "role": "governance",
+      "x": 9,
+      "y": 7,
+      "frame_start": 316,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786720919652",
+      "role": "governance",
+      "x": 8,
+      "y": 7,
+      "frame_start": 326,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786720923110",
+      "role": "governance",
+      "x": 8,
+      "y": 6,
+      "frame_start": 318,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786720924004",
+      "role": "governance",
+      "x": 9,
+      "y": 6,
+      "frame_start": 328,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786720927658",
+      "role": "governance",
+      "x": 9,
+      "y": 5,
+      "frame_start": 320,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786720928481",
+      "role": "governance",
+      "x": 8,
+      "y": 5,
+      "frame_start": 330,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_8_9_1786721284",
+      "role": "governance",
+      "x": 8,
+      "y": 4,
+      "frame_start": 308,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_ai_council_8_9_1786721285298",
+      "role": "governance",
+      "x": 9,
+      "y": 4,
+      "frame_start": 322,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_8_9_1786721287",
+      "role": "governance",
+      "x": 10,
+      "y": 4,
+      "frame_start": 311,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_8_9_1786721289",
+      "role": "governance",
+      "x": 10,
+      "y": 5,
+      "frame_start": 313,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_8_9_1786721291",
+      "role": "governance",
+      "x": 11,
+      "y": 5,
+      "frame_start": 315,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_8_9_1786721292",
+      "role": "governance",
+      "x": 11,
+      "y": 4,
+      "frame_start": 317,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_8_9_1786721294",
+      "role": "governance",
+      "x": 11,
+      "y": 3,
+      "frame_start": 319,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_8_9_1786721325",
+      "role": "governance",
+      "x": 11,
+      "y": 2,
+      "frame_start": 321,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_2_7_1786721393",
+      "role": "governance",
+      "x": 10,
+      "y": 2,
+      "frame_start": 331,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_user_1786725436320",
+      "role": "governance",
+      "x": 10,
+      "y": 3,
+      "frame_start": 335,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786726437191",
+      "role": "governance",
+      "x": 9,
+      "y": 3,
+      "frame_start": 342,
+      "frame_count": 1
+    },
+    {
+      "name": "utility_shed.12_9",
+      "role": "architecture",
+      "x": 8,
+      "y": 3,
+      "frame_start": 340,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_10_8_1786727136827",
+      "role": "governance",
+      "x": 8,
+      "y": 2,
+      "frame_start": 347,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_10_8_1786727154968",
+      "role": "governance",
+      "x": 9,
+      "y": 2,
+      "frame_start": 349,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_10_8_1786727156109",
+      "role": "governance",
+      "x": 9,
+      "y": 1,
+      "frame_start": 352,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_8_9_1786727211",
+      "role": "governance",
+      "x": 8,
+      "y": 1,
+      "frame_start": 348,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_8_8_1786728225156",
+      "role": "governance",
+      "x": 8,
+      "y": 0,
+      "frame_start": 362,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786728226156",
+      "role": "governance",
+      "x": 9,
+      "y": 0,
+      "frame_start": 372,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_8_8_1786728273532",
+      "role": "governance",
+      "x": 10,
+      "y": 0,
+      "frame_start": 364,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_8_8_1786728274696",
+      "role": "governance",
+      "x": 10,
+      "y": 1,
+      "frame_start": 368,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_8_8_1786728320172",
+      "role": "governance",
+      "x": 11,
+      "y": 1,
+      "frame_start": 380,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_8_8_1786728321202",
+      "role": "governance",
+      "x": 11,
+      "y": 0,
+      "frame_start": 384,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786728445291",
+      "role": "governance",
+      "x": 12,
+      "y": 0,
+      "frame_start": 374,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786728446503",
+      "role": "governance",
+      "x": 13,
+      "y": 0,
+      "frame_start": 378,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786728532308",
+      "role": "governance",
+      "x": 13,
+      "y": 1,
+      "frame_start": 386,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786728533483",
+      "role": "governance",
+      "x": 12,
+      "y": 1,
+      "frame_start": 390,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_8_8_1786728641382",
+      "role": "governance",
+      "x": 12,
+      "y": 2,
+      "frame_start": 392,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_8_8_1786728642537",
+      "role": "governance",
+      "x": 12,
+      "y": 3,
+      "frame_start": 396,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786728657519",
+      "role": "governance",
+      "x": 13,
+      "y": 3,
+      "frame_start": 398,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786728658660",
+      "role": "governance",
+      "x": 13,
+      "y": 2,
+      "frame_start": 402,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_8_8_1786728673471",
+      "role": "governance",
+      "x": 14,
+      "y": 2,
+      "frame_start": 404,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_8_8_1786728674613",
+      "role": "governance",
+      "x": 14,
+      "y": 3,
+      "frame_start": 408,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786728689737",
+      "role": "governance",
+      "x": 15,
+      "y": 3,
+      "frame_start": 410,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786728690873",
+      "role": "governance",
+      "x": 15,
+      "y": 2,
+      "frame_start": 414,
+      "frame_count": 1
+    },
+    {
+      "name": "utility_shed.25_25",
+      "role": "architecture",
+      "x": 15,
+      "y": 1,
+      "frame_start": 406,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786728723129",
+      "role": "governance",
+      "x": 14,
+      "y": 1,
+      "frame_start": 416,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786728724331",
+      "role": "governance",
+      "x": 14,
+      "y": 0,
+      "frame_start": 420,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786728749180",
+      "role": "governance",
+      "x": 15,
+      "y": 0,
+      "frame_start": 422,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786728750393",
+      "role": "governance",
+      "x": 16,
+      "y": 0,
+      "frame_start": 426,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786728994023",
+      "role": "governance",
+      "x": 16,
+      "y": 1,
+      "frame_start": 428,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786728995039",
+      "role": "governance",
+      "x": 17,
+      "y": 1,
+      "frame_start": 431,
+      "frame_count": 1
+    },
+    {
+      "name": "debate_log_8_9_1786729029",
+      "role": "governance",
+      "x": 17,
+      "y": 0,
+      "frame_start": 427,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_autonomous_seeder_Red_1786730970411",
+      "role": "governance",
+      "x": 18,
+      "y": 0,
+      "frame_start": 455,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_autonomous_seeder_Blue_1786730975729",
+      "role": "governance",
+      "x": 19,
+      "y": 0,
+      "frame_start": 492,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_autonomous_seeder_Green_1786730981113",
+      "role": "governance",
+      "x": 19,
+      "y": 1,
+      "frame_start": 445,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786731215889",
+      "role": "governance",
+      "x": 18,
+      "y": 1,
+      "frame_start": 447,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786731217397",
+      "role": "governance",
+      "x": 18,
+      "y": 2,
+      "frame_start": 451,
+      "frame_count": 1
+    },
+    {
+      "name": "utility_shed.27_23",
+      "role": "architecture",
+      "x": 19,
+      "y": 2,
+      "frame_start": 449,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_8_8_1786731249862",
+      "role": "governance",
+      "x": 19,
+      "y": 3,
+      "frame_start": 457,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_8_8_1786731251287",
+      "role": "governance",
+      "x": 18,
+      "y": 3,
+      "frame_start": 461,
+      "frame_count": 1
+    },
+    {
+      "name": "utility_shed.22_23",
+      "role": "architecture",
+      "x": 17,
+      "y": 3,
+      "frame_start": 459,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_autonomous_seeder_Red_1786731591630",
+      "role": "governance",
+      "x": 17,
+      "y": 2,
+      "frame_start": 470,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_autonomous_seeder_Green_1786731599984",
+      "role": "governance",
+      "x": 16,
+      "y": 2,
+      "frame_start": 474,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_8_8_1786731738080",
+      "role": "governance",
+      "x": 16,
+      "y": 3,
+      "frame_start": 484,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_8_8_1786731739541",
+      "role": "governance",
+      "x": 16,
+      "y": 4,
+      "frame_start": 488,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786731813768",
+      "role": "governance",
+      "x": 17,
+      "y": 4,
+      "frame_start": 476,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_3_7_1786731815293",
+      "role": "governance",
+      "x": 17,
+      "y": 5,
+      "frame_start": 480,
+      "frame_count": 1
+    },
+    {
+      "name": "utility_shed.28_25",
+      "role": "architecture",
+      "x": 16,
+      "y": 5,
+      "frame_start": 478,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_autonomous_seeder_Green_1786731911680",
+      "role": "governance",
+      "x": 16,
+      "y": 6,
+      "frame_start": 482,
+      "frame_count": 1
+    },
+    {
+      "name": "utility_shed.24_22",
+      "role": "architecture",
+      "x": 16,
+      "y": 7,
+      "frame_start": 486,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_10_8_1786731971753",
+      "role": "governance",
+      "x": 17,
+      "y": 7,
+      "frame_start": 490,
+      "frame_count": 1
+    },
+    {
+      "name": "governance_village_center_10_8_1786731973223",
+      "role": "governance",
+      "x": 17,
+      "y": 6,
+      "frame_start": 491,
+      "frame_count": 1
+    },
+    {
+      "name": "alpine_riscv64.qcow2",
+      "role": "qemu_disk",
+      "x": 18,
+      "y": 6,
+      "frame_start": 493,
+      "frame_count": 274
+    },
+    {
+      "name": "xv6.img",
+      "role": "qemu_disk",
+      "x": 18,
+      "y": 7,
+      "frame_start": 767,
+      "frame_count": 5
+    },
+    {
+      "name": "pixel_thought_1786926139",
+      "role": "thought",
+      "x": 19,
+      "y": 7,
+      "frame_start": 772,
+      "frame_count": 1
+    }
+  ],
+  "full": false
+}

@@ -1,0 +1,41 @@
+diff --git a/systems/virtio_pixel_rs_v3_shared/src/ecall.rs b/systems/virtio_pixel_rs_v3_shared/src/ecall.rs
+index 6109fd5..a30c4fe 100644
+--- a/systems/virtio_pixel_rs_v3_shared/src/ecall.rs
++++ b/systems/virtio_pixel_rs_v3_shared/src/ecall.rs
+@@ -50,6 +50,27 @@ static mut IDTR: IdtPtr = IdtPtr { limit: 0, base: 0 };
+ 
+ #[cfg(target_arch = "x86_64")]
+ #[unsafe(naked)]
++
++#[cfg(target_arch = "x86_64")]
++#[unsafe(naked)]
++pub unsafe extern "C" fn isr_vector_0x0E() {
++    core::arch::naked_asm!(
++        // Print 'P'
++        "mov ax, 0x3F8",
++        "mov dx, ax",
++        "mov al, 0x50",
++        "out dx, al",
++        // Print 'F'
++        "mov al, 0x46",
++        "out dx, al",
++        "3:",
++        "cli",
++        "hlt",
++        "jmp 3b"
++    );
++}
++
++#[cfg(target_arch = "x86_64")]
+ pub unsafe extern "C" fn isr_vector_0x06() {
+     core::arch::naked_asm!(
+         "mov ax, 0x2000",
+@@ -126,6 +147,8 @@ pub fn setup_trap_table() {
+             #[allow(static_mut_refs)]
+             IDT[0x0E].set_handler(isr_vector_0x0E as usize as u64, cs);
+             #[allow(static_mut_refs)]
++            IDT[0x0E].set_handler(isr_vector_0x0E as usize as u64, cs);
++            #[allow(static_mut_refs)]
+             IDT[0x0D].set_handler(isr_vector_0x0D as usize as u64, cs);
+             #[allow(static_mut_refs)]
+             IDT[0x08].set_handler(isr_vector_0x08 as usize as u64, cs);

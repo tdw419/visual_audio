@@ -1,0 +1,26 @@
+[package]
+name = "virtio_pixel_rs_v3_riscv"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+geos_pixel = { path = "../geos_pixel", default-features = false }
+virtio_pixel_rs_v3_shared = { path = "../virtio_pixel_rs_v3_shared" }
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1
+opt-level = "z"
+
+[[bin]]
+name = "bootloader_riscv"
+path = "src/main.rs"
+test = false
+bench = false
+
+[package.metadata.rust-analyzer]
+rustc_private = true

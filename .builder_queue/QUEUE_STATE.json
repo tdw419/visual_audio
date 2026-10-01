@@ -1,0 +1,238 @@
+{
+ "_comment": "Builder queue \u2014 structured supply. Canonical source for monitor next= computation (PR: resilience #1). The agent MUST keep this file in sync with the ledger prose; on mismatch the monitor emits DRIFT. Schema: id, title, status (queued|claimed|landed|reserved), blocks_on (list of ids or defect ids), claim_order.",
+ "queue": [
+  {
+   "id": "item-19",
+   "title": "Coreutils volume port #2 (grep/tr/tee/cut/sort)",
+   "status": "landed",
+   "blocks_on": [],
+   "claim_order": 19
+  },
+  {
+   "id": "item-20",
+   "title": "Shell-native swap (Phase 2 to Phase 3 gradient)",
+   "status": "landed",
+   "blocks_on": [],
+   "claim_order": 20
+  },
+  {
+   "id": "item-21",
+   "title": "Builder stage-1 in-shell fixture synthesis",
+   "status": "landed",
+   "blocks_on": [],
+   "claim_order": 21
+  },
+  {
+   "id": "item-22b",
+   "title": "Standalone workbench container packaging (items 22+23 second context)",
+   "status": "landed",
+   "blocks_on": [],
+   "claim_order": 22
+  },
+  {
+   "id": "item-24",
+   "title": "VFS-1 png_vfs.py standalone PNG disk format module + gate",
+   "status": "landed",
+   "blocks_on": [],
+   "claim_order": 24
+  },
+  {
+   "id": "item-25",
+   "title": "VFS-2/3 syscall re-route + writeback persistence",
+   "status": "landed",
+   "blocks_on": [],
+   "claim_order": 25
+  },
+  {
+   "id": "item-26",
+   "title": "Spatial process model (spawn primitive and multi-task coordination)",
+   "status": "landed",
+   "blocks_on": [],
+   "claim_order": 26
+  },
+  {
+   "id": "item-27",
+   "title": "Driver ABI freeze (unified contract for Mailbox, Console, and Block channels)",
+   "status": "landed",
+   "blocks_on": [],
+   "claim_order": 27
+  },
+  {
+   "id": "item-28",
+   "title": "Spatial root init (ext2 PNG root mount and PID 1 startup sequence)",
+   "status": "landed",
+   "blocks_on": [],
+   "claim_order": 28
+  },
+  {
+   "id": "item-29",
+   "title": "Per-process spatial containment (bind GO-1 box enforcement to spawn-allocated tiles)",
+   "status": "landed",
+   "blocks_on": [],
+   "claim_order": 29
+  },
+  {
+   "id": "item-30",
+   "title": "Ext2 spatial executable binary loader (direct execve of disk .glyph programs into spawned tiles; cites BK-33/34/35 transpiler aliasing fixtures)",
+   "status": "landed",
+   "blocks_on": [
+    "item-29"
+   ],
+   "claim_order": 30
+  },
+  {
+   "id": "item-31",
+   "title": "GPU-first spatial window coordinator (GlyphStratum multi-tile manager on infinite canvas)",
+   "status": "landed",
+   "blocks_on": [
+    "item-29",
+    "item-30"
+   ],
+   "claim_order": 31
+  },
+  {
+   "id": "item-32",
+   "title": "Spatial input router & focus manager (BM905 event dispatch into focused active tile)",
+   "status": "landed",
+   "blocks_on": [
+    "item-31"
+   ],
+   "claim_order": 32
+  },
+  {
+   "id": "item-33",
+   "title": "Desktop shell UI & process task launcher (status bar panel, storage capacity gauge, app launcher tile)",
+   "status": "landed",
+   "blocks_on": [
+    "item-31",
+    "item-32"
+   ],
+   "claim_order": 33
+  },
+  {
+   "id": "item-34",
+   "title": "Inter-tile IPC & ordered messaging protocol (GlyphChannel ring-buffer mailbox ABI with sequence/CRC/ack)",
+   "status": "landed",
+   "blocks_on": [
+    "item-33"
+   ],
+   "claim_order": 34
+  },
+  {
+   "id": "item-35",
+   "title": "Reactive agent state machine runtime (read-evaluate-act-paint execution loop)",
+   "status": "landed",
+   "blocks_on": [
+    "item-34"
+   ],
+   "claim_order": 35,
+   "landed_commit": "86be9194"
+  },
+  {
+   "id": "item-36",
+   "title": "Adversarial cross-fence multi-agent reactivity gate (verifiable behavioral change across memory fences)",
+   "status": "landed",
+   "blocks_on": [
+    "item-34",
+    "item-35"
+   ],
+   "claim_order": 36,
+   "landed_commit": "9e3a87b0"
+  },
+  {
+   "id": "item-37",
+   "title": "Interactive multi-tile desktop application suite (terminal tile, system monitor gauge, ext2 visual file explorer)",
+   "status": "landed",
+   "blocks_on": [
+    "item-33",
+    "item-36"
+   ],
+   "claim_order": 37,
+   "landed_commit": "3183e7f7"
+  },
+  {
+   "id": "item-38",
+   "title": "Spatial window compositing & z-order elevation (overlapping tile damage clipping, top-window focus, drag repositioning)",
+   "status": "landed",
+   "blocks_on": [
+    "item-37"
+   ],
+   "claim_order": 38
+  },
+  {
+   "id": "item-39",
+   "title": "Virtual terminal & PTY line discipline (ANSI/VT100 escape sequence parser, cursor movement, stdin/stdout IPC streams)",
+   "status": "landed",
+   "blocks_on": [
+    "item-37",
+    "item-38"
+   ],
+   "claim_order": 39,
+   "commit": "a675d186"
+  },
+  {
+   "id": "item-40",
+   "title": "Desktop notification daemon & system tray ABI (asynchronous agent toast alerts, status bar reactive applets)",
+   "status": "landed",
+   "blocks_on": [
+    "item-38"
+   ],
+   "claim_order": 40
+  },
+  {
+   "id": "item-41",
+   "title": "Dynamic process lifecycle & spatial task manager (process kill/pause signals, interactive task manager tile, clean window close)",
+   "status": "landed",
+   "blocks_on": [
+    "item-38",
+    "item-39"
+   ],
+   "claim_order": 41
+  },
+  {
+   "id": "remedy-item26_process_model-b727fcb1",
+   "title": "Remediate item26_process_model: System-1 flagged missing-red-leg (conf 0.95) \u2014 address advisory before further claims",
+   "status": "landed",
+   "blocks_on": [],
+   "claim_order": 0,
+   "advisory": "/home/jericho/projects/zion/projects/visual_audio/.builder_queue/RULING_SYSTEM1_ADVISORY_item26_process_model.md",
+   "evidence_hash": "sha256:b727fcb126c5b4783734fd11545e46d3533ec8f9d8156c2ec1cd68bba67e7505",
+   "origin": "system1_auto_injection",
+   "remediation": ".builder_queue/RECEIPT_remedy_item26_af3e.md"
+  },
+  {
+   "id": "remedy-L4_desktop-2079c461",
+   "title": "Remediate L4_desktop: System-1 flagged overclaim (conf 0.95) \u2014 address advisory before further claims",
+   "status": "landed",
+   "blocks_on": [],
+   "claim_order": -1,
+   "advisory": "/home/jericho/projects/zion/projects/visual_audio/.builder_queue/RULING_SYSTEM1_ADVISORY_L4_desktop.md",
+   "evidence_hash": "sha256:2079c4612480bc4ce5a3d1eaa0d2551916f69748848fa6ad65efd50853cef045",
+   "origin": "system1_auto_injection",
+   "remediation": ".builder_queue/RECEIPT_remedy_l4desktop_af3e.md"
+  },
+  {
+   "id": "remedy-DTF_floor-33b1e687",
+   "title": "Remediate DTF_floor: System-1 flagged overclaim (conf 0.90) \u2014 address advisory before further claims",
+   "status": "landed",
+   "blocks_on": [],
+   "claim_order": -2,
+   "advisory": "/home/jericho/projects/zion/projects/visual_audio/.builder_queue/RULING_SYSTEM1_ADVISORY_DTF_floor.md",
+   "evidence_hash": "sha256:33b1e68709eddb56e0926df96ef56809a843339dab6ab2fba5e9e0928c1bc11a",
+   "origin": "system1_auto_injection",
+   "remediation": ".builder_queue/RECEIPT_remedy_dtffloor_af3e.md"
+  }
+ ],
+ "active": null,
+ "defects": [
+  {
+   "id": "DEFECT-30",
+   "title": "OP_LBU/LHU lowering scratch aliasing + stack leak when rd in {r28,r29}",
+   "status": "resolved",
+   "blocks": [],
+   "file": ".builder_queue/DEFECT_30_lbu_scratch_stack.md"
+  }
+ ],
+ "updated": "2026-09-27T21:05:00-05:00",
+ "updated_by": "af3e62239ce2"
+}

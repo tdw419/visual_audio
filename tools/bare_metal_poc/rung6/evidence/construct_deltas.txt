@@ -1,0 +1,4 @@
+stage2: 11 deltas applied, 15,920 B proven text -> 21,462 B (+5,542 B); round-tripped to rung9 byte-for-byte, so the unnamed text is identical by check, not by claim
+stage1: 2 deltas applied: tag 0x32435850 (PXC2) at 0x180 of the MBR
+capture: 10 deltas applied, 8,846 B proven text -> 9,524 B (+678 B); the gdb session, the stop, and both dump widths are untouched -- only the output root, the geometry source and the lane guard moved, and they round-trip
+wrote bm602_stage2_px.asm, bm602_stage1.asm, bm602_capture.py

@@ -1,0 +1,36 @@
+; Test INDIRECT_LOAD and INDIRECT_STORE with SET_ADDR_HIGH/LOW
+; 1. Store 42 at (10, 20) using STORE
+; 2. Pack coordinate (10, 20) using SET_ADDR_HIGH/LOW
+; 3. INDIRECT_LOAD -> should read 42
+; 4. Verify accumulator = 42
+; 5. INDIRECT_STORE 99 at (10, 20)
+; 6. DIRECT LOAD from (10, 20) -> should read 99
+
+SET 42
+STORE (10, 20)
+
+; Pack (10, 20) using new opcodes
+SET_ADDR_HIGH 10  ; Acc = (10 << 8) = 2560
+SET_ADDR_LOW 20   ; Acc = 2560 + 20 = 2580 (packed coordinate)
+INDIRECT_LOAD
+
+; Accumulator should be 42
+SUB 42
+JZ :store_test
+HALT  ; FAIL
+
+:store_test
+; Pack (10, 20) again
+SET_ADDR_HIGH 10
+SET_ADDR_LOW 20
+; INDIRECT_STORE 99 at this address
+INDIRECT_STORE 99
+
+; Verify: LOAD from (10, 20) should get 99
+LOAD (10, 20)
+SUB 99
+JZ :pass
+HALT  ; FAIL
+
+:pass
+HALT  ; SUCCESS

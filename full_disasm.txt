@@ -1,0 +1,119 @@
+[ 1] 0x80c3b6da: c.sdsp     s0, 0x50(sp)
+[ 2] 0x80c3b6dc: c.sdsp     ra, 0x58(sp)
+[ 3] 0x80c3b6de: c.addi4spn s0, sp, 0x60
+[ 4] 0x80c3b6e0: c.sdsp     s1, 0x48(sp)
+[ 5] 0x80c3b6e2: c.sdsp     s2, 0x40(sp)
+[ 6] 0x80c3b6e4: auipc      a5, 0x1df
+[ 7] 0x80c3b6e8: addi       a5, a5, 0x17c
+[ 8] 0x80c3b6ec: c.ld       a4, 0(a5)
+[ 9] 0x80c3b6ee: c.ld       a5, 8(a5)
+[10] 0x80c3b6f0: sd         zero, -0x50(s0)
+[11] 0x80c3b6f4: sd         a4, -0x30(s0)
+[12] 0x80c3b6f8: sd         a5, -0x28(s0)
+[13] 0x80c3b6fc: auipc      a5, 0x1e5
+[14] 0x80c3b700: sd         a1, 0x3bc(a5)
+[15] 0x80c3b704: auipc      a3, 0x1e5
+[16] 0x80c3b708: ld         a3, 0x3b4(a3)
+[17] 0x80c3b70c: lui        a4, 0x54536
+[18] 0x80c3b710: lui        a5, 0x20494
+[19] 0x80c3b714: addi       a4, a4, -0x6ad
+[20] 0x80c3b718: addi       a5, a5, 0x249
+[21] 0x80c3b71c: sd         zero, -0x48(s0)
+[22] 0x80c3b720: sd         zero, -0x40(s0)
+[23] 0x80c3b724: sd         zero, -0x38(s0)
+[24] 0x80c3b728: c.slli     a4, 0x20
+[25] 0x80c3b72a: c.add      a4, a5
+[26] 0x80c3b72c: c.ld       a5, 0(a3)
+[27] 0x80c3b72e: bne        a5, a4, 0xcc
+[28] 0x80c3b732: c.ld       a5, 0x60(a3)
+[29] 0x80c3b734: addi       a2, s0, -0x60
+[30] 0x80c3b738: addi       a1, s0, -0x30
+[31] 0x80c3b73c: c.ld       a5, 0x98(a5)
+[32] 0x80c3b73e: c.mv       s2, a0
+[33] 0x80c3b740: c.jalr     a5
+PC 0x80000340 is outside image!
+PC 0x80000344 is outside image!
+PC 0x80000348 is outside image!
+PC 0x8000034c is outside image!
+PC 0x80000350 is outside image!
+PC 0x80000354 is outside image!
+PC 0x80000358 is outside image!
+[41] 0x80c3b742: c.mv       s1, a0
+[42] 0x80c3b744: auipc      a0, 0x1de
+[43] 0x80c3b748: addi       a0, a0, 0x49c
+[44] 0x80c3b74c: c.bnez     s1, 0x50
+[45] 0x80c3b74e: ld         a0, -0x60(s0)
+[46] 0x80c3b752: addi       a1, s0, -0x48
+[47] 0x80c3b756: auipc      ra, 0
+[48] 0x80c3b75a: jalr       ra, ra, 0xbe
+[49] 0x80c3b814: c.addi16sp sp, -0x30
+[50] 0x80c3b816: c.sdsp     s0, 0x20(sp)
+[51] 0x80c3b818: c.sdsp     s4, 0(sp)
+[52] 0x80c3b81a: c.sdsp     ra, 0x28(sp)
+[53] 0x80c3b81c: c.sdsp     s1, 0x18(sp)
+[54] 0x80c3b81e: c.sdsp     s2, 0x10(sp)
+[55] 0x80c3b820: c.sdsp     s3, 8(sp)
+[56] 0x80c3b822: c.addi4spn s0, sp, 0x30
+[57] 0x80c3b824: c.mv       s4, a1
+[58] 0x80c3b826: auipc      ra, 6
+[59] 0x80c3b82a: jalr       ra, ra, 0x79a
+[60] 0x80c41fc0: c.addi16sp sp, -0x40
+[61] 0x80c41fc2: c.sdsp     s0, 0x30(sp)
+[62] 0x80c41fc4: c.sdsp     ra, 0x38(sp)
+[63] 0x80c41fc6: c.sdsp     s1, 0x28(sp)
+[64] 0x80c41fc8: c.sdsp     s2, 0x20(sp)
+[65] 0x80c41fca: c.addi4spn s0, sp, 0x40
+[66] 0x80c41fcc: c.lw       s1, 0x30(a0)
+[67] 0x80c41fce: sd         zero, -0x28(s0)
+[68] 0x80c41fd2: ld         s2, 0x38(a0)
+[69] 0x80c41fd6: c.beqz     s1, 0x14
+[70] 0x80c41fd8: slli       a1, s1, 0x20
+[71] 0x80c41fdc: c.li       a2, 1
+[72] 0x80c41fde: c.srli     a1, 0x20
+[73] 0x80c41fe0: c.mv       a0, s2
+[74] 0x80c41fe2: auipc      ra, 0
+[75] 0x80c41fe6: jalr       ra, ra, -0x49a
+[76] 0x80c41b48: c.addi16sp sp, -0xd0
+[77] 0x80c41b4a: c.sdsp     s0, 0xc0(sp)
+[78] 0x80c41b4c: c.sdsp     s1, 0xb8(sp)
+[79] 0x80c41b4e: c.addi4spn s0, sp, 0xd0
+[80] 0x80c41b50: c.sdsp     s2, 0xb0(sp)
+[81] 0x80c41b52: c.sdsp     s3, 0xa8(sp)
+[82] 0x80c41b54: c.sdsp     s4, 0xa0(sp)
+[83] 0x80c41b56: c.sdsp     s7, 0x88(sp)
+[84] 0x80c41b58: c.sdsp     s8, 0x80(sp)
+[85] 0x80c41b5a: c.sdsp     s10, 0x70(sp)
+[86] 0x80c41b5c: c.sdsp     s11, 0x68(sp)
+[87] 0x80c41b5e: c.sdsp     ra, 0xc8(sp)
+[88] 0x80c41b60: c.sdsp     s5, 0x98(sp)
+[89] 0x80c41b62: c.sdsp     s6, 0x90(sp)
+[90] 0x80c41b64: c.sdsp     s9, 0x78(sp)
+[91] 0x80c41b66: auipc      a5, 0x1d9
+[92] 0x80c41b6a: ld         a5, -0x296(a5)
+[93] 0x80c41b6e: auipc      s8, 0x1df
+[94] 0x80c41b72: addi       s8, s8, -0xb6
+[95] 0x80c41b76: slli       s3, a2, 0x20
+[96] 0x80c41b7a: sd         a5, -0xa8(s0)
+[97] 0x80c41b7e: auipc      a5, 0x1d9
+[98] 0x80c41b82: ld         a5, -0x2a6(a5)
+[99] 0x80c41b86: srli       s3, s3, 0x20
+[100] 0x80c41b8a: auipc      s4, 0x1d9
+[101] 0x80c41b8e: addi       s4, s4, -0x172
+[102] 0x80c41b92: sd         a5, -0xa0(s0)
+[103] 0x80c41b96: ld         a5, 0(s8)
+[104] 0x80c41b9a: slli       s1, s3, 6
+[105] 0x80c41b9e: sd         a1, -0xc8(s0)
+[106] 0x80c41ba2: c.ld       a5, 0x60(a5)
+[107] 0x80c41ba4: c.mv       s11, a0
+[108] 0x80c41ba6: c.mv       s10, a2
+[109] 0x80c41ba8: ld         a5, 0x140(a5)
+[110] 0x80c41bac: sd         zero, -0xc0(s0)
+[111] 0x80c41bb0: c.add      s1, s4
+[112] 0x80c41bb2: sd         zero, -0xb8(s0)
+[113] 0x80c41bb6: addi       a2, s0, -0xb8
+[114] 0x80c41bba: c.li       a1, 0
+[115] 0x80c41bbc: addi       a0, s0, -0xa8
+[116] 0x80c41bc0: lw         s2, 8(s1)
+[117] 0x80c41bc4: c.jalr     a5
+[118] 0x70068693800006b6: Out of bounds
+[119] 0x70068693800006b6: Out of bounds

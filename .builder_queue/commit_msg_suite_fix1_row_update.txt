@@ -1,0 +1,24 @@
+docs(suite-fix1): row records both landings, two refuted classifications, and DEFECT-28
+
+Row `SUITE-FIX-1` (systems/GLYPH_SELF_HOSTING_ROADMAP.md:355) gains the running evidence for
+this tick's two commits (fd9b4e0, 1f49a92), recorded so the next run does not re-derive it:
+
+- The cluster-(4) "ENVIRONMENT / skip-with-reason" classification for
+  tests/test_ollama_contextual_memory_simple.py is REFUTED by measurement (0.18 s AttributeError,
+  no socket): it was API drift and is now fixed fail->pass. A skip would have masked it.
+- The row-gate sweep found a regression from 4863635 and that ruling's "breaks ZERO existing
+  tests" premise is falsified; repaired, with both falsification probes recorded.
+- Cluster (4)'s "tolerances may be legitimate expected behaviour" claim is refuted for all three
+  files by measurement: test_cross_modal.py is API drift (no `extract_tiles`, CLI usage mismatch),
+  test_griffin_lim.py raises a real broadcast ValueError inside src/griffin_lim.py:93/141, and
+  test_vcc_validation.py raises a real "Decoded byte out of range". Filed DEFECT-28 with the
+  measured table and a cheapest-first order instead of a decision request.
+- The row STAYS OPEN for DEFECT-28, DEFECT-27's two seated legs, and leg 1b (BLOCKED-ON-DESIGN).
+
+Final row-gate sweep: 257 files / 1619 collected / PASS 243 / FAIL 10 / TIMEOUT 4 (464.48 s),
+every per-file delta attributed; tests/test_visual_player_command.py's PASS->FAIL is recorded as
+sweep-flaky (4/4 in isolation, same HEAD), not as a regression.
+
+Also: NEAR_ESCALATIONS entry for the exec-bit decision (repair landed under the fallback rule
+rather than holding a red regression or changing an ABI to satisfy my own wrong assertion), and
+.builder_queue/DEFECT-28_suite_fix1_c4_drift_and_defects.md.

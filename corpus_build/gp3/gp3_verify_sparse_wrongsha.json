@@ -1,0 +1,12 @@
+{
+ "guest_path": "/var/tmp/gp3_1789615295/sparse/sparse.bin",
+ "size": 67108864,
+ "recon_sha256": "28cd6ed52391ef924baf5075354585f03780804c293d4ecf28ec6a57754a4b00",
+ "expected_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+ "match": false,
+ "frames_read": [
+  131,
+  132
+ ],
+ "note": "container is authoritative only after a writeback barrier"
+}

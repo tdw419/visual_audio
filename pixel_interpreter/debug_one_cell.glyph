@@ -1,0 +1,105 @@
+; Test one cell: (1, 151) is alive, should check neighbors correctly
+; Then write result to next grid
+
+; Initialize pattern: vertical line at x=1
+SET 255
+STORE (1, 151)
+STORE (1, 152)
+STORE (1, 153)
+
+; Process cell (1, 151)
+SET 1
+STORE (203, 0)  ; x = 1
+SET 151
+STORE (204, 0)  ; y = 151
+
+; Count neighbors
+SET 0
+STORE (202, 0)
+
+; Compute offsets
+LOAD (203, 0)
+SUB 1
+STORE (205, 0)  ; x-1 = 0
+
+LOAD (203, 0)
+ADD 1
+STORE (207, 0)  ; x+1 = 2
+
+LOAD (204, 0)
+SUB 1
+STORE (206, 0)  ; y-1 = 150
+
+LOAD (204, 0)
+ADD 1
+STORE (208, 0)  ; y+1 = 152
+
+; Check neighbor (1, 152) - bottom
+; Load x coordinate value
+LOAD (203, 0)
+STORE (210, 0)
+; Load y coordinate value
+LOAD (208, 0)
+STORE (211, 0)
+; Pack them
+SET_ADDR_HIGH 210
+SET_ADDR_LOW 211
+INDIRECT_LOAD
+
+SUB 255
+JZ :n_alive
+
+JMP :check_rule
+
+:n_alive
+LOAD (202, 0)
+ADD 1
+STORE (202, 0)
+
+:check_rule
+; Cell (1, 151) is alive
+LOAD (203, 0)
+STORE (212, 0)
+LOAD (204, 0)
+STORE (213, 0)
+SET_ADDR_HIGH 212
+SET_ADDR_LOW 213
+INDIRECT_LOAD
+
+SUB 255
+JZ :apply_alive
+
+; This shouldn't happen
+HALT
+
+:apply_alive
+; Alive cell, check if 2 or 3 neighbors
+LOAD (202, 0)
+SUB 2
+JZ :stay_alive
+SUB 1
+JZ :stay_alive
+
+; Die
+SET 0
+STORE (214, 0)
+LOAD (204, 0)
+ADD 4
+STORE (215, 0)
+SET_ADDR_HIGH 214
+SET_ADDR_LOW 215
+INDIRECT_STORE 0
+JMP :halt
+
+:stay_alive
+SET 255
+STORE (216, 0)
+LOAD (204, 0)
+ADD 4
+STORE (217, 0)
+SET_ADDR_HIGH 216
+SET_ADDR_LOW 217
+INDIRECT_STORE 255
+
+:halt
+HALT

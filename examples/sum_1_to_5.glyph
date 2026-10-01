@@ -1,0 +1,29 @@
+# Glyph example: sum the integers 1..5 and print the result (15).
+#
+# Run it:
+#   python3 tools/glyph_run.py examples/sum_1_to_5.glyph
+#
+# Expected output:
+#   result   : HALT
+#   output   : 15
+#
+# The compile step bakes this source into sum_1_to_5.glyph.png — a spatial
+# pixel artifact where every instruction is 4 pixels. The artifact IS the
+# program: run it again without the source via
+#   python3 tools/glyph_run.py examples/sum_1_to_5.glyph.png
+
+:__entry
+    LDI r5 0        # accumulator = 0
+    LDI r6 1        # i = 1
+    LDI r7 6        # limit = 6 (exclusive)
+:loop
+    CMP r6 r7       # r0 = (i == limit)
+    JZ :done        # loop until i reaches 6
+    ADD r5 r6       # acc += i
+    LDI r8 1
+    ADD r6 r8       # i += 1
+    JMP :loop
+:done
+    PRT r5          # prints "OUTPUT: r5 = 15" during execution;
+                    # glyph_run reports it as output: 15
+    HALT

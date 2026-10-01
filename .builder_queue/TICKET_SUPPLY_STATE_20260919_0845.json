@@ -1,0 +1,20 @@
+{
+ "id": "SUPPLY-STATE-20260919-0845",
+ "kind": "supply-state snapshot (A/report work only; no new ticket)",
+ "found": "2026-09-19T08:45-05:00",
+ "found_by": "builder cron af3e62239ce2 (PHASE 1 row sweep, monitor delta = BM904 landing commit)",
+ "status": "RESOLVED 2026-09-21 — superseded by RULING_ps012 (stop at RV32; lane idle-on-record until Jericho opens a new roadmap). The HOLD condition this snapshot documented (0 open rows, backlog exhausted, supply is Jericho's seat) is now the roadmap's formal closed state, not pending work; retired from the open-queue count per the monitor's CLOSED/DONE/RESOLVED keyword filter. Original HOLD status preserved below for provenance.",
+ "measured": {
+  "head": "450a314a (glyph-transpiler-autoloop), monitor tracked_dirty=17 DIRTY_ACTIVE (sibling WIP lanes, excluded runtime churn)",
+  "row_scan": ".builder_queue/scan_rows_orch.py v3 -> OPEN_COUNT 0; supply_census TOTAL=81 OPEN=0 rc=0",
+  "bm904": "landed last tick 450a314a (gate PASS x3 + live mutant RED, receipt tools/bare_metal_poc/rung9/RECEIPT_BM904_WRITE_DIFF.md)",
+  "bm503d": "design row closed 2026-09-18 (rung5/DESIGN_EXEC_FROM_DATA.md + _REVIEW.md on disk; verdict WORTH A RUNG conditional on three-part receipt; its follow-on implementation row is NOT yet filed in the roadmap \u2014 Jericho's seat per the brief's D-2 provenance)",
+  "standing_conjunctions": [
+   "tests/test_defect18_tick_regfile.py + tests/test_defect17_x31_refusal.py = 13 passed / 2.07s rc=0",
+   "arc leg A SEED=2026091908 head=450a314a -> 373 passed / 1 skipped / 9 deselected / 2 xfailed, rc=0, 87.43s, crashes=0, oom_kill_delta=0, journal_oom_kill_delta=0, mem_peak=23.77 GB (log output/arc_lega_seed2026091908_450a314a.txt)"
+  ],
+  "substrate": "kernel_memory.npy mtime 1789751685 = age ~73,700s (~20.5h) at check \u2014 stale, machine not stepping; no surface read, no B-state conclusions (teleop discipline)",
+  "se021_maildrop": ".geos/maildrop/content/hermes.0001.ruling.md md5 ab846c18 unchanged (~70th consecutive hold, no ack) \u2014 BLOCKED-ON-JERICHO"
+ },
+ "eligible_supply": "none in-repo. Next candidates are ALL Jericho's seat: (1) file the BM-503D follow-on implementation row (design is ruled + reviewed, six gate legs already specified); (2) renew lane supply / accept the DEFECT-22 stability bound and release the level trigger; (3) DEFECT-23 option 2, DEFECT-29; (4) SE021 re-ruling; (5) D22 series stop-condition; (6) TASK_BM001 ratification (rung7 stays uncommitted)."
+}

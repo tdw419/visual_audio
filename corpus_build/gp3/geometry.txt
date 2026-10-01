@@ -1,0 +1,24 @@
+Filesystem type is: ef53
+File size of /var/tmp/gp3_1789615295/sparse/sparse.bin is 67108864 (16384 blocks of 4096 bytes)
+ ext:     logical_offset:        physical_offset: length:   expected: flags:
+   0:        0..       0:    1921024..   1921024:      1:            
+   1:     8192..    8192:    1923072..   1923072:      1:    1929216:
+   2:    16383..   16383:    1904075..   1904075:      1:    1931263: last,eof
+/var/tmp/gp3_1789615295/sparse/sparse.bin: 3 extents found
+===
+Filesystem type is: ef53
+File size of /var/tmp/gp3_1789615295/dense_control/dense.bin is 67108864 (16384 blocks of 4096 bytes)
+ ext:     logical_offset:        physical_offset: length:   expected: flags:
+   0:        0..    8191:    1925120..   1933311:   8192:            
+   1:     8192..   14335:    1939456..   1945599:   6144:    1933312:
+   2:    14336..   16383:    1953792..   1955839:   2048:    1945600: last,eof
+/var/tmp/gp3_1789615295/dense_control/dense.bin: 3 extents found
+===
+268623 alias.txt
+268623 orig.txt
+===
+3be43ab3027ca75377e73efbf6fa371ea14424c0cc40147b3cc3a77f929b6d52
+3e7166cf09043b3aa76c833f05e743f5fbb05c503a5722e1ba5299f0f5541807
+===
+   0:        0..   65535:    1990656..   2056191:  65536:             last,eof
+/var/tmp/gp3_1789615295/multiframe3/big3.bin: 1 extent found

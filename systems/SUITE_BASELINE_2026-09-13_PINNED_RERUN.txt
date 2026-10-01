@@ -1,0 +1,263 @@
+enclosing scope memory.max = 4294967296 (from /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/hermes-worker-proc_91d2626e11fa.scope/memory.max)
+widening to MemoryMax=12G MemoryHigh=12G (workers=4)
+[[32mPASS   [0m] tests/fixtures/codec_test.py (0.79s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.14s
+[[32mPASS   [0m] tests/level5c_batch_test.py (0.84s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.14s
+[[32mPASS   [0m] tests/level5c_1mb_test.py (0.84s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.15s
+[[32mPASS   [0m] tests/level5c_50k_test.py (0.84s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.16s
+[[32mPASS   [0m] tests/level5c_gpu_test.py (0.82s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.17s
+[[32mPASS   [0m] tests/level5c_debug_test.py (0.89s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.17s
+[[32mPASS   [0m] tests/level5c_flush_test.py (0.85s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.17s
+[[32mPASS   [0m] tests/level5c_fast_gpu_test.py (0.87s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.18s
+[[32mPASS   [0m] tests/level5c_perf_test.py (0.79s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.15s
+[[32mPASS   [0m] tests/level5c_large_test.py (0.85s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.16s
+[[32mPASS   [0m] tests/level5c_minimal_test.py (0.87s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.16s
+[[32mPASS   [0m] tests/level5c_no_sync_test.py (0.89s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.16s
+[[32mPASS   [0m] tests/level5c_progress_test.py (0.86s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.18s
+[[32mPASS   [0m] tests/level5c_periodic_test.py (0.87s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.16s
+[[32mPASS   [0m] tests/level5c_qemu_test.py (0.85s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.17s
+[[32mPASS   [0m] tests/level5c_single_batch_test.py (0.83s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.15s
+[[32mPASS   [0m] tests/test_a_extension.py (0.86s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.20s
+[[32mPASS   [0m] tests/test_alpine_opensbi_boot.py (0.87s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.16s
+[[32mPASS   [0m] tests/run_ollama_memory_test.py (0.94s, rc=0, coll=12 pass=12 fail=0) - 12 passed, 12 warnings in 0.16s
+[[32mPASS   [0m] tests/test_air_gap.py (0.91s, rc=0, coll=6 pass=5 fail=0) - 5 passed, 1 skipped in 0.24s
+[[32mPASS   [0m] tests/test_bk10_pipes.py (0.87s, rc=0, coll=2 pass=2 fail=0) - 2 passed in 0.18s
+[[32mPASS   [0m] tests/test_arc_determinism_audit.py (0.95s, rc=0, coll=4 pass=4 fail=0) - 4 passed in 0.30s
+[[32mPASS   [0m] tests/test_bk12_wgsl_tier.py (1.84s, rc=0, coll=6 pass=6 fail=0) - 6 passed in 1.09s
+[[32mPASS   [0m] tests/test_bk14_demo.py (4.73s, rc=0, coll=4 pass=4 fail=0) - 4 passed in 4.05s
+[[32mPASS   [0m] tests/test_bk1_argv.py (3.91s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 2.97s
+[[32mPASS   [0m] tests/test_bk3_signals.py (0.84s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 0.21s
+[[32mPASS   [0m] tests/test_bk4_join.py (0.87s, rc=0, coll=4 pass=4 fail=0) - 4 passed in 0.20s
+[[32mPASS   [0m] tests/test_bk6_integrity.py (0.86s, rc=0, coll=6 pass=6 fail=0) - 6 passed in 0.18s
+[[32mPASS   [0m] tests/test_bk7_fs_grow.py (0.85s, rc=0, coll=2 pass=2 fail=0) - 2 passed in 0.17s
+[[32mPASS   [0m] tests/test_bk2_wgsl_syscall_parity.py (4.27s, rc=0, coll=4 pass=4 fail=0) - 4 passed in 3.32s
+[[32mPASS   [0m] tests/test_bk8_fs_pix_sha256.py (1.47s, rc=0, coll=15 pass=15 fail=0) - 15 passed in 0.82s
+[[32mPASS   [0m] tests/test_bk9_paths.py (0.85s, rc=0, coll=3 pass=3 fail=0) - 3 passed in 0.16s
+[[32mPASS   [0m] tests/test_collaborative_tile_server.py (0.76s, rc=0, coll=10 pass=10 fail=0) - 10 passed in 0.14s
+[[32mPASS   [0m] tests/test_coarticulation.py (1.93s, rc=0, coll=4 pass=4 fail=0) - 4 passed in 1.26s
+[[32mPASS   [0m] tests/test_color_explorer.py (1.46s, rc=0, coll=4 pass=4 fail=0) - 4 passed in 0.79s
+[[32mPASS   [0m] tests/test_consonant_ecc.py (0.92s, rc=0, coll=2 pass=2 fail=0) - 2 passed in 0.19s
+[[32mPASS   [0m] tests/test_bk13_net.py (14.27s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 13.63s
+[[32mPASS   [0m] tests/test_container_audit_loop.py (4.77s, rc=0, coll=21 pass=21 fail=0) - 21 passed in 4.04s
+[[32mPASS   [0m] tests/test_container_task_scheduler.py (0.91s, rc=0, coll=7 pass=7 fail=0) - 7 passed in 0.18s
+[[31mFAIL   [0m] tests/test_crc_patch.py (0.92s, rc=1, coll=1 pass=0 fail=1) - 1 failed in 0.19s
+[[32mPASS   [0m] tests/test_container_patch.py (6.07s, rc=0, coll=7 pass=7 fail=0) - 7 passed in 5.37s
+[[31mFAIL   [0m] tests/test_cross_modal.py (1.32s, rc=1, coll=8 pass=2 fail=6) - 6 failed, 2 passed in 0.64s
+[[32mPASS   [0m] tests/test_csr_m_extension.py (0.92s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.18s
+[[32mPASS   [0m] tests/test_cross_lingual_say.py (2.27s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 1.59s
+[[32mPASS   [0m] tests/test_dct_steganography.py (1.06s, rc=0, coll=19 pass=19 fail=0) - 19 passed in 0.34s
+[[32mPASS   [0m] tests/test_defect17_x31_refusal.py (2.99s, rc=0, coll=11 pass=11 fail=0) - 11 passed in 2.01s
+[[32mPASS   [0m] tests/test_defect18_tick_regfile.py (2.00s, rc=0, coll=2 pass=2 fail=0) - 2 passed in 1.04s
+[[32mPASS   [0m] tests/test_defect23_pt_identity.py (1.99s, rc=0, coll=3 pass=3 fail=0) - 3 passed in 1.08s
+[[32mPASS   [0m] tests/test_defect20_write_identity.py (2.46s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 1.48s
+[[32mPASS   [0m] tests/test_dense_ecc.py (0.86s, rc=0, coll=6 pass=6 fail=0) - 6 passed, 6 warnings in 0.17s
+[[32mPASS   [0m] tests/test_dense_pixel_codec.py (0.87s, rc=0, coll=3 pass=3 fail=0) - 3 passed in 0.18s
+[[32mPASS   [0m] tests/test_diff_overlay.py (0.87s, rc=0, coll=7 pass=7 fail=0) - 7 passed, 7 warnings in 0.17s
+[[32mPASS   [0m] tests/test_bk11_coreutils.py (29.43s, rc=0, coll=6 pass=6 fail=0) - 6 passed in 28.49s
+[[32mPASS   [0m] tests/test_emphasis.py (2.28s, rc=0, coll=3 pass=3 fail=0) - 3 passed, 3 warnings in 1.55s
+[[32mPASS   [0m] tests/test_eng1_unknown_opcode.py (1.86s, rc=0, coll=4 pass=4 fail=0) - 4 passed in 1.10s
+[[32mPASS   [0m] tests/test_dual_band_roundtrip.py (3.10s, rc=0, coll=3 pass=3 fail=0) - 3 passed in 2.25s
+[[32mPASS   [0m] tests/test_frame_based_progress_tracking.py (0.85s, rc=0, coll=44 pass=44 fail=0) - 44 passed in 0.17s
+[[32mPASS   [0m] tests/test_fountain_codes.py (1.14s, rc=0, coll=6 pass=6 fail=0) - 6 passed in 0.45s
+[[32mPASS   [0m] tests/test_executor_sandbox.py (2.27s, rc=0, coll=15 pass=15 fail=0) - 15 passed in 1.53s
+[[32mPASS   [0m] tests/test_geos_integration.py (0.83s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.15s
+[[32mPASS   [0m] tests/test_frequency_mapper.py (1.21s, rc=0, coll=29 pass=29 fail=0) - 29 passed, 7 warnings in 0.46s
+[[32mPASS   [0m] tests/test_geos_memory_palace_viz.py (0.99s, rc=0, coll=6 pass=6 fail=0) - 6 passed, 6 warnings in 0.30s[[32mPASS   [0m] tests/test_geos_region_executor.py (0.94s, rc=0, coll=7 pass=7 fail=0) - 7 passed in 0.20s
+
+[[32mPASS   [0m] tests/test_gh10_shell.py (2.13s, rc=0, coll=7 pass=7 fail=0) - 7 passed in 1.19s
+[[32mPASS   [0m] tests/test_gh11_launcher_endtoend.py (2.14s, rc=0, coll=8 pass=8 fail=0) - 8 passed in 1.19s
+[[32mPASS   [0m] tests/test_gh13_multiagent.py (2.11s, rc=0, coll=6 pass=6 fail=0) - 6 passed in 1.19s
+[[32mPASS   [0m] tests/test_gh14_agent_protocol.py (1.95s, rc=0, coll=6 pass=6 fail=0) - 6 passed in 1.09s
+[[32mPASS   [0m] tests/test_gh15_ir_transpiler.py (0.79s, rc=0, coll=10 pass=10 fail=0) - 10 passed in 0.17s
+[[32mPASS   [0m] tests/test_gh15_step3_autoatlas.py (2.11s, rc=0, coll=7 pass=7 fail=0) - 7 passed in 1.22s
+[[32mPASS   [0m] tests/test_gh15_step4_baker_sb2.py (3.32s, rc=0, coll=6 pass=6 fail=0) - 6 passed in 2.37s
+[[32mPASS   [0m] tests/test_gh15_step5_dedup.py (1.78s, rc=0, coll=8 pass=8 fail=0) - 8 passed in 0.93s
+[[32mPASS   [0m] tests/test_gh16_preemption.py (1.91s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 1.04s
+[[32mPASS   [0m] tests/test_gh12_autoatlas.py (18.06s, rc=0, coll=6 pass=6 fail=0) - 6 passed in 17.17s
+[[32mPASS   [0m] tests/test_container_security.py (38.36s, rc=0, coll=7 pass=7 fail=0) - 7 passed in 37.65s
+[[32mPASS   [0m] tests/test_gh17_paging.py (3.11s, rc=0, coll=6 pass=6 fail=0) - 6 passed in 2.15s
+[[32mPASS   [0m] tests/test_gh12_escalation.py (19.24s, rc=0, coll=2 pass=2 fail=0) - 2 passed in 18.51s
+[[32mPASS   [0m] tests/test_gh1_standalone_image.py (2.07s, rc=0, coll=8 pass=8 fail=0) - 8 passed in 1.19s
+[[32mPASS   [0m] tests/test_gh18_syscall_abi.py (5.00s, rc=0, coll=15 pass=15 fail=0) - 15 passed in 4.11s
+[[32mPASS   [0m] tests/test_gh21_posix_shim.py (2.00s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 1.14s
+[[32mPASS   [0m] tests/test_gh19_stdlib.py (4.45s, rc=0, coll=27 pass=27 fail=0) - 27 passed in 3.60s
+[[32mPASS   [0m] tests/test_gh22_device_driver_abi.py (2.00s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 1.15s
+[[32mPASS   [0m] tests/test_gh24_ascii_bridge.py (1.82s, rc=0, coll=6 pass=6 fail=0) - 6 passed in 0.95s
+[[32mPASS   [0m] tests/test_gh24_s2_mcp_server.py (1.12s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 0.42s
+[[32mPASS   [0m] tests/test_gh264c_teleop.py (1.98s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 1.09s
+[[32mPASS   [0m] tests/test_gh25_hilbert_paging.py (3.28s, rc=0, coll=6 pass=6 fail=0) - 6 passed in 2.28s
+[[32mPASS   [0m] tests/test_gh23_libc_runtime.py (6.34s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 5.45s
+[[32mPASS   [0m] tests/test_gh26_emit_aperture.py (2.84s, rc=0, coll=14 pass=14 fail=0) - 14 passed in 1.90s
+[[32mPASS   [0m] tests/test_gh26_glass_box.py (2.47s, rc=0, coll=8 pass=8 fail=0) - 8 passed in 1.50s
+[[32mPASS   [0m] tests/test_gh26_emit_admit.py (4.76s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 3.82s
+[[32mPASS   [0m] tests/test_gh26_live_surface.py (2.23s, rc=0, coll=4 pass=4 fail=0) - 4 passed in 1.26s
+[[32mPASS   [0m] tests/test_gh26_resident.py (2.19s, rc=0, coll=8 pass=8 fail=0) - 8 passed in 1.27s
+[[32mPASS   [0m] tests/test_gh2_image_kernel.py (1.92s, rc=0, coll=3 pass=3 fail=0) - 3 passed in 1.04s
+[[32mPASS   [0m] tests/test_gh3_self_extension.py (1.83s, rc=0, coll=2 pass=2 fail=0) - 2 passed in 0.95s
+[[32mPASS   [0m] tests/test_gh4_wgsl_parity.py (2.98s, rc=0, coll=3 pass=3 fail=0) - 3 passed in 1.99s
+[[32mPASS   [0m] tests/test_gh6_syscalls.py (1.92s, rc=0, coll=4 pass=4 fail=0) - 4 passed in 1.03s
+[[32mPASS   [0m] tests/test_gh5_launcher_final.py (4.22s, rc=0, coll=7 pass=7 fail=0) - 7 passed in 3.23s
+[[32mPASS   [0m] tests/test_gh7_processes.py (1.95s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 1.06s
+[[32mPASS   [0m] tests/test_gh8_fs.py (2.08s, rc=0, coll=7 pass=7 fail=0) - 7 passed in 1.19s
+[[32mPASS   [0m] tests/test_gh8c_canonical_replay.py (2.03s, rc=0, coll=4 pass=4 fail=0) - 4 passed in 1.14s
+[[32mPASS   [0m] tests/test_gh9_loader.py (2.09s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 1.20s
+[[32mPASS   [0m] tests/test_gh9_window_span.py (1.98s, rc=0, coll=9 pass=8 fail=0) - 8 passed, 1 skipped in 1.09s
+[[31mFAIL   [0m] tests/test_glyph_audio_io.py (0.87s, rc=1, coll=1 pass=0 fail=1) - 1 failed in 0.19s
+[[31mFAIL   [0m] tests/test_glyph_file_io.py (0.85s, rc=1, coll=2 pass=0 fail=2) - 2 failed in 0.17s
+[[32mPASS   [0m] tests/test_glyph_isa_v2.py (0.82s, rc=0, coll=3 pass=3 fail=0) - 3 passed in 0.14s
+[[32mPASS   [0m] tests/test_glyph_engine_coverage_lint.py (1.99s, rc=0, coll=7 pass=7 fail=0) - 7 passed in 1.17s
+[[32mPASS   [0m] tests/test_glyph_linter.py (0.84s, rc=0, coll=11 pass=11 fail=0) - 11 passed in 0.15s
+[[31mFAIL   [0m] tests/test_glyph_orchestrator_speak_to_driver.py (0.90s, rc=1, coll=1 pass=0 fail=1) - 1 failed in 0.21s
+[[32mPASS   [0m] tests/test_glyph_run_program.py (0.86s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 0.16s
+[[31mFAIL   [0m] tests/test_glyph_wordbook_lookup.py (0.97s, rc=1, coll=2 pass=0 fail=2) - 2 failed in 0.26s
+[[32mPASS   [0m] tests/test_glyph_to_pixels.py (2.06s, rc=0, coll=9 pass=9 fail=0) - 9 passed in 1.36s
+[[31mFAIL   [0m] tests/test_griffin_lim.py (1.99s, rc=1, coll=22 pass=18 fail=4) - 4 failed, 18 passed, 1 warning in 1.09s
+[[32mPASS   [0m] tests/test_image_processor.py (0.86s, rc=0, coll=7 pass=7 fail=0) - 7 passed in 0.20s
+[[31mFAIL   [0m] tests/test_glyphlang_integration.py (4.58s, rc=1, coll=7 pass=4 fail=3) - 3 failed, 4 passed in 3.74s
+[[32mPASS   [0m] tests/test_interrupt_delegation.py (2.14s, rc=0, coll=2 pass=2 fail=0) - 2 passed in 1.36s
+[[32mPASS   [0m] tests/test_gpu_frame_roundtrip.py (8.85s, rc=0, coll=4 pass=4 fail=0) - 4 passed in 7.94s
+[[32mPASS   [0m] tests/test_intonation.py (2.67s, rc=0, coll=3 pass=3 fail=0) - 3 passed, 3 warnings in 1.99s
+[[32mPASS   [0m] tests/test_llm_to_glyph.py (0.84s, rc=0, coll=9 pass=9 fail=0) - 9 passed in 0.18s
+[[32mPASS   [0m] tests/test_layered_compositor.py (1.08s, rc=0, coll=15 pass=15 fail=0) - 15 passed in 0.42s
+[[32mPASS   [0m] tests/test_instrument1_mark_registration.py (7.15s, rc=0, coll=4 pass=4 fail=0) - 4 passed in 6.42s
+[[32mPASS   [0m] tests/test_mkv_receipt.py (1.38s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.67s
+[[32mPASS   [0m] tests/test_mkvpalace_bridge.py (1.90s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 1.09s
+[[32mPASS   [0m] tests/test_multi_band_synthesizer.py (1.32s, rc=0, coll=32 pass=32 fail=0) - 32 passed in 0.40s
+[[32mPASS   [0m] tests/test_lm_procedural.py (4.76s, rc=0, coll=2 pass=2 fail=0) - 2 passed in 3.86s
+[[32mPASS   [0m] tests/test_multiframe_state.py (2.00s, rc=0, coll=19 pass=19 fail=0) - 19 passed in 1.29s
+[[32mPASS   [0m] tests/test_multitile_chunking.py (1.51s, rc=0, coll=3 pass=3 fail=0) - 3 passed, 3 warnings in 0.81s
+[[32mPASS   [0m] tests/test_natural_language_compiler.py (0.87s, rc=0, coll=28 pass=28 fail=0) - 28 passed in 0.18s
+[[32mPASS   [0m] tests/test_nested_buffer.py (0.84s, rc=0, coll=4 pass=4 fail=0) - 4 passed in 0.15s
+[[32mPASS   [0m] tests/test_gh20_fs_v2.py (44.97s, rc=0, coll=10 pass=10 fail=0) - 10 passed in 44.01s
+[[32mPASS   [0m] tests/test_neural_synthesis.py (6.30s, rc=0, coll=7 pass=7 fail=0) - 7 passed in 5.61s
+[[32mPASS   [0m] tests/test_ollama_contextual_memory.py (0.92s, rc=0, coll=22 pass=22 fail=0) - 22 passed in 0.17s
+[[32mPASS   [0m] tests/test_obs1_mcp_transport_identity.py (4.96s, rc=0, coll=4 pass=4 fail=0) - 4 passed in 3.84s
+[[31mFAIL   [0m] tests/test_ollama_contextual_memory_simple.py (0.90s, rc=1, coll=2 pass=0 fail=2) - 2 failed in 0.20s
+[[31mFAIL   [0m] tests/test_mt2_large_scale.py (20.71s, rc=1, coll=4 pass=3 fail=1) - 1 failed, 3 passed, 3 warnings in 19.77s
+[[32mPASS   [0m] tests/test_negotiating_agents.py (20.64s, rc=0, coll=10 pass=10 fail=0) - 10 passed in 19.97s
+[[32mPASS   [0m] tests/test_opensbi_setup.py (0.79s, rc=0, coll=4 pass=4 fail=0) - 4 passed in 0.15s
+[[32mPASS   [0m] tests/test_oracle.py (0.84s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 0.16s
+[[32mPASS   [0m] tests/test_osskel_aspace_map.py (0.88s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 0.17s
+[[32mPASS   [0m] tests/test_osskel_aspace_release.py (0.80s, rc=0, coll=6 pass=6 fail=0) - 6 passed in 0.15s
+[[32mPASS   [0m] tests/test_opensbi_boot.py (8.25s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 7.49s
+[[32mPASS   [0m] tests/test_osskel_aspace_switch.py (0.83s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 0.17s
+[[32mPASS   [0m] tests/test_osskel_caps_table.py (0.87s, rc=0, coll=7 pass=7 fail=0) - 7 passed in 0.19s
+[[32mPASS   [0m] tests/test_osskel_devtab_register.py (0.86s, rc=0, coll=7 pass=7 fail=0) - 7 passed in 0.14s
+[[32mPASS   [0m] tests/test_osskel_engine_switch.py (0.88s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 0.16s
+[[32mPASS   [0m] tests/test_osskel_proctab_lifecycle.py (0.87s, rc=0, coll=7 pass=7 fail=0) - 7 passed in 0.16s
+[[32mPASS   [0m] tests/test_osskel_space_lifetime.py (0.82s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 0.15s
+[[32mPASS   [0m] tests/test_osskel_spawn_integration.py (0.85s, rc=0, coll=8 pass=8 fail=0) - 8 passed in 0.17s
+[[32mPASS   [0m] tests/test_parallel_opcodes.py (0.81s, rc=0, coll=3 pass=3 fail=0) - 3 passed in 0.14s
+[[32mPASS   [0m] tests/test_phase1.py (0.84s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 0.16s
+[[32mPASS   [0m] tests/test_parallel_synthesis.py (1.45s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 0.78s
+[[32mPASS   [0m] tests/test_phase6_self_modifying.py (0.90s, rc=0, coll=14 pass=14 fail=0) - 14 passed in 0.22s
+[[32mPASS   [0m] tests/test_phase7_pixel_execution.py (0.97s, rc=0, coll=4 pass=4 fail=0) - 4 passed, 4 warnings in 0.25s
+[[32mPASS   [0m] tests/test_phase7_recursive_boot.py (1.02s, rc=0, coll=13 pass=13 fail=0) - 13 passed in 0.37s
+[[32mPASS   [0m] tests/test_phoneme_codec.py (1.56s, rc=0, coll=3 pass=3 fail=0) - 3 passed in 0.71s
+[[32mPASS   [0m] tests/test_phonemes.py (1.04s, rc=0, coll=43 pass=43 fail=0) - 43 passed in 0.35s
+[[32mPASS   [0m] tests/test_phy.py (1.03s, rc=0, coll=26 pass=26 fail=0) - 26 passed in 0.31s
+[[32mPASS   [0m] tests/test_pixel_boot.py (7.05s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 6.39s
+[[32mPASS   [0m] tests/test_pixel_corpus.py (0.81s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 0.16s
+[[32mPASS   [0m] tests/test_pixel_embeddings.py (0.86s, rc=0, coll=6 pass=6 fail=0) - 6 passed in 0.20s
+[[32mPASS   [0m] tests/test_pixel_embeddings_debug.py (0.79s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 0.15s
+[[32mPASS   [0m] tests/test_pixel_lm_audio_roundtrip.py (0.88s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 0.21s
+[[32mPASS   [0m] tests/test_pixel_lm_generate.py (3.64s, rc=0, coll=3 pass=3 fail=0) - 3 passed in 2.74s
+[[32mPASS   [0m] tests/test_ollama_update_protocol.py (37.88s, rc=0, coll=12 pass=12 fail=0) - 12 passed in 37.18s
+[[32mPASS   [0m] tests/test_pixel_os_listener_driver_ops.py (1.11s, rc=0, coll=6 pass=6 fail=0) - 6 passed in 0.41s
+[[31mFAIL   [0m] tests/test_pixel_os_listener_uart.py (1.18s, rc=1, coll=8 pass=2 fail=4) - 4 failed, 2 passed, 2 errors in 0.43s
+[[32mPASS   [0m] tests/test_phoneme_redundancy.py (23.03s, rc=0, coll=27 pass=27 fail=0) - 27 passed in 22.34s
+[[32mPASS   [0m] tests/test_pixel_os_lm_input.py (4.30s, rc=0, coll=9 pass=8 fail=0) - 8 passed, 1 skipped in 3.18s
+[[32mPASS   [0m] tests/test_pixel_os_lm_output.py (1.02s, rc=0, coll=8 pass=8 fail=0) - 8 passed in 0.23s
+[[32mPASS   [0m] tests/test_pixel_tokenizer.py (1.47s, rc=0, coll=14 pass=14 fail=0) - 14 passed in 0.35s
+[[32mPASS   [0m] tests/test_procedural_gen.py (0.91s, rc=0, coll=7 pass=7 fail=0) - 7 passed, 7 warnings in 0.18s
+[[32mPASS   [0m] tests/test_procedural_generation.py (1.48s, rc=0, coll=9 pass=9 fail=0) - 9 passed in 0.74s
+[[32mPASS   [0m] tests/test_prosodic_phrases.py (1.64s, rc=0, coll=4 pass=4 fail=0) - 4 passed, 4 warnings in 0.89s
+[[32mPASS   [0m] tests/test_rv32i_asm.py (2.17s, rc=0, coll=11 pass=11 fail=0) - 11 passed in 1.35s
+[[32mPASS   [0m] tests/test_rv64i_to_glyph.py (2.31s, rc=0, coll=4 pass=4 fail=0) - 4 passed in 1.42s
+[[32mPASS   [0m] tests/test_rv64i_to_glyph_arithshift.py (2.02s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 1.22s
+[[32mPASS   [0m] tests/test_rv64i_to_glyph_bio.py (2.20s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 1.30s
+[[32mPASS   [0m] tests/test_rv64i_to_glyph_bytemem.py (2.14s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 1.27s
+[[32mPASS   [0m] tests/test_rv64i_to_glyph_dinode.py (2.01s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 1.18s
+[[32mPASS   [0m] tests/test_rv64i_to_glyph_fifo.py (2.17s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 1.27s
+[[32mPASS   [0m] tests/test_rv64i_to_glyph_inode.py (2.45s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 1.59s
+[[32mPASS   [0m] tests/test_rv64i_to_glyph_kalloc.py (3.04s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 1.57s
+[[32mPASS   [0m] tests/test_rv64i_to_glyph_negoffset.py (2.24s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 1.27s
+[[32mPASS   [0m] tests/test_rv64i_to_glyph_printf.py (3.07s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 1.63s
+[[32mPASS   [0m] tests/test_rv64i_to_glyph_proc.py (2.04s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 1.21s
+[[32mPASS   [0m] tests/test_rv64i_to_glyph_round_robin.py (2.23s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 1.42s
+[[32mPASS   [0m] tests/test_rv64i_to_glyph_slab.py (2.14s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 1.29s
+[[32mPASS   [0m] tests/test_rv64i_to_glyph_sltiu_auipc.py (2.50s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 1.56s
+[[32mPASS   [0m] tests/test_rv64i_to_glyph_softdiv.py (2.27s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 1.27s
+[[32mPASS   [0m] tests/test_rv64i_to_glyph_stringc.py (2.27s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 1.41s
+[[32mPASS   [0m] tests/test_rv64i_to_glyph_switch.py (1.97s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 1.17s
+[[32mPASS   [0m] tests/test_rv64i_to_glyph_unimplemented_ops.py (0.94s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 0.20s
+[[32mPASS   [0m] tests/test_rv64i_to_glyph_varargs.py (2.14s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 1.26s
+[[32mPASS   [0m] tests/test_rv64i_to_glyph_xv6_nano.py (52.89s, rc=0, coll=12 pass=12 fail=0) - 12 passed in 52.00s
+[[33mTIMEOUT[0m] tests/test_ollama_security_analysis.py (150.07s, rc=-9, coll=0 pass=0 fail=0) - TIMEOUT: exceeded 150.0s budget
+[[31mFAIL   [0m] tests/test_sbi_firmware.py (7.88s, rc=1, coll=1 pass=0 fail=1) - 1 failed in 6.98s
+[[32mPASS   [0m] tests/test_simple_pixel_os_input.py (1.73s, rc=0, coll=4 pass=4 fail=0) - 4 passed in 0.79s
+[[32mPASS   [0m] tests/test_smode_sbi.py (0.91s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.19s
+[[32mPASS   [0m] tests/test_spadsl.py (0.91s, rc=0, coll=4 pass=4 fail=0) - 4 passed in 0.18s
+[[32mPASS   [0m] tests/test_spadsl_extended.py (1.04s, rc=0, coll=4 pass=4 fail=0) - 4 passed in 0.22s
+[[32mPASS   [0m] tests/test_spatial_cpu.py (1.02s, rc=0, coll=2 pass=2 fail=0) - 2 passed in 0.17s
+[[32mPASS   [0m] tests/test_spatial_daemon.py (1.31s, rc=0, coll=6 pass=6 fail=0) - 6 passed in 0.34s
+[[32mPASS   [0m] tests/test_spatial_disassembler.py (1.38s, rc=0, coll=4 pass=4 fail=0) - 4 passed in 0.33s
+[[32mPASS   [0m] tests/test_spatial_ecc.py (1.44s, rc=0, coll=21 pass=21 fail=0) - 21 passed in 0.21s
+[[31mFAIL   [0m] tests/test_spatial_ide.py (1.02s, rc=1, coll=8 pass=0 fail=8) - 8 failed in 0.25s
+[[32mPASS   [0m] tests/test_spatial_layout.py (0.94s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.21s
+[[32mPASS   [0m] tests/test_spatial_rv32i_cpu.py (3.25s, rc=0, coll=19 pass=19 fail=0) - 19 passed in 2.21s
+[[32mPASS   [0m] tests/test_spatial_rv64i_cpu.py (2.61s, rc=0, coll=13 pass=13 fail=0) - 13 passed in 1.59s
+[[32mPASS   [0m] tests/test_spatial_vm.py (1.16s, rc=0, coll=11 pass=11 fail=0) - 11 passed in 0.20s
+[[32mPASS   [0m] tests/test_speak_driver_e2e.py (2.21s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 1.07s
+[[32mPASS   [0m] tests/test_spec_verification.py (0.97s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.17s
+[[32mPASS   [0m] tests/test_spectral_ecc.py (0.98s, rc=0, coll=7 pass=7 fail=0) - 7 passed in 0.22s
+[[32mPASS   [0m] tests/test_spectral_mapping.py (1.14s, rc=0, coll=1 pass=1 fail=0) - 1 passed, 1 warning in 0.21s
+[[32mPASS   [0m] tests/test_spectrogram_processor.py (1.14s, rc=0, coll=18 pass=18 fail=0) - 18 passed, 1 warning in 0.25s
+[[32mPASS   [0m] tests/test_spine_r1_compact.py (0.92s, rc=0, coll=7 pass=7 fail=0) - 7 passed in 0.20s
+[[32mPASS   [0m] tests/test_rvc_decode.py (37.45s, rc=0, coll=3 pass=3 fail=0) - 3 passed in 36.58s
+[[32mPASS   [0m] tests/test_spine_r1_conflicts.py (0.98s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 0.18s
+[[32mPASS   [0m] tests/test_spine_r1_lookup.py (0.95s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 0.19s
+[[32mPASS   [0m] tests/test_spine_r1_plan.py (1.02s, rc=0, coll=9 pass=9 fail=0) - 9 passed in 0.20s
+[[32mPASS   [0m] tests/test_spine_r1_refuse.py (0.94s, rc=0, coll=7 pass=7 fail=0) - 7 passed in 0.18s
+[[32mPASS   [0m] tests/test_spine_r1_register.py (1.02s, rc=0, coll=9 pass=9 fail=0) - 9 passed in 0.22s
+[[32mPASS   [0m] tests/test_spine_r1_scan.py (0.98s, rc=0, coll=8 pass=8 fail=0) - 8 passed in 0.19s
+[[33mTIMEOUT[0m] tests/test_pixel_lm_train.py (150.06s, rc=-9, coll=0 pass=0 fail=0) - TIMEOUT: exceeded 150.0s budget
+[[32mPASS   [0m] tests/test_spine_r2_wirein.py (1.22s, rc=0, coll=6 pass=6 fail=0) - 6 passed in 0.42s
+[[31mFAIL   [0m] tests/test_supply_census.py (0.89s, rc=1, coll=5 pass=4 fail=1) - 1 failed, 4 passed in 0.18s
+[[32mPASS   [0m] tests/test_sv39_compiled_kernel.py (1.85s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 1.09s
+[[32mPASS   [0m] tests/test_substor_boot_witness.py (5.05s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 4.26s
+[[32mPASS   [0m] tests/test_sv39_hilbert_boot.py (2.09s, rc=0, coll=6 pass=6 fail=0) - 6 passed in 1.35s
+[[32mPASS   [0m] tests/test_sweep_preflight.py (0.89s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 0.23s
+[[31mFAIL   [0m] tests/test_synthesis_equivalence.py (1.15s, rc=1, coll=9 pass=8 fail=1) - 1 failed, 8 passed in 0.47s
+[[32mPASS   [0m] tests/test_synthesis_performance.py (1.15s, rc=0, coll=4 pass=4 fail=0) - 4 passed in 0.43s
+[[33mTIMEOUT[0m] tests/test_probe_stval.py (150.37s, rc=-9, coll=0 pass=0 fail=0) - TIMEOUT: exceeded 150.0s budget
+[[31mFAIL   [0m] tests/test_syscall_handlers.py (0.86s, rc=1, coll=7 pass=3 fail=4) - 4 failed, 3 passed in 0.18s
+[[32mPASS   [0m] tests/test_syscall_integration.py (0.90s, rc=0, coll=7 pass=7 fail=0) - 7 passed in 0.18s
+[[32mPASS   [0m] tests/test_temporal_log.py (0.87s, rc=0, coll=6 pass=6 fail=0) - 6 passed, 6 warnings in 0.19s
+[[32mPASS   [0m] tests/test_token_chord_codec.py (0.86s, rc=0, coll=3 pass=3 fail=0) - 3 passed in 0.20s
+[[32mPASS   [0m] tests/test_utils.py (0.85s, rc=0, coll=20 pass=20 fail=0) - 20 passed in 0.17s
+[[32mPASS   [0m] tests/test_upic_engine.py (1.07s, rc=0, coll=28 pass=28 fail=0) - 28 passed in 0.36s
+[[32mPASS   [0m] tests/test_true_dual_band.py (1.87s, rc=0, coll=1 pass=1 fail=0) - 1 passed, 1 warning in 1.14s
+[[32mPASS   [0m] tests/test_vamp_dense_bridge.py (0.86s, rc=0, coll=10 pass=10 fail=0) - 10 passed in 0.17s
+[[32mPASS   [0m] tests/test_vamp_ecc_tiles.py (0.86s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 0.19s
+[[32mPASS   [0m] tests/test_vamp_executable_cartridges.py (1.07s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 0.40s
+[[32mPASS   [0m] tests/test_vamp_voice_query.py (1.08s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 0.36s
+[[32mPASS   [0m] tests/test_variophone_emulator.py (1.19s, rc=0, coll=31 pass=31 fail=0) - 31 passed, 1 warning in 0.42s
+[[31mFAIL   [0m] tests/test_vcc_validation.py (0.94s, rc=1, coll=9 pass=6 fail=3) - 3 failed, 6 passed in 0.23s
+[[32mPASS   [0m] tests/test_vamp_audio_export.py (5.48s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 4.78s
+[[32mPASS   [0m] tests/test_visual_git.py (0.89s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 0.17s
+[[32mPASS   [0m] tests/test_video_in_video.py (2.89s, rc=0, coll=14 pass=14 fail=0) - 14 passed in 2.17s
+[[32mPASS   [0m] tests/test_video_encoding.py (4.04s, rc=0, coll=7 pass=7 fail=0) - 7 passed in 3.37s
+[[32mPASS   [0m] tests/test_visual_player_command.py (3.86s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 3.16s
+[[32mPASS   [0m] tests/test_voice_timbre.py (3.14s, rc=0, coll=1 pass=1 fail=0) - 1 passed in 2.48s
+[[32mPASS   [0m] tests/test_waveform_generator.py (1.00s, rc=0, coll=10 pass=10 fail=0) - 10 passed in 0.33s
+[[32mPASS   [0m] tests/test_wgsl_validation.py (0.81s, rc=5, coll=0 pass=0 fail=0) - no tests ran in 0.15s
+[[32mPASS   [0m] tests/test_visual_player.py (5.92s, rc=0, coll=1 pass=1 fail=0) - 1 passed, 1 warning in 5.24s
+[[32mPASS   [0m] tests/test_wordbase_audio_cmd.py (0.88s, rc=0, coll=15 pass=15 fail=0) - 15 passed in 0.21s
+[[32mPASS   [0m] tests/test_wf1_tick_claim_bound.py (3.04s, rc=0, coll=5 pass=5 fail=0) - 5 passed in 2.38s
+[[32mPASS   [0m] tests/test_suite_iso_harness.py (74.73s, rc=0, coll=10 pass=10 fail=0) - 10 passed, 1 warning in 74.01s (0:01:14)
+[[33mTIMEOUT[0m] tests/test_xv6_boot_regression.py (150.11s, rc=-9, coll=0 pass=0 fail=0) - TIMEOUT: exceeded 150.0s budget
+
+======================================================================
+Sweep finished in 468.54s. Files: 256, Total collected: 1608
+Verdicts: FAIL: 17, PASS: 235, TIMEOUT: 4
+======================================================================

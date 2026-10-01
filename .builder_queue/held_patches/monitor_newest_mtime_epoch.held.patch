@@ -1,0 +1,10 @@
+--- a/glyph_build_chain_monitor.py
++++ b/glyph_build_chain_monitor.py
+@@ -143,6 +143,6 @@
+ # open ticket still surfaces — via the seat-blocker sensor, whose job that is.
+ 
+ print(
+-    f"head={head} tracked_dirty={len(dirty)} newest_mtime={newest} "
++    f"head={head} tracked_dirty={len(dirty)} "
+     f"state={state} stall_tier={stall_tier} queue={len(queue)}"
+ )

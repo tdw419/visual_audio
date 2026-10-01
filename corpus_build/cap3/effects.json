@@ -1,0 +1,10 @@
+{
+  "schema": "va-syscall-corpus/1",
+  "effects": [
+    {
+      "path": "/var/tmp/gp1/pipeout.txt",
+      "bytes": 364,
+      "sha256": "f2aac849bb2dc94b6de98158012a565d76134ea61a250144cb84751e125a180e"
+    }
+  ]
+}

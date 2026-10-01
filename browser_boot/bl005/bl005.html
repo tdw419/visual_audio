@@ -1,0 +1,166 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>BL005 — boot disk assembled from a Visual Audio MKV container</title>
+<style>
+  body { background:#111; color:#ddd; font:14px monospace; margin:0; padding:8px; }
+  #serial { border-top:1px solid #444; margin-top:8px; padding-top:8px;
+            white-space:pre-wrap; max-height:70vh; overflow:auto; color:#9cf; }
+  h1 { font-size:14px; margin:0 0 6px; color:#fc0; }
+</style>
+</head>
+<body>
+<h1>BL005 — disk assembled from VAC1 MKV frames via HTTP Range fetches</h1>
+<div id="serial"></div>
+
+<script src="libv86.js"></script>
+<script>
+"use strict";
+window.__serialBuf = "";
+window.__booted = false;
+window.__started = Date.now();
+window.__fetchDone = false;
+window.__frameTimingsMs = [];
+window.__crcFailures = 0;
+window.__diskSha256 = null;
+
+var serialEl = document.getElementById("serial");
+var USERSPACE_MARKERS = [/BL002_ROOT_MOUNTED(?!.*BL002_ROOT_MOUNT_FAILED)/];
+var FAILURE_MARKERS = [/BL002_ROOT_MOUNT_FAILED/, /can't access tty/];
+
+function pushSerial(text) {
+  window.__serialBuf += text;
+  serialEl.textContent = window.__serialBuf.slice(-12000);
+  serialEl.scrollTop = serialEl.scrollHeight;
+  if (!window.__booted) {
+    for (var i = 0; i < FAILURE_MARKERS.length; i++) {
+      if (FAILURE_MARKERS[i].test(window.__serialBuf)) window.__bootFailed = true;
+    }
+    for (var i = 0; i < USERSPACE_MARKERS.length; i++) {
+      if (USERSPACE_MARKERS[i].test(window.__serialBuf)) {
+        window.__booted = true;
+        window.__bootMs = Date.now() - window.__started;
+        console.log("BL005_USERSPACE_REACHED after " + window.__bootMs + "ms");
+        break;
+      }
+    }
+  }
+}
+
+async function sha256hex(buf) {
+  const digest = await crypto.subtle.digest("SHA-256", buf);
+  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+// CRC32 (IEEE, same polynomial as zlib.crc32 used by dense_encoder framing).
+var CRC_TABLE = (function () {
+  var t = new Uint32Array(256);
+  for (var n = 0; n < 256; n++) {
+    var c = n;
+    for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[n] = c;
+  }
+  return t;
+})();
+function crc32(bytes) {
+  var c = 0xFFFFFFFF;
+  for (var i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+// Unwrap one dense_encoder frame from the START of `raw`:
+// MAGIC('UA')+LEN(2, big-endian)+PAYLOAD+CRC32(4) — the browser-side twin
+// of dense_encoder.unframe(). Throws (and counts) on any CRC mismatch.
+function unframeChunk(raw) {
+  if (raw[0] !== 0x55 || raw[1] !== 0x41)  // 'U','A'
+    throw new Error("bad frame magic: " + raw[0].toString(16) + "," + raw[1].toString(16));
+  var len = (raw[2] << 8) | raw[3];
+  var payload = raw.subarray(4, 4 + len);
+  var stored = ((raw[4 + len] << 24) | (raw[5 + len] << 16) |
+                (raw[6 + len] << 8) | raw[7 + len]) >>> 0;
+  var computed = crc32(payload);
+  if (stored !== computed) {
+    window.__crcFailures++;
+    throw new Error("CRC32 mismatch stored=" + stored.toString(16) +
+                    " computed=" + computed.toString(16));
+  }
+  return payload;
+}
+
+// The container stores pixels BGR-swapped (ffmpeg rawvideo VFW writes BGR
+// verbatim); undo it in place. Verified byte-exact offline — this is pure
+// byte shuffling, NOT decoding.
+function bgrSwapInPlace(bytes) {
+  for (var i = 0; i < bytes.length; i += 3) {
+    var t = bytes[i]; bytes[i] = bytes[i + 2]; bytes[i + 2] = t;
+  }
+}
+
+// Assemble the disk purely from Range GETs against the .mkv. Disk chunk c
+// lives in container frame (1 + c) — frame 0 is the VAC1 directory. The
+// manifest's frame_offsets are ffprobe packet [pos, end]; the dense frame
+// starts payload_offset_in_frame (=4, Matroska SimpleBlock header) bytes
+// into each packet. fetch -> slice -> BGR-unswap -> unframe -> CRC. That is
+// the entire "decode": no video decoder in the boot path.
+async function assembleDiskFromMkv(mkvUrl, manifestUrl) {
+  const manifest = await (await fetch(manifestUrl)).json();
+  const { frame_offsets, n_frames, frame_bytes, payload_offset_in_frame,
+          original_size, frame_crc32 } = manifest;
+  const out = new Uint8Array(original_size);
+  let outPos = 0;
+  for (let c = 0; c < n_frames; c++) {
+    const packet = frame_offsets[1 + c];  // disk chunk c = container frame 1+c
+    const start = packet[0] + payload_offset_in_frame;
+    const end = start + frame_bytes - 1;  // slice exactly one frame payload
+    const t0 = performance.now();
+    const resp = await fetch(mkvUrl, { headers: { Range: `bytes=${start}-${end}` } });
+    if (resp.status !== 206) throw new Error(`frame ${c}: expected 206, got ${resp.status}`);
+    const raw = new Uint8Array(await resp.arrayBuffer());
+    const t1 = performance.now();
+    window.__frameTimingsMs.push(t1 - t0);
+    bgrSwapInPlace(raw);
+    const payload = unframeChunk(raw);
+    if (crc32(payload) !== frame_crc32[c]) {
+      window.__crcFailures++;
+      throw new Error(`frame ${c}: CRC32 differs from manifest`);
+    }
+    const n = Math.min(payload.length, original_size - outPos);
+    out.set(payload.subarray(0, n), outPos);
+    outPos += n;
+  }
+  return out.buffer;
+}
+
+(async () => {
+  console.log("BL005_FETCH_START");
+  const diskBuf = await assembleDiskFromMkv("disk.mkv", "disk.manifest.json");
+  window.__diskSha256 = await sha256hex(diskBuf);
+  window.__fetchDone = true;
+  const timings = window.__frameTimingsMs;
+  const avg = timings.reduce((a, b) => a + b, 0) / timings.length;
+  console.log("BL005_FETCH_DONE frames=" + timings.length + " avg_ms=" + avg.toFixed(3)
+              + " crc_failures=" + window.__crcFailures
+              + " sha256=" + window.__diskSha256);
+
+  const emulator = new V86({
+    wasm_path: "v86.wasm",
+    memory_size: 128 * 1024 * 1024,
+    vga_memory_size: 8 * 1024 * 1024,
+    bios: { url: "seabios.bin" },
+    vga_bios: { url: "vgabios.bin" },
+    bzimage: { url: "vmlinuz-lts" },
+    initrd: { url: "initramfs32.cpio.gz" },
+    cmdline: "console=ttyS0 rdinit=/init noapic nolapic acpi=off nosmp",
+    hda: { buffer: diskBuf },
+    autostart: true,
+    disable_keyboard: true,
+    disable_mouse: true,
+  });
+  window.__emulator = emulator;
+  emulator.add_listener("serial0-output-byte", (b) => pushSerial(String.fromCharCode(b)));
+  emulator.add_listener("emulator-ready", () => console.log("BL005_EMULATOR_READY"));
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+{
+  "CORRECTION": "An earlier commit (8eaffe0) claimed the model returns a byte-identical wrong answer every attempt and framed that as 'you cannot scaffold a representation the weights do not contain'. A second run of the same task refutes the determinism claim and weakens the general rule: attempt 2 of run 2 drifted to [710, 754, 703] (2 of 3 vectors correct) where run 1 stayed at [578, 578, 688] all three attempts. The model CAN move under feedback on this task; it just does not reach exactness. And a second, unrelated counter-prior convention (BGR channel order) passed on the first attempt.",
+  "model": "qwen3-coder:30b",
+  "runs": [
+    {
+      "task": "hilbert_decode",
+      "run": 1,
+      "note": "original run behind commit 8eaffe0",
+      "attempts": [
+        {"attempt": 1, "got": [578, 578, 688], "want": [750, 754, 703], "pass": false},
+        {"attempt": 2, "got": [578, 578, 688], "want": [750, 754, 703], "pass": false},
+        {"attempt": 3, "got": [578, 578, 688], "want": [750, 754, 703], "pass": false}
+      ],
+      "result": "FAIL 0/3"
+    },
+    {
+      "task": "hilbert_decode",
+      "run": 2,
+      "note": "same task, same prompt, same temperature -- output differs from run 1",
+      "attempts": [
+        {"attempt": 1, "got": [578, 578, 688], "wall_s": 2.9},
+        {"attempt": 2, "got": [710, 754, 703], "wall_s": 2.1},
+        {"attempt": 3, "got": [710, 754, 703], "wall_s": 2.4}
+      ],
+      "result": "FAIL 0/3 (but 2 of 3 vectors correct from attempt 2 on)"
+    },
+    {
+      "task": "bgr_pack",
+      "run": 1,
+      "note": "an unrelated counter-prior convention: blue channel first, not the RGB prior",
+      "attempts": [
+        {"attempt": 1, "got": [[0, 0, 255], [0, 255, 0], [30, 20, 10]], "pass": true, "wall_s": 0.7}
+      ],
+      "result": "PASS 1/1 first attempt"
+    }
+  ],
+  "corrected_findings": [
+    "Single-run determinism claims are unsound: identical prompt, temperature 0.2, two runs, different output.",
+    "A local model can hold some counter-prior conventions on the first try (BGR packing: 1/1).",
+    "On the skill-verified Hilbert mapping it progresses under feedback (578 -> 710) but does not reach exactness; capability gradient, not categorical absence.",
+    "Practical rule unchanged for the builder role: no judgment-shaped or exactness-critical verification through a local model. The mechanism claimed earlier was wrong."
+  ]
+}

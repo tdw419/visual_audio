@@ -1,0 +1,23 @@
+# Remove C extension (compressed instructions) from kernel build
+# GPU emulator WGSL only supports RV64IMA + Zicsr/Zifencei, not RV64C.
+# Verified: after this patch, every instruction in kernel/kernel is 4
+# bytes (riscv64-linux-gnu-objdump -d | check hex-char width == 18).
+diff --git a/Makefile b/Makefile
+index aaaaaaa..bbbbbbb 100644
+--- a/Makefile
++++ b/Makefile
+@@ -65,7 +65,7 @@ DETFLAGS = -ffile-prefix-map=$(CURDIR)=.
+ 
+ CFLAGS = -Wall -Werror -Wno-unknown-attributes -O -fno-omit-frame-pointer -ggdb -gdwarf-2
+ CFLAGS += $(DETFLAGS)
+-CFLAGS += -march=rv64gc
++CFLAGS += -march=rv64ima_zicsr_zifencei -mabi=lp64
+ CFLAGS += -std=gnu99
+ CFLAGS += -MD
+ CFLAGS += -mcmodel=medany
+@@ -96,7 +96,7 @@ $K/kernel: $(OBJS) $K/kernel.ld
+ 	$(OBJDUMP) -t $K/kernel | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $K/kernel.sym
+ 
+ $K/%.o: $K/%.S
+-	$(CC) -march=rv64gc -g $(DETFLAGS) -c -o $@ $<
++	$(CC) -march=rv64ima_zicsr_zifencei -mabi=lp64 -g $(DETFLAGS) -c -o $@ $<

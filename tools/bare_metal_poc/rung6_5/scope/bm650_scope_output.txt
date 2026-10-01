@@ -1,0 +1,55 @@
+------------------------------------------------------------------------
+1. RUNG5 STAGE2: what the design had to fit into
+------------------------------------------------------------------------
+  [OK ] stage2.asm assembles warning-free: 796 B of code in a 65,536 B container (rung4_pad.py fills the tail with the A5/5A/C3/3C pattern; PAYLOAD_SECTORS=128 sectors = 65,536 B)
+  [OK ] free budget before any exec leg: 64,740 B (98.8% of the image)
+  ---- the design's §4 byte-budget question does not exist at this scale. The constraint is where the CONTRACT block and the mailbox live, and what the added serial bytes do to the boot-to-receipt bound.
+------------------------------------------------------------------------
+2. THE EXEC LEG, ASSEMBLED: probe_exec_leg.asm, section by section
+------------------------------------------------------------------------
+  [OK ] block_args: 54 B
+  [OK ] copy_down: 25 B
+  [OK ] exec_and_receipt: 90 B
+  [OK ] banner_receipt_verbose: 30 B
+  [OK ] receipt/refusal strings carried by the leg: 80 B (rung5's puts/puthex4/puthex8 are already landed and are not new cost)
+  [OK ] whole leg, code + strings: 279 B -- 0.43% of rung5's free 64,740 B
+  [OK ] stage2 with the leg: 1,075 B, 64,461 B still free
+------------------------------------------------------------------------
+3. THE MEDIUM SIDE: does the leg need room it cannot have?
+------------------------------------------------------------------------
+  [OK ] layout as landed: IMG2_LEN=2048 IMG2_BASE_LBA=129 IMG2_SEG=0x5000 WR_LBA=133
+  [OK ] img2.bin is 2,048 B, CRC32=7880D4BA -- the NID the design derives from it is host arithmetic on this value
+  [OK ] contract block at IMG2_SEG:2048+16 .. +30 (14 B of the 2048-byte window above the copied-down image): the window is the old de-interleaved image area, dead from the copy-down onward, so the block and the mailbox need no new region and no LBA -- the region map [0,1) [1,129) [129,133) [133,137) is UNCHANGED, which is what rung5_layout.py's disjointness assert will keep proving
+  [OK ] stack: SS:SP stays 0:0x7C00 as the design says -- DST_SEG is 65,536 B of stage2 itself, so no stack can be carved there
+------------------------------------------------------------------------
+3b. THE ENTRY STATE, READ OFF THE LANDED FILE (not off the design's table)
+------------------------------------------------------------------------
+  [OK ] SS=0, SP=0x7C00 set at line 41, and nothing between there and the insertion point touches SS:SP -- the design's handover row is correct as written
+  ---- the design's §2 table says "IF=0 on entry". The landed loader says otherwise: the last interrupt-state instruction before the insertion point (line 238) is `sti` at line 42 (`cli` is at 37). So img2 runs with interrupts ENABLED and the BIOS timer tick fires during it. Either the implementation row puts a `cli` immediately before the jump -- 1 byte, and the entry table becomes what it claims -- or the receipt states IF=1 as the contract. Recorded as R-SCOPE-3 because a design table that does not match the file is how a row learns the wrong thing about its own isolation.
+------------------------------------------------------------------------
+4. SERIAL GROWTH against rung5's measured boot-to-receipt bound
+------------------------------------------------------------------------
+  [OK ] the green path adds 35 B to the transcript (banner line with its 4-hex NID, then stage2's EXEC=OK); a refusal path adds up to 37 B
+  [OK ] rung5 measured <=101 ms boot-to-receipt with a 50 ms poll on a log that ends at the self receipt. This leg appends bytes after it, and on the halt variant never finishes: the bound is not inherited, the implementation row re-measures it (the design review names this as an obligation, not a detail)
+  [OK ] at the divisor rung5 actually programs (115200 baud, 8N1 = 10 bits/char) the green path's 35 B is 3.0 ms of wire -- two orders below the 50 ms poll, so the bound survives on arithmetic, but it is still re-measured, not assumed
+------------------------------------------------------------------------
+5. THE BASE QUESTION: the same leg on the three loaders this ladder owns
+------------------------------------------------------------------------
+  [OK ] rung5 (design's base): stage2 code 796 B in a 65,536 B image -> 64,740 B free; img2 slot exists; the jump target is decoded pixels; no kernel is involved
+  [OK ] rung9 PXC1: stage2 code 3,344 B in a 8,192 B image -> 4,848 B free; no img2 slot: the payload is bzImage+initrd and stage2's "exec" is Linux's protocol handoff
+  [OK ] rung6 PXC2-E: stage2 code 3,776 B in a 8,192 B image -> 4,416 B free; no img2 slot: the payload is bzImage+initrd and stage2's "exec" is Linux's protocol handoff
+  [OK ] the two 8 KiB loaders also cross-check the ladder's own books: BM601 measured 4,848 B free in rung9 and this run reproduces it exactly; BM602's ECC fork has spent 432 B of it (4,416 B left), of which 236 B is the executed corrector -- so the 279 B of this leg would fit there too, if there were something there to jump into
+  ---- bytes were never the reason not to do this on the PXC media -- there is nothing THERE to jump INTO: the PXC1/PXC2-E payload is bzImage+initrd, and putting a real-mode image on it means forking rung9/bm903_pxcodec.py's build_payload, i.e. the locked codec. That is option C in the scoping doc, and it is the row that would prove "repaired bytes execute" rather than "decoded bytes execute".
+------------------------------------------------------------------------
+6. LEGS the implementation row has to boot, and what they cost
+------------------------------------------------------------------------
+  [OK ] green x2: all rung-5 anchors byte-identical + banner + EXEC=OK, twice consecutively
+  [OK ] redA x1: one-pixel img2 corruption -> CRC refusal, NO banner, NO EXEC line
+  [OK ] nv-banner x1: img2 without the emitter -> EXEC=NO-BANNER
+  [OK ] nv-mailbox x1: img2 that banners but skips the store -> EXEC=BAD-MAILBOX <word>
+  [OK ] halt x1: img2 that halts -> host-side EXEC=TIMEOUT inside the poll bound
+  [OK ] persist x1: rung-5 write-region disjointness re-run verbatim
+  [OK ] 7 boots; rung5 boots in ~0.1 s to the receipt, so the row's wall clock is dominated by media build, not by qemu -- unlike Rung 6, where the anchor legs pay Tiny Core's autologin race. This row has no guest to wait for: the receipt is printed by stage2 in 16-bit.
+  ---- the halt leg is the one that cannot lie: a hung guest is the ONLY case where the absence of a line is the evidence, so its budget is a wall-clock cap and the gate must assert the last anchor it did see (WRITE=OK) before calling the absence TIMEOUT rather than a stage2 bug -- the same shape as BM602's "a wrong loader line is never retried".
+
+BM650_SCOPE: GREEN

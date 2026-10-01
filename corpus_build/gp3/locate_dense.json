@@ -1,0 +1,78 @@
+{
+ "guest_path": "/var/tmp/gp3_1789615295/dense_control/dense.bin",
+ "size": 67108864,
+ "extents": 3,
+ "frames": [
+  132,
+  133,
+  134
+ ],
+ "spans": [
+  {
+   "disk_bytes": [
+    8847949824,
+    8881504256
+   ],
+   "start": {
+    "frame": 132,
+    "x": 0,
+    "y": 3460,
+    "channel": "R",
+    "intra_byte": 56688640
+   },
+   "end": {
+    "frame": 133,
+    "x": 4095,
+    "y": 1411,
+    "channel": "A",
+    "intra_byte": 23134207
+   },
+   "blocks": 8192,
+   "logical_first": 0
+  },
+  {
+   "disk_bytes": [
+    8906670080,
+    8931835904
+   ],
+   "start": {
+    "frame": 133,
+    "x": 0,
+    "y": 2948,
+    "channel": "R",
+    "intra_byte": 48300032
+   },
+   "end": {
+    "frame": 134,
+    "x": 4095,
+    "y": 387,
+    "channel": "A",
+    "intra_byte": 6356991
+   },
+   "blocks": 6144,
+   "logical_first": 8192
+  },
+  {
+   "disk_bytes": [
+    8965390336,
+    8973778944
+   ],
+   "start": {
+    "frame": 134,
+    "x": 0,
+    "y": 2436,
+    "channel": "R",
+    "intra_byte": 39911424
+   },
+   "end": {
+    "frame": 134,
+    "x": 4095,
+    "y": 2947,
+    "channel": "A",
+    "intra_byte": 48300031
+   },
+   "blocks": 2048,
+   "logical_first": 14336
+  }
+ ]
+}

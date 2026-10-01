@@ -1,0 +1,20 @@
+{
+  "ticket_id": "gh26-3-emit-admit",
+  "roadmap_item": "GH-26.3",
+  "step": "EMIT->ADMIT: agent tile proposals route ONLY through autoatlas.admit_syscall; receipt every attempt to output/agent_admissions.jsonl",
+  "created": "2026-09-11T08:20:00-05:00",
+  "created_by": "oversight session (Jericho-authorized 26.2->26.5 arc, commits 93363d5/ee92607; 26.2 landed 00b29da)",
+  "failing_command": "tests/test_gh26_emit_admit.py does not exist yet - this ticket authorizes creating it from systems/GH26_AGENT_IN_THE_LOOP_SPEC.md section 26.3 (RED first: failing-test output before the fix)",
+  "context": {
+    "authorization": "GEOS_EMIT_ACK gate OPEN - .geos_emit_ack at repo root; roadmap ordering note superseded 2026-09-11; 26.2->26.5 strict sequence authorized by Jericho",
+    "prior_item": "26.2 APERTURE landed 00b29da: tools/geos_emit.py (emit intents post/clear/claim_ticket/signal_done; GH-22 word cksum[31:24]|op[15:8]|payload[7:0]; aperture {700..767}; scratch-copy checksummed commit). 14/14 gate. Reuse it: 26.3 proposals may ARRIVE via geos_emit but are ADMITTED only via autoatlas.admit_syscall",
+    "spec": "systems/GH26_AGENT_IN_THE_LOOP_SPEC.md section 26.3 - read it before writing tests",
+    "s3_constraint": "GlyphGPT is SAFE-ONLY (9% word-exact, verdict commit 878330d). Drafting = template/grammar-guided; GlyphGPT best-of-N is at most ONE source. The oracle (admit_syscall: IR verifier -> word-exact -> table stamp) is the SOLE admission path, never the generator",
+    "receipt_ledger": "output/agent_admissions.jsonl - one JSON line per attempt: {ts, intent, source: template|glyphgpt, oracle_verdict: admitted|rejected, reason}. Failed attempts are receipts too - they prove the oracle filters",
+    "gate_requirements": "RED gate tests/test_gh26_emit_admit.py per spec 26.3 adversarial legs: proposal that fails IR verifier is rejected + receipted, proposal that fails oracle word-exact is rejected + receipted, admitted proposal lands in syscall table, no write path bypasses admit_syscall"
+  },
+  "attempt": 1,
+  "max_attempts": 3,
+  "gate": "tests/test_gh26_emit_admit.py green + full arc regression from clean + feat(gh26.3) commit + roadmap GH-26 row updated with 26.3 status",
+  "receipt_discipline": "failing-test output before the fix, passing run after; receipts are command output not narrative"
+}

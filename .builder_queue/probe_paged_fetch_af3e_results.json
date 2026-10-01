@@ -1,0 +1,108 @@
+{
+ "oracle": {
+  "C1_unpaged_out_of_tile_ST": {
+   "exit_status": 1,
+   "fault_addr": 656,
+   "fault_reason": null,
+   "faulted": true,
+   "halt_reason": null,
+   "img_dims": [
+    32,
+    64
+   ],
+   "injected_opcode_px": 0,
+   "mode_final": "SUPER",
+   "program": ":__entry\nLDI r5 4660\nLDI r15 164\nST r15 r5\nHALT\n",
+   "r10": 0
+  },
+  "C2_unpaged_ST_word1280": {
+   "exit_status": 1,
+   "fault_addr": 5120,
+   "fault_reason": null,
+   "faulted": true,
+   "halt_reason": null,
+   "img_dims": [
+    32,
+    64
+   ],
+   "injected_opcode_px": 0,
+   "mode_final": "SUPER",
+   "program": ":__entry\nLDI r5 4660\nLDI r15 1280\nST r15 r5\nHALT\n",
+   "r10": 0
+  },
+  "C3_armed_PT_JMP_control": {
+   "exit_status": 0,
+   "fault_addr": 0,
+   "fault_reason": null,
+   "faulted": false,
+   "halt_reason": null,
+   "img_dims": [
+    32,
+    64
+   ],
+   "injected_opcode_px": 0,
+   "mode_final": "USER",
+   "program": ":__entry\nLDI r15 8211\nLDI r14 1536\nST r15 r14\nLDI r5 1\nJMP 6,0\nPRT r5\n:nop\n:nop\n:nop\n:nop\n:nop\nHALT\n",
+   "r10": 0
+  },
+  "P1_fetch_translation_discriminator": {
+   "exit_status": 0,
+   "fault_addr": 0,
+   "fault_reason": null,
+   "faulted": false,
+   "halt_reason": null,
+   "img_dims": [
+    32,
+    64
+   ],
+   "injected_opcode_px": 0,
+   "mode_final": "USER",
+   "program": ":__entry\nLDI r15 8211\nLDI r14 1536\nST r15 r14\nLDI r10 11399181\nHALT\n",
+   "r10": 11399181
+  },
+  "P2_paged_inject_then_execute": {
+   "exit_status": 0,
+   "fault_addr": 0,
+   "fault_reason": null,
+   "faulted": false,
+   "halt_reason": "opcode-None pixel at (4,40): rgb=(np.uint8(0), np.uint8(0), np.uint8(0)) is not a known opcode color",
+   "img_dims": [
+    32,
+    64
+   ],
+   "injected_opcode_px": 15487056,
+   "mode_final": "USER",
+   "program": ":__entry\nLDI r15 8211\nLDI r14 1536\nST r15 r14\nLDI r5 15487056\nLDI r6 3072\nST r6 r5\nLDI r5 10\nLDI r6 3073\nST r6 r5\nLDI r5 11399181\nLDI r6 3074\nST r6 r5\nLDI r5 0\nLDI r6 3075\nST r6 r5\nLDI r15 2621440\nJMPR r15\nHALT\n",
+   "r10": 11399181
+  }
+ },
+ "twin": {
+  "T_C1_unpaged_ST_vpn12_control": {
+   "fault_addr_word": 12288,
+   "fired": true,
+   "halted": true,
+   "mode_final": 0,
+   "r10": 0,
+   "steps": 3
+  },
+  "T_P1_fetch_translation_discriminator": {
+   "fault_addr_word": 0,
+   "halted": true,
+   "mode_final": 1,
+   "r10": 11399181,
+   "r10_is_canary": true,
+   "steps": 5
+  },
+  "T_P2_paged_inject_then_execute": {
+   "fault_addr_word": 0,
+   "halted": true,
+   "injected_opcode_px": 15487056,
+   "injected_px_matches_ldi": true,
+   "mode_final": 1,
+   "r10": 11399181,
+   "r10_is_canary": true,
+   "real_ldi_color": 15487056,
+   "steps": 19
+  }
+ }
+}

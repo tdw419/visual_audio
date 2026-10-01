@@ -1,0 +1,32 @@
+{
+  "id": "DEFECT-22b",
+  "found": "2026-09-13T13:0x-05:00",
+  "found_by": "builder cron af3e62239ce2, bounded pressure-class experiment (.builder_queue/probe_defect22_pressure_class.sh) run while the lane had 0 eligible roadmap rows",
+  "severity": "instrument record-loss (latent) — a leg-A run OOM-killed inside a Hermes worker scope writes NO verdict at all",
+  "status": "RESOLVED 2026-09-13 — fixed and gated in the same tick (the commit carrying this ticket: tools/arc_lega.sh start record + tools/gate_arc_lega_record_survival.sh rc=0). Retired to resolved/ so the monitor's level trigger (count of .builder_queue/*.json) is not inflated by a closed record.",
+  "claim": "Under OOMPolicy=kill the kernel kills the WHOLE scope. The arc's sidecar was written only after pytest returned, by a shell inside that same scope, so a memory-cap OOM during a leg-A run destroyed the verdict: measured arm B of the pressure probe -> SIDECAR=ABSENT, only a 769-byte partial .txt pytest log survived. The Hermes worker scope is exactly this configuration (tools/process_registry.py:273-308: systemd-run --user --scope --property MemoryMax=<n> --property OOMPolicy=kill, 4 GiB measured live), and leg A's own peak is 2.97-3.93 GB of it (91.5% in the heavier sample), so the loss is latent but armed at ~8.5% headroom. Same class of loss SUITE-ISO-2 fixed for the pytest harness (--sink); never checked for the arc.",
+  "measured": {
+    "instrument": ".builder_queue/probe_defect22_pressure_class.sh (committed), raw stdout output/d22_pressure_class_probe.txt",
+    "arm_A": "MemoryMax=2200M OOMPolicy=continue -> systemd-run rc=137 (SIGKILL), sidecar present rc=137 crashes=0 54 s, oom_kill_delta=1, journal_oom_kill_delta=1, PRESSURE=yes, mem_peak==mem_limit==2306867200",
+    "arm_B": "MemoryMax=2200M OOMPolicy=kill -> systemd-run rc=137, SIDECAR=ABSENT, PRESSURE marker never printed, only /tmp/d22_pressure_B/arc_lega_seed2026091306_070e004.txt (769 B)",
+    "negative_control": "output/arc_lega_seed2026091305_9bd8dd2.json (ordinary leg-A run): rc=0, oom_kill_delta=0, journal_oom_kill_delta=0, no PRESSURE marker, mem_peak 2970484736 of mem_limit 4294967296 -> the PRESSURE predicate is discriminating, not decorative",
+    "secondary_finding": "the cap's enforcement mechanism is SIGKILL (137), NOT the SIGSEGV (139) that DEFECT-22 observed; arm A's rc_is_sigsegv=False. So worker-cap pressure cannot produce DEFECT-22's signature. Pressure-induced allocator pathology short of the cap is NOT excluded by this measurement."
+  },
+  "fix": "tools/arc_lega.sh writes a start record to the same per-run sidecar path BEFORE pytest starts ({\"state\": \"RUNNING\", seed, head, started_utc, rc: null, ...}); the normal exit overwrites it with the full record, which now carries \"state\": \"DONE\" in both the dry-run and final writers. Uses printf, not $PY, because a third interpreter invocation would have to be routed by the stub-PY legs in gate_arc_lega_naming.sh.",
+  "gate": "tools/gate_arc_lega_record_survival.sh rc=0, output/d22_record_survival_gate.txt — L0 premise (pinned 070e004 lacks the start record); L1 RED/falsifier (pre-fix runner under MemoryMax=1200M OOMPolicy=kill -> rc=137, sidecar_count=0, property genuinely absent); L2 GREEN (working-tree runner, same scope -> rc=137, sidecar parses state=RUNNING seed=2026091307 head=070e004 started_utc=2026-09-13T18:07:59Z); L3 dry-run contract (state=DONE dry_run=True rc=None, rc=0); L4 both landed instrument gates re-run rc=0 (naming, telemetry). Real uncapped leg-A run after the fix: SEED=2026091308 -> rc=0, 325 passed / 1 skipped / 1 deselected, 125.37 s, crashes=0, state=DONE, oom_kill_delta=0, no PRESSURE marker.",
+  "not_proved": [
+    "the OOM is not prevented and the arc is not made to fit its cap — only a name for a lost run is preserved",
+    "measured through a transient user scope with identical properties, NOT through the Hermes process_registry wrapper",
+    "tools/arc_lega_capture.sh writes its own sidecar the same way and is NOT fixed (named follow-on)",
+    "caps 1200M/2200M are below the production 4 GiB and were chosen to force the OOM; they say nothing about when production OOMs",
+    "n = one run per arm, two observations, not a rate",
+    "DEFECT-22's own SIGSEGV was not reproduced (post-194844c 14 plain runs / 0 disturbed)"
+  ],
+  "receipt": "systems/RECEIPT_DEFECT22_PRESSURE_CLASS_AND_RECORD_SURVIVAL.md",
+  "see": [
+    ".builder_queue/DEFECT-22_arc_legA_instability.json",
+    "systems/RECEIPT_DEFECT22_LEGA_PER_FILE_RSS.md",
+    "systems/RECEIPT_SUITE_ISO2_KILL_SURVIVAL.md",
+    ".builder_queue/REPAIR_PENDING_worker_cgroup_memory_limit.md"
+  ]
+}

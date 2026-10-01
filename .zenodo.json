@@ -1,0 +1,24 @@
+{
+  "title": "Visual Audio & Geometry OS: Spatial Computing, Bootable Pixel Substrates, and the Glyph Architecture",
+  "description": "Geometry OS and the Visual Audio system represent a paradigm shift from symbolic to spatial computing. It implements 'The Screen is the Hard Drive' and 'The Screen is the Mind' through Hilbert-curve packed 2D pixel containers (VAC2/PXC1/.rts.png) bootable directly via hypervisor block backends (virtio_pixel_backend), executed by a dual-substrate spatial ISA (Glyph ISA v2 with lockstep CPU and WGSL GPU twins), and self-hosted through machine-proven in-image tile admission.",
+  "creators": [
+    {
+      "name": "Whittaker, Timothy",
+      "affiliation": "Geometry OS Project"
+    }
+  ],
+  "access_right": "open",
+  "license": "agpl-3.0",
+  "upload_type": "software",
+  "keywords": [
+    "spatial computing",
+    "geometry os",
+    "pixel os",
+    "glyph isa",
+    "hilbert curve",
+    "virtio block device",
+    "formal verification",
+    "self-hosting",
+    "operating systems"
+  ]
+}

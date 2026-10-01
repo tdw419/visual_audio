@@ -1,0 +1,44 @@
+[
+  {
+    "timestamp": "2026-07-19T15:16:27.570365",
+    "model": "qwen2.5-coder:14b",
+    "findings": [],
+    "suspect_tasks": [],
+    "status": "complete"
+  },
+  {
+    "timestamp": "2026-07-19T15:16:27.602046",
+    "model": "qwen2.5-coder:14b",
+    "findings": [],
+    "suspect_tasks": [],
+    "status": "complete"
+  },
+  {
+    "timestamp": "2026-07-19T15:24:13.956785",
+    "model": "qwen2.5-coder:14b",
+    "findings": [],
+    "suspect_tasks": [],
+    "status": "complete"
+  },
+  {
+    "timestamp": "2026-07-19T15:24:14.198908",
+    "model": "qwen2.5-coder:14b",
+    "findings": [],
+    "suspect_tasks": [],
+    "status": "complete"
+  },
+  {
+    "timestamp": "2026-07-19T15:33:43.550066",
+    "model": "qwen2.5-coder:14b",
+    "findings": [],
+    "suspect_tasks": [],
+    "status": "complete"
+  },
+  {
+    "timestamp": "2026-07-19T15:33:43.582622",
+    "model": "qwen2.5-coder:14b",
+    "findings": [],
+    "suspect_tasks": [],
+    "status": "complete"
+  }
+]

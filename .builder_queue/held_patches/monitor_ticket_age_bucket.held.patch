@@ -1,0 +1,29 @@
+--- a/glyph_build_chain_monitor.py
++++ b/glyph_build_chain_monitor.py
+@@ -22,6 +22,10 @@
+ REPO = "/home/jericho/projects/zion/projects/visual_audio"
+ STALL_SECS = 30 * 60
+ QUEUE_DIR = os.path.join(REPO, ".builder_queue")
++TICKET_BUCKET_SECS = 6 * 3600  # clock-only wake guard: 1 h resolution re-fired
++                                # the loop hourly on an open ticket (measured
++                                # 2026-09-13: the only diff field between two
++                                # successive monitor lines was ticket_age_h 0 -> 1).
+ MAX_TIER = 3  # circuit breaker: tier >= MAX_TIER -> auto-stash + defect
+ 
+ 
+@@ -119,12 +123,12 @@
+     _newest_ticket = max(
+         int(os.path.getmtime(os.path.join(QUEUE_DIR, t))) for t in queue
+     )
+-    ticket_age_h = int((now - _newest_ticket) // 3600)
++    ticket_age_6h = int((now - _newest_ticket) // TICKET_BUCKET_SECS)
+ else:
+-    ticket_age_h = -1
++    ticket_age_6h = -1
+ 
+ print(
+     f"head={head} tracked_dirty={len(dirty)} newest_mtime={newest} "
+     f"state={state} stall_tier={stall_tier} queue={len(queue)} "
+-    f"ticket_age_h={ticket_age_h}"
++    f"ticket_age_6h={ticket_age_6h}"
+ )

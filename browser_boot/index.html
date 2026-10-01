@@ -1,0 +1,81 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>BL001 — v86 Linux boot</title>
+<style>
+  body { background:#111; color:#ddd; font:14px monospace; margin:0; padding:8px; }
+  #screen_container { white-space:pre; font:12px/1.05 monospace; color:#0f0; background:#000; }
+  #screen_container canvas { display:none; }
+  #serial { border-top:1px solid #444; margin-top:8px; padding-top:8px;
+            white-space:pre-wrap; max-height:60vh; overflow:auto; color:#9cf; }
+  h1 { font-size:14px; margin:0 0 6px; color:#fc0; }
+</style>
+</head>
+<body>
+<h1>BL001 — v86 + buildroot linux.iso</h1>
+<div id="screen_container"><div></div><canvas></canvas></div>
+<div id="serial"></div>
+
+<script src="libv86.js"></script>
+<script>
+"use strict";
+window.__serialBuf = "";
+window.__booted = false;
+window.__started = Date.now();
+window.__serial = function () { return window.__serialBuf; };
+
+var serialEl = document.getElementById("serial");
+
+// A prompt or login banner on serial proves init reached userspace.
+var USERSPACE_MARKERS = [
+  /buildroot login:/i,
+  /Welcome to Buildroot/i,
+  /\/ #\s*$/,
+  /~ #\s*$/,
+  /can't run '\/etc\/init/i,   // still means kernel handed off to userspace init
+];
+
+function pushSerial(text) {
+  window.__serialBuf += text;
+  serialEl.textContent = window.__serialBuf.slice(-8000);
+  serialEl.scrollTop = serialEl.scrollHeight;
+  if (!window.__booted) {
+    for (var i = 0; i < USERSPACE_MARKERS.length; i++) {
+      if (USERSPACE_MARKERS[i].test(window.__serialBuf)) {
+        window.__booted = true;
+        window.__bootMs = Date.now() - window.__started;
+        console.log("BL001_USERSPACE_REACHED after " + window.__bootMs + "ms marker=" + USERSPACE_MARKERS[i]);
+        break;
+      }
+    }
+  }
+}
+
+var emulator = new V86({
+  wasm_path: "v86.wasm",
+  memory_size: 64 * 1024 * 1024,
+  vga_memory_size: 8 * 1024 * 1024,
+  bios: { url: "seabios.bin" },
+  vga_bios: { url: "vgabios.bin" },
+  cdrom: { url: "linux.iso" },
+  autostart: true,
+  disable_keyboard: true,
+  disable_mouse: true,
+  screen_container: document.getElementById("screen_container"),
+});
+
+// v86 0.5.x emits bytes; keep a char fallback for older builds.
+emulator.add_listener("serial0-output-byte", function (byte) {
+  pushSerial(String.fromCharCode(byte));
+});
+emulator.add_listener("serial0-output-char", function (ch) {
+  pushSerial(ch);
+});
+
+emulator.add_listener("emulator-ready", function () {
+  console.log("BL001_EMULATOR_READY");
+});
+</script>
+</body>
+</html>

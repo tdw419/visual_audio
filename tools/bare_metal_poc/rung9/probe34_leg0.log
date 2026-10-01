@@ -1,0 +1,23 @@
+The target architecture is set to "i386:x86-64".
+warning: No executable has been specified and target does not support
+determining executable automatically.  Try using the "file" command.
+0x000000000000fff0 in ?? ()
+Breakpoint 1 at 0x100000
+
+Breakpoint 1, 0x0000000000100000 in ?? ()
+=== STOP0 isolinux rsi=0x160005
+0x160207:	117 'u'	28 '\034'	-117 '\213'	-108 '\224'
+0x000000000016001e in ?? ()
+
+Breakpoint 1, 0x0000000000100000 in ?? ()
+=== CAPTURE leg 0 ===
+STOP1 rsi=0x13ab0 rip=0x100000
+0x13cb2:	72 'H'	100 'd'	114 'r'	83 'S'
+RAX=0x100000 RBX=0x0 RCX=0x0 RDX=0x0
+RSI=0x13ab0 RDI=0x0 RBP=0x0 RSP=0x1f784
+EFLAGS=0x46 CS=0x10 SS=0x18 DS=0x18 ES=0x18
+CR0=0x11 CR3=0x0 CR4=0x0
+CMDPTR=0x1f800
+0x1f800:	"loglevel=3 cde console=ttyS0,115200 initrd=/boot/core.gz BOOT_IMAGE=/boot/vmlinuz "
+Kill the program being debugged? (y or n) [answered Y; input not from terminal]
+[Inferior 1 (process 1) killed]

@@ -1,0 +1,85 @@
+BM802 FAULT-SENSITIVITY MAP -- one medium byte XOR'd: how far does the boot get?
+
+Fixture (rung8/bm802_fixture.py) re-bakes the loader's EXPECTED_CRC to the CRC the
+corrupted payload actually computes, so the guest gate stays a REAL check and what
+is measured here is kernel tolerance, not gate function (BM903 L6 measured that).
+Primitive: one byte XOR 0xA5 (three bits); a one-bit leg is reported separately.
+RECOVERED is absent by construction -- nothing on this medium can repair a fault
+until Rung 6 is funded and built.
+
+Control: 3/3 boots reached stage 5 (median 11.0s); fault legs ran on a 38s budget derived as 3x that median, so the ceiling is measured, not chosen.
+
+stage  meaning                                verdict
+  5    boot scripts finished                      INERT (the fault did not matter)
+  4    reached "Loading extensions"               SENSITIVE unless it timed out
+  0-3  refused / silent / never reached init      SENSITIVE
+  6    + serial prompt                          bonus only (BM903 measured the autologin race)
+
+region           kind          bytes  samp  SENS INERT  fatal%  worst  what it is
+----------------------------------------------------------------------------------------------------
+stage1-mbr       band            512    16     3    13    19%      0  BIOS boot sector
+stage2-code      band          2,320    37    16    21    43%      0  loader text/data: walk, gate, handoff
+stage2-crc-table band          1,024    16    16     0   100%      1  the gate's own lookup table
+stage2-pad       band          4,848    11     0    11     0%      5  unused container, never executed
+setup-bootsect   payload         497     8     0     8     0%      5  real-mode code, never executed (handoff enters pmode)
+setup-header     payload         119    30     3    27    10%      0  ZERO-PAGE HANDSHAKE 0x1f1-0x268: HdrS, cmdline ptr, initrd addr+len
+setup-header-census payload         119    89    12    77    13%      0  METHOD (not coverage): the handshake bytes the stride-4 row skipped
+setup-code       payload      15,768    31     0    31     0%      5  rest of the setup sector, copied but not run
+pm-kernel        payload   4,280,992    22    16     6    73%      2  compressed kernel, decompiles at 0x100000
+pm-pad           payload      11,616     6     0     6     0%      5  group padding after the kernel
+initrd           payload   9,260,807    24     7    17    29%      2  Tiny Core core.gz
+initrd-pad       payload      12,537     7     0     7     0%      5  group padding after the archive
+filler-sink      payload      49,152     6     0     6     0%      5  PATTERN groups landing in the 0x34000 sink
+----------------------------------------------------------------------------------------------------
+Weighted by region size: 5.82 MB of the 13.64 MB medium (42.6%) sits on a byte where a single-byte fault stops the boot. That assumes each region is uniform between its samples -- the map is a SHAPE, not a census: 303 of 13,640,192 medium bytes were perturbed.
+
+METHOD CHECK on setup-header -- reported apart and NOT counted in the
+weighting above, because it re-covers the same 119 bytes.
+Stride 4 B sampled 30 bytes and read 10% fatal; the
+census booted the other 89. The whole window is 15/119
+= 13% fatal, and the stride saw 3 of those
+15: a fixed stride aliases one byte per field, so a field can be
+fatal in bytes the stride never touched.
+  The stride MISSED 12 fatal byte(s): 0x202, 0x203, 0x204, 0x23c, 0x23e, 0x23f, 0x250, 0x254, 0x256, 0x257, 0x262, 0x263.
+  => A stride can hide fatal bytes, so every fatal% in the table above is a
+     SAMPLE, not a rate -- and for the question Rung 6 asks ("how much of the
+     medium must stay readable?") they are to be read as a FLOOR.
+
+Boot-side non-vacuity (committed loader, flipped payload -- the guest must refuse):
+  payload   2156880 -> stage 1, flags=gate-MISMATCH, refused
+  payload   8939395 -> stage 1, flags=gate-MISMATCH, refused
+
+Fault width (1 bit, same primitive, at named offsets):
+  width-initrd       payload  stage=5 INERT     (3-bit at the same offset: 5)
+  width-pm-kernel    payload  stage=2 SENSITIVE (3-bit at the same offset: 2)
+  width-stage2-code  band     stage=6 INERT     (3-bit at the same offset: 5)
+
+Timeout control: 20 SENSITIVE/SLOW legs re-run at 3x the budget -> 0 came alive.
+  band-stage1-mbr-001#slow     stage=0 DEAD
+  band-stage2-code-007#slow    stage=2 DEAD
+  band-stage2-code-015#slow    stage=0 DEAD
+  band-stage2-crc-table-002#slow stage=1 DEAD
+  band-stage2-crc-table-009#slow stage=1 DEAD
+  pay-pm-kernel-001#slow       stage=2 DEAD
+  pay-pm-kernel-009#slow       stage=2 DEAD
+  pay-pm-kernel-019#slow       stage=2 DEAD
+  pay-setup-header-census-017#slow stage=0 DEAD
+  pay-setup-header-census-018#slow stage=0 DEAD
+  pay-setup-header-census-019#slow stage=0 DEAD
+  pay-setup-header-census-075#slow stage=2 DEAD
+  pay-setup-header-census-077#slow stage=2 DEAD
+  pay-setup-header-census-078#slow stage=2 DEAD
+  pay-setup-header-census-095#slow stage=2 DEAD
+  pay-setup-header-census-099#slow stage=2 DEAD
+  pay-setup-header-census-101#slow stage=2 DEAD
+  pay-setup-header-census-102#slow stage=2 DEAD
+  pay-setup-header-census-113#slow stage=2 DEAD
+  pay-setup-header-census-114#slow stage=2 DEAD
+  Every re-run stayed down, so SENSITIVE in this map means a stopped boot,
+  not a slow one.
+
+Read this against the Rung 6 case: a large SENSITIVE area is the argument FOR
+paying +75% medium capacity for Hamming(7,4), because decay then equals a box that
+will not boot; a large INERT area is the argument that some of the medium can be
+left unprotected -- and it is also the warning, because an INERT byte is a fault
+the CRC gate happily signs off on. Silence is not the same as correctness.

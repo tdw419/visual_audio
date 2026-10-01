@@ -1,0 +1,9 @@
+# Transpiled from RV32I/RV64I by rv64i_to_glyph.py
+:__entry
+LDI r31 1087            ; initialize hardware call stack pointer
+JMP :pc_00000000
+
+:pc_00000000
+LDI r10 0x5a
+:pc_00000004
+RET

@@ -1,0 +1,109 @@
+# Geometry OS Spatial Program Coordinator
+# Language: Glyph Assembly (.glyph)
+# Architecture: GPU-First / Spatial Multitasking
+#
+# Real cooperative scheduler with genuine dynamic dispatch: each WCB now
+# stores its tick routine's packed entry address in memory, and the
+# supervisor loads that value and issues CALLR (register-indirect call)
+# directly — no more hardcoded CMP/JZ chain over the 4 known indices.
+# Adding a 5th window no longer requires touching the supervisor's code
+# at all, only seeding WCB4's TICK_ADDR slot; the CALLR-based dispatch
+# below is unchanged.
+#
+# WCB layout (stride 8, base configurable — tests use 100):
+#   offset 0: STATE (0=empty, 1=active)
+#   offset 7: persistent tick counter (repurposed PADDING slot)
+#   offset 6: TICK_ADDR — packed (row<<16)|col entry point of this WCB's
+#             tick routine (repurposed CYCLE_LIMIT slot; the old
+#             cycle-countdown simulation is gone, replaced by a real call)
+#
+# Registers:
+# r0:  CMP flag (implicit)
+# r1:  Max windows
+# r2:  Current window index
+# r3:  WCB base pointer
+# r4:  Current WCB pointer
+# r5:  Current WCB STATE
+# r6:  WCB stride (8 words)
+# r7:  scratch (stride-loop counter)
+# r8:  scratch (TICK_ADDR memory address, then the packed value itself for CALLR)
+# r10-r12: scratch, used inside window_tickN routines
+# r29: constant 0
+# r30: constant 1
+# r31: stack pointer for CALL/CALLR/RET (image address space, unrelated to WCB memory)
+
+:init
+LDI r31 250
+LDI r29 0
+LDI r30 1
+LDI r1 4
+LDI r2 0
+LDI r3 100
+LDI r6 8
+
+:main_loop
+LDI r4 0
+ADD r4 r3
+
+LDI r7 0
+:stride_loop
+CMP r2 r7
+JZ :stride_done
+ADD r4 r6
+ADD r7 r30
+JMP :stride_loop
+
+:stride_done
+LD r5 r4
+CMP r5 r29
+JZ :next_window
+
+# --- genuine dynamic dispatch: load this WCB's tick-routine address and CALLR it ---
+LDI r8 6
+ADD r8 r4            ; r8 = address of TICK_ADDR slot (WCB + 6)
+LD r8 r8              ; r8 = packed tick-routine entry point (data-driven, not a label)
+CALLR r8
+
+:next_window
+ADD r2 r30
+CMP r2 r1
+JZ :reset_loop
+JMP :main_loop
+
+:reset_loop
+LDI r2 0
+JMP :main_loop
+
+HALT
+
+:window_tick0
+LDI r10 107
+LD r11 r10
+LDI r12 1
+ADD r11 r12
+ST r10 r11
+RET
+
+:window_tick1
+LDI r10 115
+LD r11 r10
+LDI r12 1
+ADD r11 r12
+ST r10 r11
+RET
+
+:window_tick2
+LDI r10 123
+LD r11 r10
+LDI r12 1
+ADD r11 r12
+ST r10 r11
+RET
+
+:window_tick3
+LDI r10 131
+LD r11 r10
+LDI r12 1
+ADD r11 r12
+ST r10 r11
+RET

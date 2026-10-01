@@ -1,0 +1,34 @@
+{
+  "id": "DEFECT-29",
+  "title": "The cross_modal tile ABI asserted by tests/test_cross_modal.py exists in NO committed revision - 5 legs carry a strict xfail against a capability that was never built",
+  "filed": "2026-09-13",
+  "filed_by": "builder cron af3e62239ce2 (SUITE-FIX-1, DEFECT-28 file (1), applying RULING_format_authority_and_crossmodal.md section 2)",
+  "base_commit": "7935035",
+  "type": "missing-capability / record-only (the legs are xfail-with-reason, never silently green)",
+  "status": "CLOSED 2026-09-14 (retired) - the 5 xfail legs were removed under RULING_defect29_tile_abi_retire.md (same commit); tests/test_cross_modal.py now collects only the 3 CLI legs (3 passed, 0 xfail). Restore path: write fresh legs against a real ABI if product intent ever exists; do not resurrect the July 2026 bodies.",
+  "measured": {
+    "gate": "/usr/bin/python3 -m pytest tests/test_cross_modal.py -q -rxX",
+    "before": "6 failed, 2 passed (output/cross_modal_orch_RED_prefix.txt at 7935035)",
+    "after": "3 passed, 5 xfailed, 0 failed; the same 5 legs under --runxfail still fail with the original AttributeError, so the marker is the only thing turning them green",
+    "harness_token": "tools/suite_iso_harness.py tests/test_cross_modal.py -t 150 -w 1 --json -> verdict PASS, counts {collected: 8, passed: 3, failed: 0} (output/cross_modal_harness_post.json). Note: the 5 xfailed legs appear in NEITHER bucket - an xfail is currently unaccounted in the sink, same family as the coll=0 artifact SUITE-COLLECT-1 corrected.",
+    "phantom_functions": [
+      "cross_modal.extract_tiles (required by tests/test_cross_modal.py:86,:103,:124,:138)",
+      "cross_modal.text_to_tiles (required by :60)",
+      "cross_modal.tiles_to_audio_byteperfect (required by :64,:90,:105)",
+      "cross_modal.tiles_to_audio_semantic (required by :128)"
+    ],
+    "search": "git grep 'def extract_tiles|def text_to_tiles|def tiles_to_audio_byteperfect|def tiles_to_audio_semantic' over all tracked files -> 0 providers; git log -S'tiles_to_audio_byteperfect' --all -> 0 hits. The test file is untracked (.gitignore:101 test_*.py), mtime 2026-07-27 23:52."
+  },
+  "near_equivalents_measured_not_used": {
+    "tools/pixel_dedup_optimized.py:45 extract_tiles_from_frame": "NOT a drop-in: requires a 4096x4096 RGBA frame (returns [] plus a warning for any other size), returns (int, bytes) tiles of 32x32, and imports PIL - while the leg it would replace (test_ppm_support) exists precisely to assert 16x16x4 tiles and PPM loading with NO PIL. Re-pointing would replace the assertion set, which DEFECT-28's ticket orders against ('preserving every assertion').",
+    "tools/cross_modal_minimal.py:15 image_to_tiles / :57 audio_to_tiles / :79 tiles_to_image": "module docstring says 'Minimal mock cross_modal.py for testing'; contract differs (8px tiles, flattened 1-D RGB arrays, PIL). Same objection as above.",
+    "tools/cross_modal_mock.py:89 image_to_tiles / :109 tiles_to_image": "also a mock; different signatures again (image_to_tiles takes a PIL Image, tiles_to_image returns an Image)."
+  },
+  "options_cheapest_first": [
+    "1. (this tick, taken) Fix the genuine CLI drift and record the missing capability as 5 strict xfail legs carrying this ticket id; no module API invented, no leg deleted.",
+    "2. Build the tile ABI for real in tools/cross_modal.py (text_to_tiles / extract_tiles / tiles_to_audio_byteperfect / tiles_to_audio_semantic) - a product feature, needs Jericho's intent, then un-mark the xfails (strict=True makes a future XPASS go RED, which is the intended forcing function).",
+    "3. If the cross-modal lane is being retired, delete the test file with a ruling - the standing rule forbids deleting a test to go green without one."
+  ],
+  "gate_clause": "A leg carrying the xfail marker must have a reason string that names this ticket id; removing the marker must reproduce the original AttributeError at the cited line (proven with pytest --runxfail).",
+  "not_proven": "That the tile ABI is wanted at all; that any near-equivalent module is the intended home; whether the July test's 16x16x4 tile contract was ever a real design target. Nothing about tools/cross_modal.py's own MFSK path, which is tracked, live, and exercised by the two passing CLI legs."
+}

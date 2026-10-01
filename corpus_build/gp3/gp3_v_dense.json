@@ -1,0 +1,13 @@
+{
+ "guest_path": "/var/tmp/gp3_1789615295/dense_control/dense.bin",
+ "size": 67108864,
+ "recon_sha256": "c32040a9a151753d8da6146d80b3f84ad7ae5f191a02b9bf0c3ab44918574a07",
+ "expected_sha256": "c32040a9a151753d8da6146d80b3f84ad7ae5f191a02b9bf0c3ab44918574a07",
+ "match": true,
+ "frames_read": [
+  132,
+  133,
+  134
+ ],
+ "note": "ok"
+}

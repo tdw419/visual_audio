@@ -1,0 +1,6 @@
+green     2048 B  crc32=101BFE00  exec_nid=EE1B
+noecho    2048 B  crc32=92DD6EF6  exec_nid=FC2B
+nombox    2048 B  crc32=0C818841  exec_nid=84C0
+halt      2048 B  crc32=85E95236  exec_nid=D7DF
+contract offsets agree in both sources: ARG_NID=8, ARG_MBOX=10, ARG_ECHO=12, mailbox=0x4b4f
+EXEC_ARGS=4096 >= 4096: above both image windows, out of reach of the copy-down

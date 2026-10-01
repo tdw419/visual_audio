@@ -1,0 +1,28 @@
+[package]
+name = "v4_bootloader_x86"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+log = "0.4"
+uefi = { version = "0.39.0", features = ["panic_handler", "logger", "alloc", "global_allocator"] }
+uefi-raw = "0.15.1"
+geos_pixel = { path = "../geos_pixel", default-features = false }
+
+[features]
+logging = []
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1
+opt-level = "z"
+
+[[bin]]
+name = "bootloader_uefi_v4"
+path = "src/bootloader_uefi.rs"
+test = false
+bench = false

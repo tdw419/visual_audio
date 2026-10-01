@@ -1,0 +1,21 @@
+{
+  "ticket_id": "bk1-argv",
+  "roadmap_item": "BK-1",
+  "step": "argv/env block: loader (GH-9) passes argc/argv/envp in the box data page; C main(argc, argv) transpiles and reads them",
+  "created": "2026-09-11T14:25:00-05:00",
+  "created_by": "Antigravity builder session (Jericho-authorized BK-1 continuation)",
+  "resolved": "2026-09-11T14:41:00-05:00",
+  "resolved_by": "Antigravity builder session",
+  "failing_command": "pytest tests/test_bk1_argv.py",
+  "resolution": "tests/test_bk1_argv.py 5/5 green (Leg 1 native GCC match, Leg 2 preemption r25..r28 isolation, Leg 3 GH-22 format, Leg 4 WGSL parity on RTX 5090, Leg 5 offline relaunch exec semantics). Zero regressions across full GH arc.",
+  "context": {
+    "prereqs": "GH-9 (loader), BK-2 (WGSL parity per syscall, 34f9e23)",
+    "requirements": "Loader sets up argc/argv/envp in the box data page (words 750+); compiled C main(argc, argv) transpiles via transpile_rv32i_to_glyph and executes; result matches native host GCC run byte-exact; tight quantum preemption preserves live registers across tick boundaries; GH-22 checksum format computed; GPU compute parity via run_wgsl().",
+    "warnings": "Compute GH-22 checksums (cksum=(op+payload)&0xFF); test tight timer quantum (Bug 8 register isolation); seed argv block before _start runs."
+  },
+  "attempt": 1,
+  "max_attempts": 3,
+  "status": "resolved",
+  "gate": "tests/test_bk1_argv.py green across all legs + full arc regressions green + feat(bk1) commit + roadmap BK-1 row updated; THEN retire to .builder_queue/resolved/",
+  "receipt_discipline": "failing-test output before the fix, passing run after; receipts are command output not narrative"
+}

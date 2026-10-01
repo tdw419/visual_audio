@@ -1,0 +1,10 @@
+# rung-5 gate artifacts (regenerable by run_gate5.sh) — not source
+*.raw
+*.log
+*.bin
+*.json
+*.inc
+dbg_*
+serial_*
+payload_host*.bin
+img2_host*.bin

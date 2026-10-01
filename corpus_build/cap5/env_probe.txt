@@ -1,0 +1,5 @@
+HOME=/var/tmp/hermehome
+PWD=/home/jericho
+LANG=C.UTF-8
+PWD_AFTER_CHDIR=/var/tmp/gp1
+FAKE=unset

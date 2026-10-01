@@ -1,0 +1,14 @@
+{
+  "hostname": "ubuntu",
+  "user": "jericho",
+  "cwd": "/host_zion/projects/visual_audio",
+  "hermes": {
+    "installed": true,
+    "path": "/var/tmp/hermehome/.local/bin/hermes",
+    "version": null
+  },
+  "available_tools": [],
+  "storage": {},
+  "network": {},
+  "timestamp": "2026-09-24T14:22:28.919699"
+}

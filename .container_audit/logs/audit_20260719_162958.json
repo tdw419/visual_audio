@@ -1,0 +1,16 @@
+{
+  "timestamp": "2026-07-19T16:29:58.236321",
+  "model": "qwen2.5-coder:14b",
+  "total_tasks": 0,
+  "completed_tasks": 0,
+  "pending_tasks": 0,
+  "suspect_tasks": [],
+  "findings": {
+    "suspect_tasks_analysis": [],
+    "recommendations": [
+      "Dry-run mode - no actual LLM analysis performed"
+    ]
+  },
+  "status": "complete",
+  "duration_seconds": 0.001981973648071289
+}

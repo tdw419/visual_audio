@@ -1,0 +1,30 @@
+; test_2d_flow.glyph
+; Tests 2D spatial instruction pointer
+
+ORG (0, 1)
+SET 1        ; (0, 1) - Moves RIGHT by default
+ORG (1, 1)
+ADD 1        ; (1, 1) - Acc = 2
+ORG (2, 1)
+DIR_DOWN     ; (2, 1) - Turn DOWN
+
+ORG (2, 2)
+NOP          ; (2, 2) - Continues DOWN
+ORG (2, 3)
+ADD 10       ; (2, 3) - Acc = 12
+ORG (2, 4)
+DIR_LEFT     ; (2, 4) - Turn LEFT
+
+ORG (1, 4)
+NOP          ; (1, 4) - Continues LEFT
+ORG (0, 4)
+ADD 100      ; (0, 4) - Acc = 112
+ORG (255, 4)
+DIR_UP       ; (255, 4) - Turn UP (wrapped around)
+
+ORG (255, 3)
+NOP          ; (255, 3) - Continues UP
+ORG (255, 2)
+ADD 1000     ; (255, 2) - Acc = 1112
+ORG (255, 1)
+HALT         ; (255, 1)

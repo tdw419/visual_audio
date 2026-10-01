@@ -1,0 +1,40 @@
+--- a/tools/rv64i_to_glyph.py
++++ b/tools/rv64i_to_glyph.py
+@@ -780,6 +780,9 @@
+                 # class as the SB/SH and branch fixes. FIX: PUSH/POP all
+                 # three around the sequence -- EXCEPT rd, which receives
+                 # its final value here and must not be restored over.
++                _pop = [r for r in (28, 29, 30) if r != rd]
++                for _r in (28, 29, 30):
++                    lines.append(f"PUSH r{_r}")
+                 lines.append(f"LDI r30 0x{imm & 0xFFFFFFFF:x}")
+                 _emit_add_reg(lines, "r30", rs1)
+                 # lane*8 = shift amount, computed from the BYTE address
+@@ -795,6 +798,8 @@
+                 lines.append(f"SHR r{rd} r28")
+                 lines.append("LDI r29 0xff")
+                 lines.append(f"AND r{rd} r29")
++                for _r in reversed(_pop):
++                    lines.append(f"POP r{_r}")
+ 
+         # SB (sub-word store, G6): read-modify-write the containing word.
+         # Clearing exactly the target byte lane without a NOT opcode uses
+@@ -859,6 +864,9 @@
+             if rd != 0:
+                 # DEFECT-16c (same class as the LBU fix above): PUSH/POP
+                 # the t-reg scratch around the halfword extract, minus rd.
++                _pop = [r for r in (28, 29, 30) if r != rd]
++                for _r in (28, 29, 30):
++                    lines.append(f"PUSH r{_r}")
+                 lines.append(f"LDI r30 0x{imm & 0xFFFFFFFF:x}")
+                 _emit_add_reg(lines, "r30", rs1)
+                 lines.append("LDI r28 2")
+@@ -872,6 +880,8 @@
+                 lines.append(f"SHR r{rd} r28")
+                 lines.append("LDI r29 0xffff")
+                 lines.append(f"AND r{rd} r29")
++                for _r in reversed(_pop):
++                    lines.append(f"POP r{_r}")
+ 
+         # SH (sub-word store, G10): RMW the containing word, exactly like SB
+         # but with a 0xFFFF lane mask and shift = (addr&2)<<3. Same DEFECT 11

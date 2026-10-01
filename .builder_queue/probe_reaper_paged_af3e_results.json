@@ -1,0 +1,89 @@
+{
+ "results": {
+  "C1_unpaged_rewrite_traps": {
+   "exit_status": 1,
+   "fault_addr": 13056,
+   "fault_reason": null,
+   "faulted": true,
+   "halt_reason": null,
+   "img_dims": [
+    32,
+    64
+   ],
+   "kf_word": 1966080,
+   "mode_final": "SUPER",
+   "output": [],
+   "program": ":__entry\nLDI r5 16208720\nLDI r6 3264\nST r6 r5\nLDI r5 6\nLDI r6 3265\nST r6 r5\nLDI r5 52\nLDI r6 3266\nST r6 r5\nLDI r5 0\nLDI r6 3267\nST r6 r5\nLDI r2 5120\nLD r3 r2\nHALT\n",
+   "trampoline_words": [
+    16737095,
+    0,
+    0,
+    0
+   ]
+  },
+  "C2_paged_fault_real_trampoline": {
+   "exit_status": 1,
+   "fault_addr": 20480,
+   "fault_reason": "pte_invalid pte=0x0 vaddr=0x5000 mode=USER op=LD site=glyph_isa_v2",
+   "faulted": true,
+   "halt_reason": null,
+   "img_dims": [
+    32,
+    64
+   ],
+   "kf_word": 1966080,
+   "mode_final": "SUPER",
+   "output": [],
+   "program": ":__entry\nLDI r15 8211\nLDI r14 1536\nST r15 r14\nLDI r2 5120\nLD r3 r2\nHALT\n",
+   "trampoline_words": [
+    16737095,
+    0,
+    0,
+    0
+   ]
+  },
+  "R1_paged_fault_vectors_to_reaper": {
+   "exit_status": 1,
+   "fault_addr": 20480,
+   "fault_reason": "pte_invalid pte=0x0 vaddr=0x5000 mode=USER op=LD site=glyph_isa_v2",
+   "faulted": true,
+   "halt_reason": null,
+   "img_dims": [
+    32,
+    64
+   ],
+   "kf_word": 1966080,
+   "mode_final": "SUPER",
+   "output": [],
+   "program": ":__entry\nLDI r15 8211\nLDI r14 1536\nST r15 r14\nLDI r2 5120\nLD r3 r2\nHALT\n",
+   "trampoline_words": [
+    16737095,
+    0,
+    0,
+    0
+   ]
+  },
+  "R3_paged_reaper_rewrite_then_fault_execute": {
+   "exit_status": 1,
+   "fault_addr": 3840,
+   "fault_reason": "paged_paddr_fence op=ST paddr=960 vaddr=0x3300 mode=USER site=glyph_isa_v2",
+   "faulted": true,
+   "halt_reason": null,
+   "img_dims": [
+    32,
+    64
+   ],
+   "kf_word": 1966080,
+   "mode_final": "SUPER",
+   "output": [],
+   "program": ":__entry\nLDI r15 8211\nLDI r14 1536\nST r15 r14\nLDI r5 16208720\nLDI r6 3264\nST r6 r5\nLDI r5 6\nLDI r6 3265\nST r6 r5\nLDI r5 52\nLDI r6 3266\nST r6 r5\nLDI r5 0\nLDI r6 3267\nST r6 r5\nLDI r2 5120\nLD r3 r2\nHALT\n",
+   "trampoline_words": [
+    16737095,
+    0,
+    0,
+    0
+   ]
+  }
+ },
+ "results_md5": "e0c6e7e67b94186a4b10031f212caeaf"
+}

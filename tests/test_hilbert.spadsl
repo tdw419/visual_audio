@@ -1,0 +1,24 @@
+# Test Hilbert Memory Layout
+# Test 1: Basic shift on 4x4 Hilbert region
+A = region(shape=(4, 4), initial=1, layout="hilbert")
+B = shift(A, offset=1)
+total = reduce(B, sum)
+print(total)  # Should be 16 (4x4 grid, all 1s, shift doesn't change sum)
+
+# Test 2: Linear vs Hilbert should produce same result for elementwise ops
+C = region(shape=(4, 4), initial=2, layout="hilbert")
+D = A + C
+total2 = reduce(D, sum)
+print(total2)  # Should be 48 (4x4 grid, 1+2=3 per element, 3*16=48)
+
+# Test 3: Where with Hilbert layout
+E = region(shape=(4, 4), initial=5, layout="hilbert")
+F = where(A, D, E)
+total3 = reduce(F, sum)
+print(total3)  # Should be 48
+
+# Test 4: Conv2D on Hilbert layout
+G = region(shape=(4, 4), initial=1, layout="hilbert")
+H = conv2d(G, [[0, 0, 0], [0, 1, 0], [0, 0, 0]])
+total4 = reduce(H, sum)
+print(total4)  # Should be 16 (identity preserves values)

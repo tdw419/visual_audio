@@ -1,0 +1,30 @@
+{
+  "id": "INSTRUMENT-2",
+  "title": "agy_implement.sh reports UNVERIFIED / exit 3 for a reply that DOES carry its gate evidence - the DIFF SUMMARY detector keys on a literal block header",
+  "filed": "2026-09-13",
+  "filed_by": "builder cron af3e62239ce2 (SUITE-FIX-1 / DEFECT-28 file (1) landing)",
+  "base_commit": "7935035",
+  "type": "instrument hygiene (wrapper recall) - NOT a correctness gap in any landed change",
+  "status": "LANDED 2026-09-13 (builder cron af3e62239ce2, commit 803ed8d) - option 1 (widen the predicate) + option 2 spirit (the wrapper now delegates to tools/agy_evidence_check.sh; the detector's verdicts are exercised by the gate rather than printed). Gate tests/test_agy_wrapper_evidence.py 6/6 (L1 calibration: the 204459 log flips UNVERIFIED->VERIFIED, old predicate shown RED on it; L2 no-evidence negatives incl. the 09:09 'no output produced' shape, still UNVERIFIED; L3 conjunction load-bearing; L4 literal-header fast path; L5 self-test; plus patch-applies-cleanly). Live wrapper patched and end-to-end verified: the mis-graded log now yields rc 0; the no-output guard is NOT relaxed. NOT eligible supply. Second-order finding recorded in the commit: the delegation for this row itself was mis-graded exit 1 because agy's reply QUOTED 'no output produced' while describing its L2 fixture (output/agy/agy_impl_20260913_224947.log:61) - same literal-anchor class, unfenced, flagged.",
+  "measured": {
+    "command": "TIMEOUT=45m EFFORT=medium bash ~/.hermes/scripts/agy_implement.sh -f .builder_queue/brief_defect29_cross_modal_cli_xfail.md",
+    "observed": "agy_implement: UNVERIFIED - reply carries no DIFF SUMMARY block (no gate evidence) - FAIL / exit 3",
+    "reply_actually_contains": [
+      "'### 1. RED-first pre-edit gate output'",
+      "'### 2. Raw gate tail post-edit' -> '3 passed, 5 xfailed in 0.63s'",
+      "the five xfail reason strings",
+      "'### 5. git diff --stat & git status' + 'git status --short tests/ tools/'"
+    ],
+    "reply_log": "output/agy/agy_impl_20260913_204459.log",
+    "orchestrator_outcome": "every leg re-run independently; gate green (3 passed, 5 xfailed, rc 0) and non-vacuity proven (--runxfail -> 5 failed with the original AttributeError). The work was complete; only the wrapper's verdict was wrong."
+  },
+  "why_it_matters": "A false UNVERIFIED/exit-3 is the failure mode that trains an orchestrator to ignore the wrapper. The wrapper exists to catch the opposite shape (exit 0 with no evidence, the 09:09 incident), so its positive class must stay trustworthy.",
+  "options_cheapest_first": [
+    "1. Widen the predicate: accept any of {literal 'DIFF SUMMARY', a section whose body carries the brief's own gate command AND its literal output tail, a 'gate tail'/'gate output' heading}. Show RED against a reply log with no gate evidence at all (e.g. the 'no output produced' shape) and GREEN against output/agy/agy_impl_20260913_204459.log.",
+    "2. Make the wrapper PRINT the detector's matched/expected token on failure, so the reason is visible in the log instead of asserted.",
+    "3. Do nothing but stop treating rc as a claim of failure: document in the wrapper header that rc=3 means 'the reply did not carry a recognisable evidence block' and is not a judgement on the work."
+  ],
+  "gate_clause": "A wrapper self-test whose fixture replies are (a) the real 2026-09-13 reply log -> must be classified VERIFIED, and (b) a reply with no gate command or output -> must be classified UNVERIFIED. Today (a) is classified UNVERIFIED, so the leg is RED-first by construction.",
+  "not_proven": "That any other delegation's exit code was mis-read in the same way; the wrapper's other guards (no output produced, empty log) were not probed.",
+  "landed_commit": "803ed8d"
+}

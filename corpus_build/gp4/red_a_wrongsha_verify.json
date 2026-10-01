@@ -1,0 +1,11 @@
+{
+ "guest_path": "/var/tmp/gp4_1789617660/proc_snapshot.txt",
+ "size": 374,
+ "recon_sha256": "00e88971858eb0bfec643b97977110e62552507a0d9e96fec547be9da5fdca2c",
+ "expected_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+ "match": false,
+ "frames_read": [
+  57
+ ],
+ "note": "container is authoritative only after a writeback barrier"
+}

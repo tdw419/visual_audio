@@ -1,0 +1,61 @@
+== S legs (source reads, tools/wgsl_glyph_isa_v2.py) ==
+{
+ "S1a_fetch_addr_in_box_refs": 0,
+ "S1b_CALLR_addr_in_box_refs": 0,
+ "S1b_CALLR_sets_next_pc": true,
+ "S1b_CALL_addr_in_box_refs": 0,
+ "S1b_CALL_sets_next_pc": true,
+ "S1b_JMPR_addr_in_box_refs": 0,
+ "S1b_JMPR_sets_next_pc": true,
+ "S1b_JMP_addr_in_box_refs": 0,
+ "S1b_JMP_sets_next_pc": true,
+ "S1b_RET_addr_in_box_refs": 0,
+ "S1b_RET_sets_next_pc": true,
+ "S1c_PUSH_addr_in_box_refs": 0,
+ "S1c_PUSH_uses_mem_write": true
+}
+== D legs (on-device WGSL, RTX 5090) ==
+{
+ "C1_user_st_oobox_ek1_control": {
+  "fault_addr_word": 400,
+  "fired": true,
+  "halted": true,
+  "mode_final": 0,
+  "r10": 0,
+  "r31": 0,
+  "steps": 3
+ },
+ "C2_user_st_inbox_control": {
+  "clean": true,
+  "fault_addr_word": 0,
+  "halted": true,
+  "mode_final": 1,
+  "r10": 0,
+  "r31": 0,
+  "steps": 4
+ },
+ "D1_user_jmpr_exec_oobox_code": {
+  "fault_addr_word": 0,
+  "halted": true,
+  "injected_opcode_px": 15487056,
+  "injected_opcode_px_is_ldi_color": true,
+  "mode_final": 1,
+  "r10": 11399181,
+  "r10_is_canary": true,
+  "r31": 0,
+  "steps": 4
+ },
+ "D2_push_inject_then_execute": {
+  "fault_addr_word": 0,
+  "halted": true,
+  "injected_opcode_px": 15487056,
+  "injected_px_matches_ldi": true,
+  "mode_final": 1,
+  "r10": 11399181,
+  "r10_is_canary": true,
+  "r31": 1603,
+  "real_ldi_color": 15487056,
+  "steps": 16
+ }
+}
+results_md5=4940f4344fa679a1a70e8f244b30f4c0

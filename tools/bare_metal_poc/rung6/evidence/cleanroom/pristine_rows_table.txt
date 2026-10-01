@@ -1,0 +1,93 @@
+# The five most recently closed rows, run in one tree out of `git archive HEAD`
+#
+# (Rungs 1-5 and 7 are not in this table; `lower_rungs_pristine.txt` beside it
+# covers the lower half of the ladder, and TASK_BM001's bullet in ROADMAP
+# collects both.)
+
+Made 2026-09-20, 14:32–15:27 (each file's own timestamp, below). One scratch
+tree, one input copied in by hand, one
+prerequisite command, then every closed row's own gate:
+
+    T=/tmp/bm000_final
+    git -C <repo> archive HEAD tools/bare_metal_poc | tar -x -C $T    # at c0ad33a1
+    mkdir -p $T/tools/bare_metal_poc/rung7                            # rung7/ has no tracked file
+    cp rung7/core.gz $T/tools/bare_metal_poc/rung7/                   # the one input NOT in git
+    cd $T/tools/bare_metal_poc && bash reproduce_prereqs.sh           # PREREQ_STATUS=GREEN
+    # then, sequentially, one lane at a time (bm653_lane-style: never two booted rigs):
+    cd rung9  && bash run_bm903_e2e.sh        x2
+    cd ../rung8 && python3 bm802_fixture.py / bm802_pin_bitest.py /
+                   bm802_header_fields.py / bm802_archive_local.py
+                   python3 run_bm802_sweep.py --dry / --limit=3 --recheck=2
+    cd ../rung6 && bash run_bm602_e2e.sh      x2
+    cd ../rung6_5 && bash run_bm651_e2e.sh
+                     bash run_bm653_e2e.sh    (runs its own two passes)
+
+| row | gate | result in that tree | wall |
+|---|---|---|---|
+| prerequisite | `reproduce_prereqs.sh` | `PREREQ_STATUS=GREEN`, 12/12 legs, six landmarks re-pinned, no tracked file moved | 39 s |
+| rung 9 / BM903 | `run_bm903_e2e.sh` ×2 | `BM903 E2E TALLY: 42 pass, 0 red` both passes; both deliberate RED legs fired on offset `0x244` and the same guest-vs-host CRC line | ~2 min 50 s each |
+| rung 6 / BM602 | `run_bm602_e2e.sh` ×2 | `GREEN 15 RED 0`, `IDENTITY: GREEN 32 RED 0`, `BM602_RUN_STATUS=GREEN`, 47 `[PASS]` lines, both passes | 6.8 min, then 8.3 min |
+| rung 6.5 / BM653 | `run_bm653_e2e.sh` | `2 of 2 passes clean`, `IDENTITY: GREEN 49 RED 0` both, 18 dumps landed, `BM653_RUN_STATUS=GREEN` | 613 s |
+| rung 6.5 / BM651 | `run_bm651_e2e.sh` | `GATE651 PASS`, 18 predictions fixed before the first boot, 7 boots | 144 s |
+| rung 8 / BM802 | four host legs + bounded preflight | `BM802 FIXTURE TALLY: 0 red`, pin bitest took its AssertionError, header/archive legs rc=0, and 12 preflight rows agreeing with the landed 363 on verdict, offset and gate value | ~7 min + ~1 s legs |
+
+Finishing timestamp of each log, which is the evidence the runs did not overlap
+(one lane at a time, as `bm653_lane` does):
+
+    14:33:42  prereq.log          14:52:35  bm802_preflight.log
+    14:38:51  rung9 pass 1        15:03:52  bm602 pass 1
+    14:42:39  rung9 pass 2        15:12:11  bm602 pass 2
+    15:14:35  bm651               15:26:43  bm653 pair (both passes)
+
+The three `_leg0` dumps in that same tree, hashed after the rung-9 pair:
+`bc2431d7be0ab1d2` (zp), `30cd829f2a88c80c` (cmdline), `935d5fe1c23f878e`
+(regs) -- the pinned values, re-derived from the commit by their producer.
+
+Details are in the row's own record, not duplicated here (paths below are from
+`tools/bare_metal_poc/`, the ladder root):
+`bm903_pristine_pair.txt` (same directory as this record) and
+`rung6_5/evidence/bm653/prereq_pristine.txt` and
+`rung8/bm802_pristine_preflight.txt`. The rungs below these five were
+measured the same way the same afternoon, in `lower_rungs_pristine.txt` next
+door -- rungs 4 and 5 pass from the commit, rung 2's tracked gate does not run
+from it.
+
+One figure differs between the two records on purpose: BM653's pair is 613 s
+here and 372 s in `prereq_pristine.txt`. Timing, not verdict -- the boot legs
+account for ~115 s of the 241 s (pass 1's `exec_green` drew 4 autologin attempts
+and 155.3 s here against 2 and 59.1 s there, pass 2's drew 2 against 1, partly
+offset by `exec_image_repaired` at 21.0 s against 58.6 s), the two identity legs
+at 29 s against 18 s account for 22 s more, and the remaining ~104 s cannot be
+attributed because the cold record does not time the static legs individually.
+What the row measures is unchanged: 2 of 2 passes clean, `IDENTITY: GREEN 49
+RED 0` both passes.
+
+And the dumps themselves were compared afterwards, not inferred: all 18 files in
+that tree's `evidence/bm653/dumps/` are byte-identical to the lane's landed 18
+(`cmp`, one file at a time, after the run) -- so the pristine tree produced the
+same executed handoff state this box's green row did, down to the second leg's
+captures.
+
+## What this proves, and what it does not
+
+Proves: a reviewer with this commit, `nasm`, `python3`, `qemu-system-x86_64`,
+`gdb` and one 9.3 MB vendor blob can re-run each of the five rows above without
+this box's working files, and the references BM602 and BM653 pin are the bytes
+rung 9
+emits there (the three `_leg0` dumps hashed to the pinned sha256s — see the
+BM903 record).
+
+Does not prove:
+* **BM651 twice.** Its own closure ran the gate ×2; pristine ran it once (the
+  landed GATE651 line above is that single run). Not re-run a second time here
+  because nothing about the prerequisite chain changes between passes, and the
+  row's autologin-sensitive legs cost boots.
+* **The full BM802 sensitivity map** — 319 boots, ~165 min, planned `--dry`
+  identically and deliberately not re-run.
+* **Anything about hardware.** All of it is TCG; Rung 8's silicon row (BM801)
+  is unchanged and still unstarted.
+* **That `git status` is the way to see the missing inputs.** It is not, for one
+  of them: `rung7/TinyCore-current.iso` is ignored by `.gitignore:68 *.iso`, so
+  the cleanest checkout on the box lacks a 28 MB file that no `git status`
+  invocation will ever mention. `bm001_landing_plan.sh` reports it; TASK_BM001
+  is the decision about it.

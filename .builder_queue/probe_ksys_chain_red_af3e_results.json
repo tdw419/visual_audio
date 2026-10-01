@@ -1,0 +1,26 @@
+{
+ "red_verdict_broken": true,
+ "results": {
+  "K1_red": {
+   "exit_status": 1,
+   "fault_reason": "super_mmio_window_access_refused (RED-leg stand-in)",
+   "faulted": true,
+   "ksys_word_after": 3,
+   "mode_final": "SUPER",
+   "output": [
+    7
+   ]
+  },
+  "K2_red": {
+   "exit_status": 1,
+   "fault_reason": "super_mmio_window_access_refused (RED-leg stand-in)",
+   "faulted": true,
+   "ksys_word_after": 3,
+   "mode_final": "SUPER",
+   "output": [
+    7
+   ]
+  }
+ },
+ "results_md5": "6ebd72a3ddfb4a670a671d48b8c7987c"
+}

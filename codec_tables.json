@@ -1,0 +1,75 @@
+{
+  "magic": "VAC-CODEC",
+  "version": 1,
+  "layers": {
+    "phoneme": {
+      "description": "39 ARPAbet phoneme templates for semantic encoding",
+      "throughput_chars_per_sec": 40,
+      "fidelity": "semantic_human_legible",
+      "duration_per_symbol_ms": 20,
+      "sample_rate": 44100,
+      "phonemes": {
+        "AA": {"ipa": "ɑ", "type": "vowel", "f1": 750, "f2": 1100},
+        "AE": {"ipa": "æ", "type": "vowel", "f1": 650, "f2": 1800},
+        "AH": {"ipa": "ʌ", "type": "vowel", "f1": 600, "f2": 1200},
+        "AO": {"ipa": "ɔ", "type": "vowel", "f1": 500, "f2": 900},
+        "AW": {"ipa": "aʊ", "type": "diphthong", "start": 750, "end": 300},
+        "AY": {"ipa": "aɪ", "type": "diphthong", "start": 750, "end": 300},
+        "B": {"ipa": "b", "type": "stop", "burst_freq": 600, "closure": 0.3},
+        "CH": {"ipa": "tʃ", "type": "stop", "burst_freq": 2000, "closure": 0.35},
+        "D": {"ipa": "d", "type": "stop", "burst_freq": 1000, "closure": 0.3},
+        "DH": {"ipa": "ð", "type": "fricative", "lo": 1500, "hi": 2000},
+        "EH": {"ipa": "ɛ", "type": "vowel", "f1": 550, "f2": 1700},
+        "ER": {"ipa": "ɝ", "type": "vowel", "f1": 500, "f2": 1400},
+        "EY": {"ipa": "eɪ", "type": "diphthong", "start": 550, "end": 300},
+        "F": {"ipa": "f", "type": "fricative", "lo": 1000, "hi": 1500},
+        "G": {"ipa": "ɡ", "type": "stop", "burst_freq": 1300, "closure": 0.3},
+        "HH": {"ipa": "h", "type": "fricative", "lo": 500, "hi": 1500},
+        "IH": {"ipa": "ɪ", "type": "vowel", "f1": 400, "f2": 2100},
+        "IY": {"ipa": "i", "type": "vowel", "f1": 300, "f2": 2300},
+        "JH": {"ipa": "dʒ", "type": "stop", "burst_freq": 1800, "closure": 0.25},
+        "K": {"ipa": "k", "type": "stop", "burst_freq": 1500, "closure": 0.4},
+        "L": {"ipa": "l", "type": "semivowel", "start": 400, "end": 600},
+        "M": {"ipa": "m", "type": "nasal", "freq": 300, "bandwidth": 50},
+        "N": {"ipa": "n", "type": "nasal", "freq": 400, "bandwidth": 60},
+        "NG": {"ipa": "ŋ", "type": "nasal", "freq": 500, "bandwidth": 70},
+        "OW": {"ipa": "oʊ", "type": "diphthong", "start": 500, "end": 300},
+        "OY": {"ipa": "ɔɪ", "type": "diphthong", "start": 500, "end": 300},
+        "P": {"ipa": "p", "type": "stop", "burst_freq": 800, "closure": 0.4},
+        "R": {"ipa": "ɹ", "type": "semivowel", "start": 500, "end": 400},
+        "S": {"ipa": "s", "type": "fricative", "lo": 4000, "hi": 5000},
+        "SH": {"ipa": "ʃ", "type": "fricative", "lo": 2500, "hi": 3500},
+        "T": {"ipa": "t", "type": "stop", "burst_freq": 1200, "closure": 0.4},
+        "TH": {"ipa": "θ", "type": "fricative", "lo": 2000, "hi": 2500},
+        "UH": {"ipa": "ʊ", "type": "vowel", "f1": 400, "f2": 800},
+        "UW": {"ipa": "u", "type": "vowel", "f1": 300, "f2": 900},
+        "V": {"ipa": "v", "type": "fricative", "lo": 800, "hi": 1200},
+        "W": {"ipa": "w", "type": "semivowel", "start": 300, "end": 500},
+        "Y": {"ipa": "j", "type": "semivowel", "start": 600, "end": 300},
+        "Z": {"ipa": "z", "type": "fricative", "lo": 3000, "hi": 4000},
+        "ZH": {"ipa": "ʒ", "type": "fricative", "lo": 2000, "hi": 2800}
+      }
+    },
+    "byte": {
+      "description": "16-tone MFSK for bit-perfect data encoding",
+      "throughput_bytes_per_sec": 24,
+      "fidelity": "bit_perfect",
+      "duration_per_symbol_ms": 20,
+      "sample_rate": 44100,
+      "num_tones": 16,
+      "base_frequency": 800.0,
+      "frequency_step": 150.0,
+      "frequencies": [800, 950, 1100, 1250, 1400, 1550, 1700, 1850, 2000, 2150, 2300, 2450, 2600, 2750, 2900, 3050],
+      "encoding": {
+        "bits_per_symbol": 4,
+        "symbols_per_byte": 2,
+        "byte_format": "high_nibble_then_low_nibble"
+      }
+    },
+    "dual_band": {
+      "description": "Combined phoneme+byte encoding for human-machine communication",
+      "phoneme_band_hz": [500, 3000],
+      "byte_band_hz": [4000, 8000]
+    }
+  }
+}

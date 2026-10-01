@@ -1,0 +1,34 @@
+{
+  "round": 8,
+  "title": "GLYPH-AS-LINUX: make the desktop work as well as Linux (operator direction, verbatim: 'i need you to make this work as good a linux')",
+  "authority": "Operator direct order 2026-09-24. Build-only mode standing; this is the new north star superseding 'desktop floor complete' as the working goal. The floor is done; Linux-parity is the mountain.",
+  "strategy": "Close the gap between glyph-sh and a daily-usable shell in measured layers. Each layer: RED-first gate, receipt, no engine regression. Order chosen by user pain: what makes a shell unusable first, fixed first.",
+  "layers": [
+    {
+      "id": "L1-PERSONALITY",
+      "title": "Shell personality: argv verbs, real files by name, pipes-light",
+      "brief": "glyph-sh today: 5 single-letter verbs, one fixed write path, one fixed read path. L1 makes it a shell: (a) verbs become words (echo/speak/write/read/ls/cp/mv/rm/cat/wc/head/tail/grep/time/date/which/env/pwd/cd) parsed host-side INTO the existing glyph dispatch program — the GPU still executes the command body, the parser just routes argv; (b) per-file paths: w/r take a filename argument via the existing FILE_WRITE/FILE_READ syscalls (0x03/0x04 already accept path_addr — the shell program currently hardcodes one path; extend the dispatch chain with a second ST region for argv-path, SE021 pattern, ~70 instrs measured precedent); (c) ERR:UNKNOWN_CMD grammar unchanged and re-gated.",
+      "gate": "tests/test_l1_shell_personality.py — RED-first on today's tree (ls: ERR:UNKNOWN_CMD today, GREEN after). Legs: word-verb echo/speak/write/read byte-exact vs single-letter forms; per-file w/r on 3 distinct names + read-back; ls lists what w created; cp/mv/rm round-trip; cat/wc/head/tail/grep on a 3-line fixture (coreutils already run on GPU — now argv-reachable); time/date return epoch (BK-16 becomes an L1 dependency); pwd/env/which return sane strings. All natural-sentence pipes still ERR:UNKNOWN_CMD. Twin: shell program changes are glyph-side, so WGSL twin parity re-pinned same-commit (CALLR lesson). Receipt: RECEIPT_L1_shell_personality.md."
+    },
+    {
+      "id": "L2-FILES",
+      "title": "A real filesystem: ls -l semantics, dirs, append, rename-in-place",
+      "brief": "BK-15 SYSCALL_FILE_LIST (0x13) lands FIRST (already spec'd, containment per 0x07/0x12 ruling); then L1's ls upgrades to ls with size/mtime columns from FSTAB (GH-8b already tracks start/len — extend with created-ts word); mkdir/rmdir on host-side scoped dirs (GLYPH_RUN_ALLOW containment, same ruling); append-mode write (BK-7 syscall exists — shell flag >>); rm -f quiet semantics. No symlinks, no permissions — documented non-goals for this layer.",
+      "gate": "tests/test_l2_files.py — ls -l shows name+size+mtime for 3 created files, sorted by name; mkdir/rmdir/mv-across-dirs under an allow-scoped root; >> append byte-exact vs BK-7 whole-file read; rm of nonexistent -> error, not silence; all L1 gates stay green. RED-first (ls -l column format absent today). Receipt: RECEIPT_L2_files.md."
+    },
+    {
+      "id": "L3-PROCESS",
+      "title": "Pipes and job control-light: |, >, <, && between GPU programs",
+      "brief": "Kernel-side plumbing: stdout of program A feeds stdin ring of program B (the 16-byte stdout window and INPUT_DATA ring already exist — L3 is the host-side splice loop with backpressure, documented window-size limits); > and < redirect to files via 0x03/0x04; && and ; sequencing; exit codes surface as $? (0x05 EXIT status already lands in engine state — plumb to shell var). NOT in this layer: signals, background jobs,Job control — documented non-goals.",
+      "gate": "tests/test_l3_pipes.py — 'cat f | wc' byte-exact vs host truth on a 3-line fixture; 'echo hi > out' then 'cat out'; 'cat missing && echo no' short-circuits; $? reflects EXIT status; backpressure: a program producing 3x window bytes across multiple turns terminates, not hangs. RED-first. Receipt: RECEIPT_L3_pipes.md."
+    },
+    {
+      "id": "L4-DESKTOP",
+      "title": "Desktop environment: multiple consoles, glyph-native text editor, app launcher",
+      "brief": "Tk surface grows from 1 window to a desktop shell: tabbed/file-backed consoles (each tab = its own TextConsole ring + its own CPU state, same dispatch program); a glyph-native text editor (open/save via 0x03/0x04 — the FIRST GUI app running its I/O through GPU syscalls, not host text widgets); an app launcher tab listing coreutils + editor; session persistence (console rings + open files saved to a session dir, restored on relaunch). Window layout, focus, keybinding sanity — this is where operator pixel-eyes verification happens FIRST (L4 receipt holds that leg open like the GUI receipt did).",
+      "gate": "tests/test_l4_desktop.py (headless-able parts): editor open->edit->save->cat byte-exact through GPU syscalls; 2 consoles isolated (write in A invisible in B); session save/restore round-trip; launcher lists every L1 verb. Pixel/layout legs: operator-eyes PENDING, same pattern as glyph_desktop receipt. RED-first on each headless leg. Receipt: RECEIPT_L4_desktop.md."
+    }
+  ],
+  "order": "L1 -> L2 -> L3 -> L4, one layer landed+receipted before the next starts. BK-16 (time/date) folds into L1. BK-15 folds into L2. BK-18 (suite OOM) jumps the queue to NEXT-TICK after L1 — the suite must stay runnable as test count grows. BK-21 after L2.",
+  "success_criterion": "A user sits at glyph_desktop.py and, without reading source: edits a file, searches it, saves it, runs it, sees output — all I/O through the GPU OS. That is 'works as good as Linux' for this product's scope (single machine, single user, no network/USB/multiuser — documented non-goals carried from PRODUCT_ROADMAP.md)."
+}
