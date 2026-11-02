@@ -1,0 +1,8 @@
+  [ok]   stage1 ran
+  [ok]   stage2 ran and reached the check
+  [ok]   container line printed  -- tail='GE2\r\nBM903-S2 ENTER\r\nBM903-S2 PMODE\r\nBM903-S2 A20 OK\r\nBM903-S2 CONTAINER=00000000 EXP=32435850\r\n'
+  [ok]   names the medium it was handed  -- wire 00000000, sector 0 of a PXC1 medium holds 00000000
+  [ok]   names what it wanted  -- EXP=32435850, the loader was built for 32435850
+  [ok]   nothing after the refusal  -- the loader hung instead of walking on
+pxc1_front_end: GREEN  wall=0.3s boots=1 predicted ECC=None PAR=None verdict=REFUSE-BEFORE-WALK
+    trace (last boot, 0.25 s polling): s2 enter@0.3s refused@0.3s

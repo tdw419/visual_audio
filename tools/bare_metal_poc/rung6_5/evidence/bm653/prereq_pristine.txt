@@ -1,0 +1,139 @@
+# `reproduce_prereqs.sh` in a pristine checkout — and BM653's pair over the tree it made
+
+Made 2026-09-20. The claim this file exists to support is narrow and worth
+stating exactly: a closed row can be brought up from **the commit**, given one
+vendor blob, with no working files hand-carried from the lane that built it.
+
+The commands, in this order, in a scratch tree that held nothing but committed
+source:
+
+    T=/tmp/bm000_cold
+    git -C <repo> archive HEAD tools/bare_metal_poc | tar -x -C $T
+    mkdir -p $T/tools/bare_metal_poc/rung7           # rung7/ is untracked: absent
+    cp rung7/core.gz $T/tools/bare_metal_poc/rung7/  # the one input not in git
+    cd $T/tools/bare_metal_poc && bash reproduce_prereqs.sh   # log 1
+    cd rung6_5 && bash run_bm653_e2e.sh                        # log 2
+
+Two facts about the tree this was run in, both true of the commit it describes
+and recorded here rather than hidden: `rung7/` has no tracked files, so a clean
+checkout has no `rung7/` **directory** until it is made and fed — and
+`reproduce_prereqs.sh` itself was untracked when this ran, so it was copied in
+by hand. Committing it is what removes the second one. Disk: 91 % full, 3.3 GB
+free, so both scratch trees were deleted after these captures.
+
+## Log 1 — `reproduce_prereqs.sh`, cold, timed
+
+    core.gz: sha256 7f1e370dd4e489fd..., the pinned input
+    ----------------------------------------------------------------
+    STEP 1-4  rung9: the medium and its pixel payload
+      [OK   ] rung9/bm903_mkimg.py  | wrote bm903_medium.raw: 13565440 B = 26495 sectors (kernel@17 4295328 B, initrd@8407 9260807 B)
+      [OK   ] rung9/bm903_mkimg_px.py  | wrote bm903_medium_px.raw: 13640192 B = 26641 sectors, payload 13631488 B / 832 groups, CRC=393950AA; walk replay + sub-image slotting + CRC parity all green
+      [OK   ] rung9/bm903_pxcodec.py  | px payload 13631488 B = 832 groups = 208 banks, plane 3407872 B (6656 sectors), base LBA 17, medium 26641 sectors, CRC=393950AA
+    ----------------------------------------------------------------
+    STEP 5-6  rung6: the ECC fork of the payload, and its 8 fixture media
+      [OK   ] rung6/bm602_pxcodec.py  | corrector selftest: 10 codeword classes pinned: single-symbol faults fixed, a two-symbol codeword confidently mis-fixed, and the equal-triple fault reported as clean -- the last two for the gate to catch
+      [OK   ] rung6/bm602_mkimg.py  | wrote bm602_medium_px.raw (23,863,808 B = 46,609 sectors), 8 fixtures and bm602_fixtures.json
+    ----------------------------------------------------------------
+    LANDMARKS: the bytes every closed row downstream measures against
+      [OK   ] bm903_stage1.bin sha256 f0e7d7e1c6ab4536..., the bytes the gates were gated on
+      [OK   ] bm903_stage2_px.bin sha256 2970d2477792d73f..., the bytes the gates were gated on
+      [OK   ] bm903_px_payload.bin sha256 e6ebe1ab6574a011..., the bytes the gates were gated on
+      [OK   ] bm903_medium_px.raw sha256 c8c30130ddc9a207..., the bytes the gates were gated on
+      [OK   ] bm602_px_payload.bin sha256 e6ebe1ab6574a011..., the bytes the gates were gated on
+      [OK   ] bm602_medium_px.raw sha256 32efd1deca4638f9..., the bytes the gates were gated on
+    ----------------------------------------------------------------
+    TRACKED: what the steps rewrote must be what was checked out
+      [OK   ] all 6 generated-but-tracked files are byte-identical to the checkout
+    ================================================================
+    PREREQ_STATUS=GREEN
+    Now runnable, each from its own directory:
+      rung6:    bash run_bm602_e2e.sh
+      rung6_5:  bash run_bm653_e2e.sh   (needs rung6/fixtures/ for its regression leg)
+      rung9:    bash run_bm903_e2e.sh   (boots; its own statics are already done here)
+      rung8:    python3 bm802_fixture.py            (host-only selftest; reads rung9/bm903_medium_px.raw)
+
+Cold, 35 s wall, 12/12 legs, no boots. The six landmarks are the same six
+sha256 prefixes the lane recorded when it built them by hand (`e6ebe1ab…` for
+both payloads is the one that matters downstream: BM653's "exactly 2,048 bytes
+differ" is a claim about a byte-exact ancestor). The TRACKED leg is what keeps
+the script honest about its own inputs — three of the six generated `.inc`/
+`.json` files are committed, so drift shows up here instead of as a mystery
+diff in a later row.
+
+## Log 2 — `rung6_5/run_bm653_e2e.sh` over that tree
+
+    [PASS] p1_refs  rc=0  0s    refs: 3 pinned, 0 problem(s)
+    ... pass 1: five statics green, then all seven boots green —
+        exec_green 59.1s boots=2, exec_image_repaired 58.6s boots=2,
+        exec_beeoff_control 1.5s, exec_two_symbol_in_image 1.5s,
+        exec_blind_spot_in_image 1.5s, exec_halt 45.0s, exec_scribbler 1.5s
+    [PASS] identity  rc=0  18s  IDENTITY: GREEN 49  RED 0
+    [PASS] bm602 clean  rc=0  ...
+    ... pass 2: same five statics green, same seven boots green —
+        exec_green 14.3s boots=1, exec_image_repaired 14.5s boots=1
+    [PASS] identity  rc=0  18s  IDENTITY: GREEN 49  RED 0
+    [PASS] bm602 clean  rc=0  15s
+    PASS 2: predictions re-derived from a clean rebuild are byte-identical to pass 1's, apart from the replay-duration line
+    PASS 2: clean
+    ================================================================
+    2 of 2 passes clean, 372 s wall
+    dumps landed: 18 files
+    evidence: evidence/bm653 (11 entries, plus transcripts/ and dumps/)
+    BM653_RUN_STATUS=GREEN
+
+The leg that used to disappear in a clean tree — the identity stage's
+comparison against rung9's working `_leg0` dumps — is now the preflight line
+`refs: 3 pinned, 0 problem(s)`, and both `IDENTITY: GREEN 49 RED 0` halves are
+the same 49 the lane scores in its own directory. That, plus BM602's 32/0
+after its own pin-and-land (`rung6/evidence/refs/`, recorded in
+`rung6/evidence/cleanroom/`), is the reference-hygiene class closed on both
+rows that had it.
+
+The only pass-to-pass variation is the Tiny Core autologin tty1/ttyS0 race:
+here pass 1 needed two boots each for `exec_green` and `exec_image_repaired`
+(59 s apiece) and pass 2 needed one (14 s), which is why the row measures with
+`BOOT_ATTEMPTS=8` and never asserts a boot count. The four refusal legs and the
+halt leg are identical every time. What this record does **not** claim: that
+`rung7/core.gz` is in git — it is not, and that gap is TASK_BM001's to ratify.
+
+## The refusals bite — four ways to break the input, each checked
+
+A gate that only ever prints OK is the defect this whole pass exists to remove,
+so each refusal leg was exercised rather than read. All four ran in the scratch
+tree above against a copy of the script; each exits 1, and the real script and
+input were restored afterwards.
+
+1. **`core.gz` replaced** (9,260,807 B of `/dev/urandom`, same size, so only the
+   content differs) — `rung7/core.gz sha256 35e6528194f1344b... != the pinned
+   7f1e370dd4e489fd...` then `REFUSE: the payload is derived from this file; a
+   different initrd is a different ancestor`, rc=1, before any step runs.
+2. **`core.gz` absent** — `REFUSE: no initrd, nothing can be built`, rc=1.
+3. **One landmark pin moved** (bit 0 of `bm903_stage1.bin`'s expected sha
+   flipped in the script) — `[RED ] rung9/bm903_stage1.bin sha256
+   f0e7d7e1c6ab4536... != the landed aaaaaaaa... -- rung9 bm903_mkimg.py did not
+   reproduce it. Stop: a row gate run on top of this would be measuring a
+   different ancestor.` then `PREREQ_STATUS=RED (1)`, rc=1. The message names
+   the step that owns the file, which is the `STEP_OF` table's whole job.
+4. **A generated-but-tracked file hand-edited** (one line appended to
+   `rung9/bm903_px_layout.inc`, the case BM602's receipt warns about — editing
+   a `.inc` the asm includes) — three REDs and `PREREQ_STATUS=RED (3)`, rc=1:
+   the loader step fails to assemble, its product therefore goes missing from
+   the landmark table, and the TRACKED leg reports the edit itself
+   (`moved under the regeneration: 4185c0a2c1cfbddb... -> c252f2dc7df65635...`).
+   The regeneration rewrites the file back to the committed bytes, so the tree
+   is healed by the next run — but not silently: the RED says so first.
+
+Test 3 is the closest analogue to what BM802's `bm802_pin_bitest.py` does for
+its own stage1 pin: a deliberately wrong expected value, and the check has to
+say so.
+
+## Post-commit re-check: the command list, exactly, with nothing copied in
+
+After `c0ad33a1` the same sequence was run again with the script coming out of
+the archive rather than the working tree — `git archive HEAD tools/bare_metal_poc
+| tar -x`, `mkdir -p rung7`, `cp core.gz`, `bash reproduce_prereqs.sh` — and
+nothing else. **`PREREQ_STATUS=GREEN`, 39 s, 12/12 legs.** That removes the
+second of the two caveats above; the first (`rung7/` having no tracked file, so
+the directory itself has to be made) stands, and is TASK_BM001's.
+
+

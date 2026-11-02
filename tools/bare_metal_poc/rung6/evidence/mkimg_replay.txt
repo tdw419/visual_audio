@@ -1,0 +1,15 @@
+  class        data+parity: scalar == codec, (1, 0), payload restored=True
+  class   two data symbols: scalar == codec, (1, 0), payload restored=False
+assembled: stage1 512 B with tag 32435850 read back from the bytes at 0x180, stage2 8192 B (8192 B container), warning-free
+plane buffers as the guest indexes them: PB0=0x30000 PB1=0x31000 PB2=0x32000 PB3=0x33000 PP1=0x38000 PP2=0x39000 PP4=0x3a000
+host replay of the 7-plane walk + pass 1: payload restored, ECC=0 PAR=0, CRC=393950AA == the gate constant (1.1 s); 0 of 832 groups needed the instruction-exact write order, 832 groups took the chunk-level skip and were spot-checked the slow way every 64th group
+scalar-vs-codec over all 3,407,872 codewords of the real payload: same counts, same bytes (1 s), plus the two-symbol class agreeing on WHICH byte it wrongly corrupted
+chunk-level skip vs per-offset scalar on the 128 KiB fault: ECC=0001FE1C PAR=00000000 both ways (1 s unpaced)
+  chunk_plane0_stuckff     ECC=00000FF4 PAR=00000000 CRC=393950AA -> PASS
+  chunk_plane1_stuck00     ECC=00000FF5 PAR=00000000 CRC=393950AA -> PASS
+  erase_block_128k         ECC=0001FE1C PAR=00000000 CRC=393950AA -> PASS
+  parity_chunk_stuckff     ECC=00000000 PAR=00000FF2 CRC=393950AA -> PASS
+  two_symbol_collision     ECC=00000001 PAR=00000000 CRC=B72A10FD -> FAIL
+  blind_spot_equal_triple  ECC=00000000 PAR=00000000 CRC=8E53C9D5 -> FAIL
+  pxc1_front_end           ECC=-- PAR=-- CRC=-- -> REFUSE-BEFORE-WALK
+wrote bm602_medium_px.raw (23,863,808 B = 46,609 sectors), 8 fixtures and bm602_fixtures.json

@@ -1,0 +1,9 @@
+1 exec_green        11.3s anchor=YES 1,355 B  s2 enter@0.3s, walk done@1.3s, verdict@1.3s, banner@1.3s, exec@1.3s, handoff@1.3s
+2 exec_scribbler    11.3s anchor=YES 1,353 B  s2 enter@0.3s, walk done@1.3s, verdict@1.3s, banner@1.3s, exec@1.3s, handoff@1.3s
+3 exec_green        75.1s anchor=NO  1,106 B  s2 enter@0.3s, walk done@1.3s, verdict@1.3s, banner@1.3s, exec@1.3s, handoff@1.3s
+    no shell; last lines: [1;32mSetting keymap to [1;35mus[1;32m Done.[0;39m // [1;32mSetting hostname to [1;35mbox[0;39m [1;32mDone.[0;39m // login[497]: root login on 'tty1'
+4 exec_scribbler    11.8s anchor=YES 1,365 B  s2 enter@0.3s, walk done@1.3s, verdict@1.3s, banner@1.3s, exec@1.3s, handoff@1.3s
+5 exec_green        11.3s anchor=YES 1,355 B  s2 enter@0.3s, walk done@1.3s, verdict@1.3s, banner@1.3s, exec@1.3s, handoff@1.3s
+6 exec_scribbler    11.8s anchor=YES 1,365 B  s2 enter@0.3s, walk done@1.3s, verdict@1.3s, banner@1.3s, exec@1.3s, handoff@1.3s
+7 exec_green        11.3s anchor=YES 1,355 B  s2 enter@0.3s, walk done@1.3s, verdict@1.3s, banner@1.3s, exec@1.3s, handoff@1.3s
+8 exec_scribbler    11.8s anchor=YES 1,400 B  s2 enter@0.3s, walk done@1.3s, verdict@1.3s, banner@1.3s, exec@1.3s, handoff@1.3s

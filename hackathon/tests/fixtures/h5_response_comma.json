@@ -1,0 +1,16 @@
+{
+ "id": "chatcmpl-h5-recorded",
+ "object": "chat.completion",
+ "created": 1769472000,
+ "model": "muse-spark-1.3",
+ "choices": [
+  {
+   "index": 0,
+   "message": {
+    "role": "assistant",
+    "content": "```asm\nLDI r10, 0\nLDI r8, 1\nADD r10, r8\nHALT\n```\nSum two values."
+   },
+   "finish_reason": "stop"
+  }
+ ]
+}

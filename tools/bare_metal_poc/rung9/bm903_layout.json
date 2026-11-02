@@ -1,0 +1,17 @@
+{
+ "kernel_lba": 17,
+ "kernel_sectors": 8390,
+ "kernel_bytes": 4295328,
+ "payload_lba": 45,
+ "payload_sectors": 8362,
+ "payload_bytes": 4280992,
+ "initrd_lba": 8407,
+ "initrd_sectors": 18088,
+ "initrd_bytes": 9260807,
+ "initrd_addr": 268435456,
+ "stage2_sectors": 16,
+ "zp_addr": 80560,
+ "cmdline_addr": 129024,
+ "e820_entries": 7,
+ "medium_sectors": 26495
+}

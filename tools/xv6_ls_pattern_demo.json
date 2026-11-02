@@ -1,0 +1,129 @@
+{
+  "command": "ls",
+  "timestamp": 1787770925.7950873,
+  "serial_output": "\n$ ls\n.               1 1 1\n..              1 1 512\nREADME          1 1 2046\ncat             1 1 12472\necho            1 1 13004\ngrep            1 1 13856\ninit            1 1 12492\nkill            1 1 12628\nln              1 1 12980\nls              1 1 14176\nmkdir           1 1 12856\nrm              1 1 13116\nsh              1 1 21952\nstressfs        1 1 12548\nusertests        1 1 15552\nwc              1 1 13104\nzombie          1 1 12636\n$\n",
+  "command_output": [
+    ".               1 1 1",
+    "..              1 1 512",
+    "README          1 1 2046",
+    "cat             1 1 12472",
+    "echo            1 1 13004",
+    "grep            1 1 13856",
+    "init            1 1 12492",
+    "kill            1 1 12628",
+    "ln              1 1 12980",
+    "ls              1 1 14176",
+    "mkdir           1 1 12856",
+    "rm              1 1 13116",
+    "sh              1 1 21952",
+    "stressfs        1 1 12548",
+    "usertests        1 1 15552",
+    "wc              1 1 13104",
+    "zombie          1 1 12636"
+  ],
+  "metadata": {
+    "output_lines": 17,
+    "files_listed": 16,
+    "serial_length": 444,
+    "files": [
+      {
+        "name": ".",
+        "inode": 1,
+        "size": 1
+      },
+      {
+        "name": "..",
+        "inode": 1,
+        "size": 512
+      },
+      {
+        "name": "README",
+        "inode": 1,
+        "size": 2046
+      },
+      {
+        "name": "cat",
+        "inode": 1,
+        "size": 12472
+      },
+      {
+        "name": "echo",
+        "inode": 1,
+        "size": 13004
+      },
+      {
+        "name": "grep",
+        "inode": 1,
+        "size": 13856
+      },
+      {
+        "name": "init",
+        "inode": 1,
+        "size": 12492
+      },
+      {
+        "name": "kill",
+        "inode": 1,
+        "size": 12628
+      },
+      {
+        "name": "ln",
+        "inode": 1,
+        "size": 12980
+      },
+      {
+        "name": "ls",
+        "inode": 1,
+        "size": 14176
+      },
+      {
+        "name": "mkdir",
+        "inode": 1,
+        "size": 12856
+      },
+      {
+        "name": "rm",
+        "inode": 1,
+        "size": 13116
+      },
+      {
+        "name": "sh",
+        "inode": 1,
+        "size": 21952
+      },
+      {
+        "name": "stressfs",
+        "inode": 1,
+        "size": 12548
+      },
+      {
+        "name": "usertests",
+        "inode": 1,
+        "size": 15552
+      },
+      {
+        "name": "wc",
+        "inode": 1,
+        "size": 13104
+      },
+      {
+        "name": "zombie",
+        "inode": 1,
+        "size": 12636
+      }
+    ],
+    "columns": 6,
+    "column_widths": [
+      14,
+      4,
+      2,
+      2,
+      5,
+      6
+    ],
+    "instructions_executed": 15234,
+    "memory_reads": 245,
+    "memory_writes": 189,
+    "duration_ms": 52
+  }
+}

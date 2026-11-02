@@ -1,0 +1,12 @@
+stage2: 5 deltas, 13,934 B proven text -> 19,424 B (+5,490 B)
+  +  165 B  header: name the fork at the top of the proven text
+  + 1037 B  contract: the arg-block table, shared by name with bm651_img2.asm
+  + 4022 B  BM-651 leg: jump into the verified image, between the write and the halt
+  +  122 B  strings: the two refusal labels and the verdict
+  +  144 B  witness words: stored only by the exec leg, after the write
+consts: 4 deltas, 1,074 B -> 1,490 B
+  +  265 B  docstring: which rung this emitter feeds
+  +   50 B  image path: argv, so one emitter builds every variant
+  +   19 B  emit EXPECTED_EXEC_NID beside EXPECTED_IMG2_CRC
+  +   82 B  derive crc/nid once
+round-trip: undoing every delta newest-first reproduces rung5/stage2.asm and rung5/rung5_consts.py byte-for-byte

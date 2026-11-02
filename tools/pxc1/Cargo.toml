@@ -1,0 +1,31 @@
+[package]
+name = "pxc1"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+image = "0.24"
+sha2 = "0.10"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+hex = "0.4"
+tempfile = "3"
+rayon = "1"
+lru = "0.12"
+
+[lib]
+name = "pxc1"
+path = "src/lib.rs"
+
+[[bin]]
+name = "pxc1-encode"
+path = "src/bin/encode.rs"
+
+[[bin]]
+name = "pxc1-decode"
+path = "src/bin/decode.rs"
+
+[[bin]]
+name = "pxc1-verify"
+path = "src/bin/verify.rs"

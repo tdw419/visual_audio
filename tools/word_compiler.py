@@ -1,0 +1,718 @@
+#!/usr/bin/env python3
+"""
+word_compiler.py — Compile words from text to phoneme-based UPIC voices.
+
+Fetches pronunciations from CMUdict (135k+ words), synthesizes each word as
+a sequence of phoneme envelopes, and caches the results to voicebook/ for
+fast reuse. Words are normalized to lowercase and mapped to ARPAbet phonemes.
+
+TASK_P001: Added 5ms crossfade between phonemes for smooth transitions.
+"""
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import sys
+import tempfile
+import urllib.request
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
+import soundfile as sf
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src'))
+
+from upic_engine import UPICProject, UPICVoice, UPICWaveformTable, UPICEnvelope, create_basic_waveform
+import phonemes
+
+# TASK_R008: Neural synthesis integration
+_neural_model = None
+_PhonemeEnvelopeMLP = None
+_predict_envelope = None
+_DEFAULT_WEIGHTS_PATH = None
+_NEURAL_SYNTHESIS_AVAILABLE = False
+
+try:
+    from neural_synthesis import PhonemeEnvelopeMLP, predict_envelope, DEFAULT_WEIGHTS_PATH
+    _PhonemeEnvelopeMLP = PhonemeEnvelopeMLP
+    _predict_envelope = predict_envelope
+    _DEFAULT_WEIGHTS_PATH = DEFAULT_WEIGHTS_PATH
+    _NEURAL_SYNTHESIS_AVAILABLE = True
+except ImportError:
+    _NEURAL_SYNTHESIS_AVAILABLE = False
+    print("WARNING: neural_synthesis module not available, falling back to static envelopes")
+
+SAMPLE_RATE = 44100
+CMUDICT_URL = "https://raw.githubusercontent.com/cmusphinx/cmudict/master/cmudict.dict"
+CMUDICT_PATH = os.path.expanduser("~/.cmudict/cmudict.dict")
+VOICEBOOK_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'voicebook')
+
+# TASK_P001: 5ms crossfade between phonemes
+CROSSFADE_DURATION_MS = 5.0
+
+# Singleton cache for CMUdict (prevents re-parsing 126k words on every call)
+_cmudict_cache: Optional[Dict[str, List[str]]] = None
+_cmudict_cache_path: Optional[str] = None
+
+
+def crossfade_audio(a: np.ndarray, b: np.ndarray, fade_samples: int) -> np.ndarray:
+    """
+    Crossfade two audio segments using linear interpolation.
+    
+    Args:
+        a: First audio segment
+        b: Second audio segment
+        fade_samples: Number of samples to crossfade
+    
+    Returns:
+        Crossfaded audio (len(a) + len(b) - fade_samples)
+    """
+    if fade_samples == 0:
+        return np.concatenate([a, b])
+    
+    # Determine actual fade length (don't exceed segment lengths)
+    fade_len = min(fade_samples, len(a), len(b))
+    
+    if fade_len == 0:
+        return np.concatenate([a, b])
+    
+    # Create crossfade windows
+    fade_out = np.linspace(1.0, 0.0, fade_len)
+    fade_in = np.linspace(0.0, 1.0, fade_len)
+    
+    # Crossfade the overlapping region
+    overlap_a = a[-fade_len:] * fade_out
+    overlap_b = b[:fade_len] * fade_in
+    overlap = overlap_a + overlap_b
+    
+    # Concatenate: start of a + crossfade + rest of b
+    result = np.concatenate([
+        a[:-fade_len],
+        overlap,
+        b[fade_len:]
+    ])
+    
+    return result
+
+
+def get_neural_model():
+    """
+    Lazy-load the neural phoneme-to-envelope model.
+    
+    Returns:
+        PhonemeEnvelopeMLP instance or None if not available
+    """
+    global _neural_model
+    
+    if _neural_model is not None:
+        return _neural_model
+    
+    if not _NEURAL_SYNTHESIS_AVAILABLE or _PhonemeEnvelopeMLP is None or _DEFAULT_WEIGHTS_PATH is None:
+        return None
+    
+    if os.path.exists(_DEFAULT_WEIGHTS_PATH):
+        try:
+            _neural_model = _PhonemeEnvelopeMLP.load(_DEFAULT_WEIGHTS_PATH)
+            print(f"Loaded neural synthesis model from {_DEFAULT_WEIGHTS_PATH}")
+            return _neural_model
+        except Exception as e:
+            print(f"WARNING: Failed to load neural synthesis model: {e}")
+            return None
+    else:
+        print(f"WARNING: Neural synthesis weights not found at {_DEFAULT_WEIGHTS_PATH}")
+        return None
+
+
+def get_envelope_for_phoneme(phoneme: str, prev_phoneme: str = 'SIL', 
+                             next_phoneme: str = 'SIL', use_neural: bool = True) -> UPICEnvelope:
+    """
+    Get an envelope for a phoneme, with optional coarticulation via neural model.
+    
+    Args:
+        phoneme: The target phoneme (e.g., 'AA', 'T', 'SH')
+        prev_phoneme: Preceding phoneme (default: 'SIL')
+        next_phoneme: Following phoneme (default: 'SIL')
+        use_neural: Use neural model if available (default: True)
+    
+    Returns:
+        UPICEnvelope for the phoneme
+    """
+    # Try neural synthesis first
+    if use_neural and _NEURAL_SYNTHESIS_AVAILABLE and _predict_envelope is not None:
+        model = get_neural_model()
+        if model is not None:
+            try:
+                env = _predict_envelope(model, prev_phoneme, phoneme, next_phoneme)
+                return env
+            except Exception as e:
+                print(f"  Warning: Neural prediction failed for '{phoneme}': {e}, falling back")
+    
+    # Fallback to static envelope
+    all_envelopes = phonemes.create_phoneme_envelopes()
+    if phoneme in all_envelopes:
+        return all_envelopes[phoneme]
+    else:
+        raise ValueError(f"Unknown phoneme '{phoneme}'")
+
+
+def get_cmudict() -> Dict[str, List[str]]:
+    """
+    Get cached CMUdict (singleton pattern).
+
+    Returns:
+        Dict mapping lowercase word to list of phonemes
+    """
+    global _cmudict_cache, _cmudict_cache_path
+
+    cmudict_path = ensure_cmudict()
+
+    # Return cached copy if path unchanged
+    if _cmudict_cache is not None and _cmudict_cache_path == cmudict_path:
+        return _cmudict_cache
+
+    # Parse and cache
+    _cmudict_cache = parse_cmudict(cmudict_path)
+    _cmudict_cache_path = cmudict_path
+    return _cmudict_cache
+
+
+def ensure_cmudict() -> str:
+    """
+    Download CMUdict if not present.
+    
+    Returns:
+        Path to cmudict file
+    """
+    if os.path.exists(CMUDICT_PATH):
+        return CMUDICT_PATH
+    
+    print(f"Downloading CMUdict from {CMUDICT_URL}...")
+    os.makedirs(os.path.dirname(CMUDICT_PATH), exist_ok=True)
+    
+    try:
+        urllib.request.urlretrieve(CMUDICT_URL, CMUDICT_PATH)
+        print(f"Downloaded CMUdict to {CMUDICT_PATH}")
+        return CMUDICT_PATH
+    except Exception as e:
+        raise RuntimeError(f"Failed to download CMUdict: {e}")
+
+
+def parse_cmudict(path: str) -> Dict[str, List[str]]:
+    """
+    Parse CMUdict into a word -> phonemes mapping.
+    
+    Args:
+        path: Path to cmudict.dict file
+    
+    Returns:
+        Dict mapping lowercase word to list of phonemes
+    """
+    words = {}
+    with open(path, 'r', encoding='latin-1') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith(';;;'):
+                continue
+            
+            # Split on whitespace (first part is word, rest are phonemes)
+            parts = line.split()
+            if len(parts) < 2:
+                continue
+            
+            # Word may have stress markers in parentheses, strip them
+            word = parts[0].lower()
+            # Remove variant markers (e.g., "word(2)" -> "word")
+            word = word.split('(')[0]
+            
+            # Extract phonemes (remove stress digits from vowels)
+            phonemes_list = []
+            for ph in parts[1:]:
+                # Remove trailing stress markers (0, 1, 2)
+                ph_clean = ''.join(c for c in ph if not c.isdigit())
+                phonemes_list.append(ph_clean)
+            
+            # Keep first pronunciation for simplicity
+            if word not in words:
+                words[word] = phonemes_list
+    
+    print(f"Parsed {len(words)} words from CMUdict")
+    return words
+
+
+def get_phonemes_for_word(word: str, cmudict: Dict[str, List[str]]) -> List[str]:
+    """
+    Get ARPAbet phonemes for a word, with smart fallback to compound-aware G2P.
+
+    Uses smart_g2p.get_phonemes_smart() which supports:
+    - Direct CMUdict lookup
+    - Hyphenated compounds (micro-kernel)
+    - Known compound splits (websocket -> web + socket)
+    - Prefix/suffix decomposition
+    - Improved naive fallback
+
+    Args:
+        word: The word to look up (case-insensitive)
+        cmudict: Parsed CMUdict mapping
+
+    Returns:
+        List of phonemes for the word
+    """
+    try:
+        from smart_g2p import get_phonemes_smart
+        return get_phonemes_smart(word, cmudict)
+    except ImportError:
+        # Fallback to old simple grapheme rules if smart_g2p not available
+        print(f"  Warning: smart_g2p unavailable, using naive fallback for '{word}'")
+        word_lower = word.lower()
+
+        if word_lower in cmudict:
+            return cmudict[word_lower]
+
+        fallback_phonemes = []
+        for char in word_lower:
+            if char == 'a':
+                fallback_phonemes.append('AE')
+            elif char == 'b':
+                fallback_phonemes.append('B')
+            elif char == 'c':
+                fallback_phonemes.append('K')
+            elif char == 'd':
+                fallback_phonemes.append('D')
+            elif char == 'e':
+                fallback_phonemes.append('EH')
+            elif char == 'f':
+                fallback_phonemes.append('F')
+            elif char == 'g':
+                fallback_phonemes.append('G')
+            elif char == 'h':
+                fallback_phonemes.append('HH')
+            elif char == 'i':
+                fallback_phonemes.append('IH')
+            elif char == 'j':
+                fallback_phonemes.append('JH')
+            elif char == 'k':
+                fallback_phonemes.append('K')
+            elif char == 'l':
+                fallback_phonemes.append('L')
+            elif char == 'm':
+                fallback_phonemes.append('M')
+            elif char == 'n':
+                fallback_phonemes.append('N')
+            elif char == 'o':
+                fallback_phonemes.append('OW')
+            elif char == 'p':
+                fallback_phonemes.append('P')
+            elif char == 'q':
+                fallback_phonemes.append('K')
+                fallback_phonemes.append('W')
+            elif char == 'r':
+                fallback_phonemes.append('R')
+            elif char == 's':
+                fallback_phonemes.append('S')
+            elif char == 't':
+                fallback_phonemes.append('T')
+            elif char == 'u':
+                fallback_phonemes.append('UH')
+            elif char == 'v':
+                fallback_phonemes.append('V')
+            elif char == 'w':
+                fallback_phonemes.append('W')
+            elif char == 'x':
+                fallback_phonemes.append('K')
+                fallback_phonemes.append('S')
+            elif char == 'y':
+                fallback_phonemes.append('Y')
+            elif char == 'z':
+                fallback_phonemes.append('Z')
+
+        if not fallback_phonemes:
+            print(f"  Warning: No phonemes found for '{word}'")
+
+        return fallback_phonemes
+
+
+def build_word_project_with_crossfade(word: str, phonemes_list: List[str], use_neural: bool = True, voice_profile: str = 'sine') -> np.ndarray:
+    """
+    Build a word from phonemes with crossfade between adjacent phonemes.
+    
+    TASK_P001: Synthesizes each phoneme individually and applies 5ms crossfade
+    between adjacent phonemes to eliminate clicking artifacts.
+    
+    TASK_R008: Uses coarticulated phoneme envelopes when neural model is available.
+    Each phoneme's envelope is predicted based on its left and right neighbors.
+    
+    Args:
+        word: The word being synthesized
+        phonemes_list: List of ARPAbet phonemes
+        use_neural: Use neural model for coarticulation (default: True)
+        voice_profile: Waveform type (e.g., 'sine', 'triangle', 'sawtooth')
+    
+    Returns:
+        Audio array with crossfaded phonemes
+    """
+    if not phonemes_list:
+        return np.array([])
+    
+    # Calculate crossfade length in samples
+    crossfade_samples = int(CROSSFADE_DURATION_MS / 1000.0 * SAMPLE_RATE)
+    
+    # Get amplitude envelopes
+    try:
+        amp_envelopes = phonemes.create_phoneme_amplitude_envelopes()
+    except AttributeError:
+        amp_envelopes = {}
+    
+    # Synthesize each phoneme individually with coarticulation
+    phoneme_audios = []
+    for i, ph in enumerate(phonemes_list):
+        # Determine neighbors for coarticulation
+        prev_ph = phonemes_list[i - 1] if i > 0 else 'SIL'
+        next_ph = phonemes_list[i + 1] if i < len(phonemes_list) - 1 else 'SIL'
+        
+        # Get envelope (neural or fallback to static)
+        try:
+            ph_envelope = get_envelope_for_phoneme(ph, prev_ph, next_ph, use_neural=use_neural)
+        except ValueError:
+            print(f"  Warning: Unknown phoneme '{ph}', skipping")
+            continue
+        
+        # Create project for single phoneme
+        project = UPICProject(f"phoneme_{ph}")
+        wavetable = UPICWaveformTable(voice_profile, create_basic_waveform(voice_profile), SAMPLE_RATE)
+        project.add_wavetable(wavetable)
+        
+        voice = UPICVoice(ph, wavetable)
+        voice.base_frequency = 1.0
+        voice.base_amplitude = 1.0  # Let the amplitude envelope control the full range
+        voice.set_frequency_envelope(ph_envelope)
+        if ph in amp_envelopes:
+            voice.set_amplitude_envelope(amp_envelopes[ph])
+        else:
+            # Fallback if no specific amplitude envelope is found
+            voice.base_amplitude = 0.7
+            
+        project.add_voice(voice)
+        
+        # Synthesize this phoneme
+        audio = project.synthesize(phonemes.DURATION, SAMPLE_RATE)
+        phoneme_audios.append(audio)
+    
+    # Crossfade adjacent phonemes
+    result = phoneme_audios[0]
+    for i in range(1, len(phoneme_audios)):
+        result = crossfade_audio(result, phoneme_audios[i], crossfade_samples)
+    
+    return result
+
+
+def build_word_project(word: str, phonemes_list: List[str], voice_profile: str = 'sine') -> UPICProject:
+    """
+    Build a UPIC project for a single word from its phonemes.
+    
+    Note: This function builds the legacy project structure without crossfade.
+    For crossfaded audio, use build_word_project_with_crossfade().
+    
+    Args:
+        word: The word being synthesized
+        phonemes_list: List of ARPAbet phonemes
+        voice_profile: Waveform type (e.g., 'sine', 'triangle')
+    
+    Returns:
+        UPICProject for the word
+    """
+    # Create phoneme envelopes
+    all_envelopes = phonemes.create_phoneme_envelopes()
+    try:
+        amp_envelopes = phonemes.create_phoneme_amplitude_envelopes()
+    except AttributeError:
+        amp_envelopes = {}
+    
+    # Build combined frequency and amplitude envelopes for all phonemes
+    duration = len(phonemes_list) * phonemes.DURATION
+    combined_freq_points = []
+    combined_amp_points = []
+    
+    for i, ph in enumerate(phonemes_list):
+        if ph not in all_envelopes:
+            print(f"  Warning: Unknown phoneme '{ph}', skipping")
+            continue
+        
+        ph_envelope = all_envelopes[ph]
+        amp_envelope = amp_envelopes.get(ph)
+        ph_duration = phonemes.DURATION
+        
+        # Map phoneme's local time [0,1] to global time
+        t_start = i * ph_duration / duration
+        t_end = (i + 1) * ph_duration / duration
+        
+        # Transform and append this phoneme's frequency control points
+        for local_t, value in ph_envelope.control_points:
+            global_t = t_start + local_t * (t_end - t_start)
+            combined_freq_points.append((global_t, value))
+            
+        # Transform and append this phoneme's amplitude control points
+        if amp_envelope:
+            for local_t, value in amp_envelope.control_points:
+                global_t = t_start + local_t * (t_end - t_start)
+                combined_amp_points.append((global_t, value))
+        else:
+            # Fallback flat amplitude
+            combined_amp_points.append((t_start, 0.7))
+            combined_amp_points.append((t_end, 0.7))
+    
+    # Create project
+    project = UPICProject(f"word_{word}")
+    wavetable = UPICWaveformTable(voice_profile, create_basic_waveform(voice_profile), SAMPLE_RATE)
+    project.add_wavetable(wavetable)
+    
+    # Create combined envelopes
+    frequency_envelope = UPICEnvelope(f"{word}_freq", combined_freq_points)
+    project.add_envelope(frequency_envelope)
+    
+    amplitude_envelope = UPICEnvelope(f"{word}_amp", combined_amp_points)
+    project.add_envelope(amplitude_envelope)
+    
+    # Create voice with base_frequency = 1.0 so envelope values are literal Hz
+    voice = UPICVoice(word, wavetable)
+    voice.base_frequency = 1.0
+    voice.base_amplitude = 1.0
+    voice.set_frequency_envelope(frequency_envelope)
+    voice.set_amplitude_envelope(amplitude_envelope)
+    project.add_voice(voice)
+    
+    return project
+
+
+def compile_word(word: str, cmudict: Dict[str, List[str]], 
+                 force: bool = False, verbose: bool = False, use_neural: bool = True, voice_profile: str = 'sine') -> Tuple[str, np.ndarray]:
+    """
+    Compile a single word: synthesize audio and cache it.
+    
+    TASK_P001: Uses crossfade between phonemes for smooth transitions.
+    TASK_R008: Uses neural coarticulation when model is available.
+    
+    Args:
+        word: The word to compile
+        cmudict: Parsed CMUdict mapping
+        force: Re-compile even if cached
+        verbose: Print detailed output
+        use_neural: Use neural model for coarticulation (default: True)
+        voice_profile: Waveform type (default: 'sine')
+    
+    Returns:
+        Tuple of (wav_path, audio_array)
+    """
+    os.makedirs(VOICEBOOK_DIR, exist_ok=True)
+    
+    word_hash = hashlib.md5(word.encode()).hexdigest()[:8]
+    # Sanitize word for use as filename (strip chars that break paths like '/')
+    safe_word = re.sub(r'[^\w\-]', '_', word)
+    # Truncate to prevent path length issues on filesystem
+    if len(safe_word) > 48:
+        safe_word = safe_word[:48]
+    
+    # Add neural suffix to cache path if using neural model
+    neural_suffix = '_neural' if use_neural and _NEURAL_SYNTHESIS_AVAILABLE else ''
+    voice_suffix = f"_{voice_profile}" if voice_profile != 'sine' else ''
+    wav_path = os.path.join(VOICEBOOK_DIR, f"{safe_word}_{word_hash}{neural_suffix}{voice_suffix}.wav")
+    upic_path = os.path.join(VOICEBOOK_DIR, f"{safe_word}_{word_hash}{neural_suffix}{voice_suffix}.upic.json")
+    
+    # Check cache
+    if os.path.exists(wav_path) and not force:
+        if verbose:
+            print(f"  Using cached: {wav_path}")
+        audio, _ = sf.read(wav_path)
+        return wav_path, audio
+    
+    if verbose:
+        mode_str = "neural coarticulation" if use_neural and _NEURAL_SYNTHESIS_AVAILABLE else "static envelopes"
+        print(f"  Compiling '{word}' using {mode_str} (voice: {voice_profile})...")
+    
+    # Get phonemes
+    phonemes_list = get_phonemes_for_word(word, cmudict)
+    
+    if not phonemes_list:
+        raise ValueError(f"No phonemes found for word '{word}'")
+    
+    if verbose:
+        print(f"    Phonemes: {' '.join(phonemes_list)}")
+    
+    # TASK_P001 + TASK_R008: Build word with crossfade and optional neural coarticulation
+    audio = build_word_project_with_crossfade(word, phonemes_list, use_neural=use_neural, voice_profile=voice_profile)
+    
+    # Save
+    sf.write(wav_path, audio, SAMPLE_RATE)
+    
+    # Also save project for reference (legacy format without crossfade)
+    duration = len(phonemes_list) * phonemes.DURATION
+    project = build_word_project(word, phonemes_list, voice_profile=voice_profile)
+    project.save_project(upic_path)
+    
+    if verbose:
+        mode_str = "neural" if use_neural and _NEURAL_SYNTHESIS_AVAILABLE else "static"
+        print(f"    Saved: {wav_path} ({len(audio)/SAMPLE_RATE*1000:.0f}ms, {mode_str} envelopes, {CROSSFADE_DURATION_MS}ms crossfade)")
+    
+    return wav_path, audio
+
+
+def compile_text(text: str, cmudict: Dict[str, List[str]], 
+                 force: bool = False, verbose: bool = False, use_neural: bool = True, voice_profile: str = 'sine') -> List[Tuple[str, np.ndarray]]:
+    """
+    Compile text by splitting into words and compiling each.
+    
+    Args:
+        text: Input text to compile
+        cmudict: Parsed CMUdict mapping
+        force: Re-compile even if cached
+        verbose: Print detailed output
+        use_neural: Use neural model for coarticulation (default: True)
+        voice_profile: Waveform type (default: 'sine')
+    
+    Returns:
+        List of (wav_path, audio_array) tuples for each word
+    """
+    # Split on whitespace and punctuation
+    words = [w.strip() for w in text.split() if w.strip()]
+    
+    if verbose:
+        mode_str = "neural coarticulation" if use_neural and _NEURAL_SYNTHESIS_AVAILABLE else "static envelopes"
+        print(f"Compiling {len(words)} words using {mode_str} (voice: {voice_profile})...")
+    
+    results = []
+    for word in words:
+        try:
+            wav_path, audio = compile_word(word, cmudict, force=force, verbose=verbose, use_neural=use_neural, voice_profile=voice_profile)
+            results.append((wav_path, audio))
+        except ValueError as e:
+            print(f"  Error compiling '{word}': {e}")
+            continue
+    
+    return results
+
+
+def concat_words_audio(word_audios: List[Tuple[str, np.ndarray]], 
+                       gap_ms: float = 50.0) -> np.ndarray:
+    """
+    Concatenate word audios with brief gaps.
+    
+    Args:
+        word_audios: List of (wav_path, audio_array) tuples
+        gap_ms: Silence gap between words in milliseconds
+    
+    Returns:
+        Concatenated audio array
+    """
+    if not word_audios:
+        return np.array([])
+    
+    gap_samples = int(gap_ms / 1000.0 * SAMPLE_RATE)
+    
+    pieces = []
+    for _, audio in word_audios:
+        pieces.append(audio)
+        # Add gap
+        pieces.append(np.zeros(gap_samples))
+    
+    # Remove trailing gap
+    pieces = pieces[:-1] if pieces else pieces
+    
+    return np.concatenate(pieces)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Compile words from text to phoneme-based UPIC voices")
+    sub = parser.add_subparsers(dest='cmd', required=True)
+    
+    # Compile a single word
+    p_word = sub.add_parser('word', help='compile a single word')
+    p_word.add_argument('word', help='word to compile')
+    p_word.add_argument('-f', '--force', action='store_true', help='re-compile even if cached')
+    p_word.add_argument('-v', '--verbose', action='store_true', help='print detailed output')
+    p_word.add_argument('--no-neural', action='store_true', help='disable neural coarticulation, use static envelopes')
+    
+    # Compile text
+    p_text = sub.add_parser('text', help='compile text')
+    p_text.add_argument('input', help='input text file or "-" for stdin')
+    p_text.add_argument('-o', '--output', default='spoken_text.wav', help='output WAV file')
+    p_text.add_argument('-p', '--project', help='output UPIC project file')
+    p_text.add_argument('-f', '--force', action='store_true', help='re-compile even if cached')
+    p_text.add_argument('-v', '--verbose', action='store_true', help='print detailed output')
+    p_text.add_argument('--no-neural', action='store_true', help='disable neural coarticulation, use static envelopes')
+    p_text.add_argument('--voice', default='sine', choices=['sine', 'triangle', 'square', 'sawtooth'], help='voice waveform profile (timbre)')
+    
+    # Cache stats
+    p_stats = sub.add_parser('stats', help='show voicebook cache statistics')
+    
+    args = parser.parse_args()
+    
+    # Ensure CMUdict is available
+    cmudict_path = ensure_cmudict()
+    cmudict = parse_cmudict(cmudict_path)
+    
+    if args.cmd == 'word':
+        use_neural = not args.no_neural
+        wav_path, audio = compile_word(args.word, cmudict, force=args.force, verbose=args.verbose, use_neural=use_neural)
+        print(f"Compiled '{args.word}' -> {wav_path}")
+        print(f"  Duration: {len(audio) / SAMPLE_RATE * 1000:.0f}ms")
+    
+    elif args.cmd == 'text':
+        # Read input
+        if args.input == '-':
+            text = sys.stdin.read()
+        else:
+            with open(args.input, 'r') as f:
+                text = f.read()
+        
+        # Compile words
+        use_neural = not args.no_neural
+        word_audios = compile_text(text, cmudict, force=args.force, verbose=args.verbose, use_neural=use_neural, voice_profile=args.voice)
+        
+        if not word_audios:
+            print("No words compiled")
+            return
+        
+        # Concatenate
+        audio = concat_words_audio(word_audios, gap_ms=50.0)
+        
+        # Save
+        sf.write(args.output, audio, SAMPLE_RATE)
+        duration = len(audio) / SAMPLE_RATE
+        mode_str = "neural" if use_neural and _NEURAL_SYNTHESIS_AVAILABLE else "static"
+        print(f"Compiled {len(word_audios)} words -> {args.output}")
+        print(f"  Duration: {duration:.2f}s ({len(word_audios) / duration:.1f} words/sec)")
+        print(f"  Mode: {mode_str} envelopes")
+        
+        # Optionally save project
+        if args.project:
+            # Create a simple project file with all word references
+            project_data = {
+                'name': os.path.basename(args.output).replace('.wav', ''),
+                'mode': 'neural' if use_neural and _NEURAL_SYNTHESIS_AVAILABLE else 'static',
+                'words': [{'word': os.path.basename(p), 'path': p} for p, _ in word_audios]
+            }
+            with open(args.project, 'w') as f:
+                json.dump(project_data, f, indent=2)
+            print(f"  Project: {args.project}")
+    
+    elif args.cmd == 'stats':
+        if not os.path.exists(VOICEBOOK_DIR):
+            print("Voicebook is empty")
+            return
+        
+        wav_files = list(Path(VOICEBOOK_DIR).glob('*.wav'))
+        upic_files = list(Path(VOICEBOOK_DIR).glob('*.upic.json'))
+        
+        print(f"Voicebook: {VOICEBOOK_DIR}")
+        print(f"  Cached words: {len(wav_files)}")
+        print(f"  UPIC projects: {len(upic_files)}")
+        
+        # Calculate total size
+        total_size = sum(f.stat().st_size for f in wav_files)
+        print(f"  Total size: {total_size / 1024 / 1024:.2f} MB")
+
+
+if __name__ == '__main__':
+    main()

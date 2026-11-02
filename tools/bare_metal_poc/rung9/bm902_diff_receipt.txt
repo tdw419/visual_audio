@@ -1,0 +1,20 @@
+# BM902 diff receipt
+date: 2026-09-20T21:58:21Z
+oracle pins (unchanged):
+c3120d8ef78f6a66a8fe09e5f1f6ba967f216e07a2fabbd9430a32daca051f16  oracle_zp_leg0.bin
+c3120d8ef78f6a66a8fe09e5f1f6ba967f216e07a2fabbd9430a32daca051f16  oracle_zp_leg1.bin
+30cd829f2a88c80cb80bfef1d056c9d0d85683cc9e58dbd7b9e4c62ce03c43c3  oracle_cmdline_leg0.bin
+30cd829f2a88c80cb80bfef1d056c9d0d85683cc9e58dbd7b9e4c62ce03c43c3  oracle_cmdline_leg1.bin
+constructed pins:
+f6605707f28f97130fc6313e567993b0b012ea4bf7166be7fea4d46de9deadac  bm902_zp_leg0.bin
+f6605707f28f97130fc6313e567993b0b012ea4bf7166be7fea4d46de9deadac  bm902_zp_leg1.bin
+30cd829f2a88c80cb80bfef1d056c9d0d85683cc9e58dbd7b9e4c62ce03c43c3  bm902_cmdline_leg0.bin
+30cd829f2a88c80cb80bfef1d056c9d0d85683cc9e58dbd7b9e4c62ce03c43c3  bm902_cmdline_leg1.bin
+--- L4 RED tail ---
+L2 PASS: cmdline byte-identical (82 chars, NUL-terminated)
+L3 PASS: registers match oracle (rsp loader-specific, ours 0x1f784)
+L1 FAIL: 1 zeropage diff(s) outside whitelist: 0x214
+--- L5 RED tail ---
+L2 PASS: cmdline byte-identical (82 chars, NUL-terminated)
+L3 PASS: registers match oracle (rsp loader-specific, ours 0x1f784)
+L1 FAIL: 1 zeropage diff(s) outside whitelist: 0x210

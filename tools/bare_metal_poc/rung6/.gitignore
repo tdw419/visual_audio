@@ -1,0 +1,7 @@
+# BM903's leg-0 handoff dumps are rung9's capture OUTPUTS, and the repo's root
+# .gitignore excludes *.bin. BM602's B+ half compares its executed handoff
+# against those exact bytes, so the pinned copies under evidence/refs/ have to
+# be tracked -- a reference a clean checkout cannot see is a check that
+# silently stops existing. Negation, not `git add -f`, so the exception survives
+# the next `git add`. Same convention as ../rung6_5/.gitignore.
+!/evidence/refs/*.bin

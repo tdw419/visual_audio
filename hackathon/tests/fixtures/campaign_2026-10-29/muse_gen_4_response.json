@@ -1,0 +1,29 @@
+{
+ "id": "chatcmpl-01a18a40-e8b3-73f3-893d-0e50e2e6dc7e",
+ "choices": [
+  {
+   "finish_reason": "stop",
+   "index": 0,
+   "message": {
+    "content": "```asm\nLDI r1 10\nLDI r2 10\nLDI r3 3\nLDI r4 12\nLDI r10 1\n :y_outer\nLDI r1 10\n :x_outer\nST r1 r3\nADD r1 r1\nLDI r5 1\nADD r1 r5\nCMP r1 r4\nJZ r0 r0\nJMP r0 r0\nADD r2 r2\nLDI r5 1\nADD r2 r5\nCMP r2 r4\nJZ r0 r0\nJMP r0 r0\nLDI r1 12\nLDI r2 12\nLDI r3 5\nLDI r4 18\n :y_inner\nLDI r1 12\n :x_inner\nST r1 r3\nADD r1 r1\nLDI r5 1\nADD r1 r5\nCMP r1 r4\nJZ r0 r0\nJMP r0 r0\nADD r2 r2\nLDI r5 1\nADD r2 r5\nCMP r2 r4\nJZ r0 r0\nJMP r0 r0\nLDI r10 1\nHALT r10 r10\n```\n",
+    "refusal": null,
+    "role": "assistant"
+   },
+   "logprobs": null
+  }
+ ],
+ "created": 1793320872,
+ "model": "muse-spark-1.3",
+ "object": "chat.completion",
+ "usage": {
+  "completion_tokens": 602,
+  "prompt_tokens": 366,
+  "total_tokens": 968,
+  "completion_tokens_details": {
+   "reasoning_tokens": 318
+  },
+  "prompt_tokens_details": {
+   "cached_tokens": 241
+  }
+ }
+}

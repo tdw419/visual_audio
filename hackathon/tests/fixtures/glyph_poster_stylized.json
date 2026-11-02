@@ -1,0 +1,37 @@
+{
+ "canonical_frame": {
+  "origin": "top-left",
+  "width_px": 512,
+  "height_px": 512,
+  "cell_px": 8,
+  "grid": 64,
+  "hilbert_order": 6
+ },
+ "canvas": "stylized: 48px decorative border, ink 0x08, background 0xF4",
+ "payload_hex": "7374796c697a656420683420706f737465723a20706f696e742d70726f6d7074206465636f646564207468697320756e7365656e206672616d650a",
+ "payload_md5": "91e8a76a2237bf0e23c2ef0627590627",
+ "framed_hex": "474c5931003b7374796c697a656420683420706f737465723a20706f696e742d70726f6d7074206465636f646564207468697320756e7365656e206672616d650a",
+ "framed_md5": "77ff59d031c32db9ce76764fcd54797f",
+ "poster_png_md5": "244cc8bb5086168f3e4b864541334d30",
+ "otsu_eta": 1.0,
+ "wire_score": 1.0,
+ "conf_threshold": 0.9,
+ "decode_path": "sam",
+ "box": {
+  "x1": 48,
+  "y1": 48,
+  "x2": 560,
+  "y2": 560,
+  "w": 512,
+  "h": 512
+ },
+ "point": {
+  "x": 300,
+  "y": 300,
+  "label": 1
+ },
+ "bit_encoding": "framed bytes MSB-first; bit d -> cell hilbert_d2xy(order=6, d); cell filled=1 (ink 0x00), empty=0 (background 0xFF)",
+ "framing": "b\"GLY1\" + >H payload length + payload + zero pad to 4096 bits",
+ "mask_wire": "RLE pairs 'run,bit' comma-separated, row-major over the 64x64 cell grid",
+ "notes": "unseen stylized input; promptable point + nonzero box origin; wire score is the measured Otsu eta of the frame crop"
+}

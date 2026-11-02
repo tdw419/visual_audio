@@ -1,0 +1,3 @@
+# scratch build artifacts — corpus records + raw/ traces ARE ground truth, commit them
+build/
+__pycache__/

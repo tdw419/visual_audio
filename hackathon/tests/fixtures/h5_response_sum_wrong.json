@@ -1,0 +1,16 @@
+{
+ "id": "chatcmpl-h5-recorded",
+ "object": "chat.completion",
+ "created": 1769472000,
+ "model": "muse-spark-1.3",
+ "choices": [
+  {
+   "index": 0,
+   "message": {
+    "role": "assistant",
+    "content": "Here is the glyph assembly:\n```asm\nLDI r10 0\nLDI r8 1\nLDI r9 12\n:cond\nCMP r8 r9\nJZ :done\nADD r10 r8\nLDI r7 1\nADD r8 r7\nJMP :cond\n:done\nHALT\n```\nThis loops i from 1 while i != 12, accumulating into r10."
+   },
+   "finish_reason": "stop"
+  }
+ ]
+}

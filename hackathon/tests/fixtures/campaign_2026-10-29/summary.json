@@ -1,0 +1,83 @@
+[
+ {
+  "i": 1,
+  "desc": "Draw a filled blue rectangle across the bottom third of the screen.",
+  "latency_s": 9.2,
+  "usage": {
+   "prompt_tokens": 360,
+   "completion_tokens": 838,
+   "total_tokens": 1198,
+   "reasoning_tokens": 769
+  },
+  "content_len": 102,
+  "error": "not enough values to unpack (expected 2, got 1)"
+ },
+ {
+  "i": 2,
+  "desc": "Draw three filled squares in a diagonal line from top-left to bottom-right, each a different color.",
+  "latency_s": 17.1,
+  "usage": {
+   "prompt_tokens": 367,
+   "completion_tokens": 1599,
+   "total_tokens": 1966,
+   "reasoning_tokens": 1377
+  },
+  "content_len": 310,
+  "error": "not enough values to unpack (expected 2, got 1)"
+ },
+ {
+  "i": 3,
+  "desc": "Draw a white border frame around the edge of the screen.",
+  "latency_s": 10.5,
+  "usage": {
+   "prompt_tokens": 359,
+   "completion_tokens": 1022,
+   "total_tokens": 1381,
+   "reasoning_tokens": 775
+  },
+  "content_len": 465,
+  "error": "extract: HALT got a 3rd (extra) operand ['r10', 'r10'] in 'HALT r10 r10' \u2014 extra operands are SILENTLY DROPPED at the machine level (BK-315 accumulator class); expected exactly 0"
+ },
+ {
+  "i": 4,
+  "desc": "Draw a filled cyan square in the center of the screen with a filled magenta square inside it.",
+  "latency_s": 5.3,
+  "usage": {
+   "prompt_tokens": 366,
+   "completion_tokens": 602,
+   "total_tokens": 968,
+   "reasoning_tokens": 318
+  },
+  "content_len": 432,
+  "error": "extract: JZ got a 3rd (extra) operand ['r0'] in 'JZ r0 r0' \u2014 extra operands are SILENTLY DROPPED at the machine level (BK-315 accumulator class); expected exactly 1"
+ },
+ {
+  "i": 5,
+  "desc": "Draw a horizontal red line across the middle of the screen, one pixel tall.",
+  "latency_s": 8.9,
+  "usage": {
+   "prompt_tokens": 363,
+   "completion_tokens": 887,
+   "total_tokens": 1250,
+   "reasoning_tokens": 750
+  },
+  "content_len": 206,
+  "lint_issues": 0,
+  "halted": true,
+  "steps": 650,
+  "asm_lines": 21
+ },
+ {
+  "i": 6,
+  "desc": "Fill the entire screen with a dark gray color, then draw a small white square in the top-left corner.",
+  "latency_s": 8.8,
+  "usage": {
+   "prompt_tokens": 369,
+   "completion_tokens": 952,
+   "total_tokens": 1321,
+   "reasoning_tokens": 730
+  },
+  "content_len": 329,
+  "error": "not enough values to unpack (expected 2, got 1)"
+ }
+]

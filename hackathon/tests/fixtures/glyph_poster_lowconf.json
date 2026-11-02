@@ -1,0 +1,39 @@
+{
+ "canonical_frame": {
+  "origin": "top-left",
+  "width_px": 512,
+  "height_px": 512,
+  "cell_px": 8,
+  "grid": 64,
+  "hilbert_order": 6
+ },
+ "canvas": "stylized: 48px decorative border, ink 0x08, background 0xF4",
+ "payload_hex": "6c6f772d636f6e666964656e63652066616c6c6261636b3a20636c6173736963616c20706978656c206465636f6465207265636f76657265642074686973207061796c6f61640a",
+ "payload_md5": "cf09b99dee2b22834fe938f4238a511b",
+ "framed_hex": "474c593100476c6f772d636f6e666964656e63652066616c6c6261636b3a20636c6173736963616c20706978656c206465636f6465207265636f76657265642074686973207061796c6f61640a",
+ "framed_md5": "57c7c4ba99dd664024d94e250e35a04e",
+ "poster_png_md5": "4fd863ab7c46450ffc030e230f5e7318",
+ "otsu_eta": 0.897667,
+ "wire_score": 0.8977,
+ "conf_threshold": 0.9,
+ "decode_path": "pixels",
+ "box": {
+  "x1": 48,
+  "y1": 48,
+  "x2": 560,
+  "y2": 560,
+  "w": 512,
+  "h": 512
+ },
+ "point": {
+  "x": 300,
+  "y": 300,
+  "label": 1
+ },
+ "bit_encoding": "framed bytes MSB-first; bit d -> cell hilbert_d2xy(order=6, d); cell filled=1 (ink 0x00), empty=0 (background 0xFF)",
+ "framing": "b\"GLY1\" + >H payload length + payload + zero pad to 4096 bits",
+ "mask_wire": "RLE pairs 'run,bit' comma-separated, row-major over the 64x64 cell grid",
+ "notes": "deterministic uniform-noise level=48 (prob 48/256: pixel replaced by a PRNG byte, seed 'h4-lowconf'); clean-base eta 1.0000",
+ "speckle_level": 48,
+ "clean_base_otsu_eta": 1.0
+}

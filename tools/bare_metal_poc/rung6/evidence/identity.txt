@@ -1,0 +1,105 @@
+----------------------------------------------------------------
+A. TRANSCRIPTS: clean boot vs each repaired boot, rung9 T1-T4 applied
+----------------------------------------------------------------
+  [PASS] clean transcript: 1,356 B raw -> 917 B compared, ECC line at bytes 116-141
+  [PASS] chunk_plane0_stuckff: 1 differing span(s), 3 B, all inside the 25 B ECC=/PAR= field at bytes 116-141 (125-128 (3 B)), and its value is the predicted ECC=00000FF4 PAR=00000000 -- with that one line tokenised the transcripts are BYTE-IDENTICAL (913 B compared, same length both sides)
+  [PASS] chunk_plane1_stuck00: 1 differing span(s), 3 B, all inside the 25 B ECC=/PAR= field at bytes 116-141 (125-128 (3 B)), and its value is the predicted ECC=00000FF5 PAR=00000000 -- with that one line tokenised the transcripts are BYTE-IDENTICAL (913 B compared, same length both sides)
+  [PASS] erase_block_128k: 1 differing span(s), 5 B, all inside the 25 B ECC=/PAR= field at bytes 116-141 (123-128 (5 B)), and its value is the predicted ECC=0001FE1C PAR=00000000 -- with that one line tokenised the transcripts are BYTE-IDENTICAL (913 B compared, same length both sides)
+  [PASS] parity_chunk_stuckff: 1 differing span(s), 3 B, all inside the 25 B ECC=/PAR= field at bytes 116-141 (138-141 (3 B)), and its value is the predicted ECC=00000000 PAR=00000FF2 -- with that one line tokenised the transcripts are BYTE-IDENTICAL (913 B compared, same length both sides)
+----------------------------------------------------------------
+B. HANDOFF DUMPS: executed state at the kernel entry, three media
+----------------------------------------------------------------
+        lane clear: no bm903/bm602 qemu alive
+          leg 0: last-checkpoint=BM903-S2 HANDOFF BUILT (6/6) stop=stopped on the handoff wall=1.2s
+          === CAPTURE leg 0 ===
+          STOP rsi=0x13ab0 rip=0x100000
+          RAX=0x100000 RBX=0x0 RCX=0x0 RDX=0x0
+          RSI=0x13ab0 RDI=0x0 RBP=0x0 RSP=0x1f784
+          EFLAGS=0x46 CS=0x10 SS=0x18 DS=0x18 ES=0x18
+          CR0=0x11 CR3=0x0 CR4=0x0
+          CMDPTR=0x1f800
+        leg 0: CAPTURED rip=0x100000 rsi=0x13ab0 rsp=0x1f784 cr0=0x11 eflags=0x46
+          leg 1: last-checkpoint=BM903-S2 HANDOFF BUILT (6/6) stop=stopped on the handoff wall=1.2s
+          === CAPTURE leg 1 ===
+          STOP rsi=0x13ab0 rip=0x100000
+          RAX=0x100000 RBX=0x0 RCX=0x0 RDX=0x0
+          RSI=0x13ab0 RDI=0x0 RBP=0x0 RSP=0x1f784
+          EFLAGS=0x46 CS=0x10 SS=0x18 DS=0x18 ES=0x18
+          CR0=0x11 CR3=0x0 CR4=0x0
+          CMDPTR=0x1f800
+        leg 1: CAPTURED rip=0x100000 rsi=0x13ab0 rsp=0x1f784 cr0=0x11 eflags=0x46
+        done OK
+        lane clear: no bm903/bm602 qemu alive
+          leg 0: last-checkpoint=BM903-S2 HANDOFF BUILT (6/6) stop=stopped on the handoff wall=1.2s
+          === CAPTURE leg 0 ===
+          STOP rsi=0x13ab0 rip=0x100000
+          RAX=0x100000 RBX=0x0 RCX=0x0 RDX=0x0
+          RSI=0x13ab0 RDI=0x0 RBP=0x0 RSP=0x1f784
+          EFLAGS=0x46 CS=0x10 SS=0x18 DS=0x18 ES=0x18
+          CR0=0x11 CR3=0x0 CR4=0x0
+          CMDPTR=0x1f800
+        leg 0: CAPTURED rip=0x100000 rsi=0x13ab0 rsp=0x1f784 cr0=0x11 eflags=0x46
+          leg 1: last-checkpoint=BM903-S2 HANDOFF BUILT (6/6) stop=stopped on the handoff wall=1.2s
+          === CAPTURE leg 1 ===
+          STOP rsi=0x13ab0 rip=0x100000
+          RAX=0x100000 RBX=0x0 RCX=0x0 RDX=0x0
+          RSI=0x13ab0 RDI=0x0 RBP=0x0 RSP=0x1f784
+          EFLAGS=0x46 CS=0x10 SS=0x18 DS=0x18 ES=0x18
+          CR0=0x11 CR3=0x0 CR4=0x0
+          CMDPTR=0x1f800
+        leg 1: CAPTURED rip=0x100000 rsi=0x13ab0 rsp=0x1f784 cr0=0x11 eflags=0x46
+        done OK
+        lane clear: no bm903/bm602 qemu alive
+          leg 0: last-checkpoint=BM903-S2 HANDOFF BUILT (6/6) stop=stopped on the handoff wall=1.3s
+          === CAPTURE leg 0 ===
+          STOP rsi=0x13ab0 rip=0x100000
+          RAX=0x100000 RBX=0x0 RCX=0x0 RDX=0x0
+          RSI=0x13ab0 RDI=0x0 RBP=0x0 RSP=0x1f784
+          EFLAGS=0x46 CS=0x10 SS=0x18 DS=0x18 ES=0x18
+          CR0=0x11 CR3=0x0 CR4=0x0
+          CMDPTR=0x1f800
+        leg 0: CAPTURED rip=0x100000 rsi=0x13ab0 rsp=0x1f784 cr0=0x11 eflags=0x46
+          leg 1: last-checkpoint=BM903-S2 HANDOFF BUILT (6/6) stop=stopped on the handoff wall=1.4s
+          === CAPTURE leg 1 ===
+          STOP rsi=0x13ab0 rip=0x100000
+          RAX=0x100000 RBX=0x0 RCX=0x0 RDX=0x0
+          RSI=0x13ab0 RDI=0x0 RBP=0x0 RSP=0x1f784
+          EFLAGS=0x46 CS=0x10 SS=0x18 DS=0x18 ES=0x18
+          CR0=0x11 CR3=0x0 CR4=0x0
+          CMDPTR=0x1f800
+        leg 1: CAPTURED rip=0x100000 rsi=0x13ab0 rsp=0x1f784 cr0=0x11 eflags=0x46
+        done OK
+  [PASS] clean: zp leg0 == leg1, strict, 4,096 B -- deterministic capture
+  [PASS] clean: cmdline leg0 == leg1, strict, 512 B -- deterministic capture
+  [PASS] clean: regs leg0 == leg1, strict, 516 B -- deterministic capture
+  [PASS] chunk_plane0_stuckff: zp leg0 == leg1, strict, 4,096 B -- deterministic capture
+  [PASS] chunk_plane0_stuckff: cmdline leg0 == leg1, strict, 512 B -- deterministic capture
+  [PASS] chunk_plane0_stuckff: regs leg0 == leg1, strict, 516 B -- deterministic capture
+  [PASS] erase_block_128k: zp leg0 == leg1, strict, 4,096 B -- deterministic capture
+  [PASS] erase_block_128k: cmdline leg0 == leg1, strict, 512 B -- deterministic capture
+  [PASS] erase_block_128k: regs leg0 == leg1, strict, 516 B -- deterministic capture
+  [PASS] zp vs clean (chunk_plane0_stuckff): 4,096 B BYTE-IDENTICAL, no normalization applied or needed
+  [PASS] zp vs clean (erase_block_128k): 4,096 B BYTE-IDENTICAL, no normalization applied or needed
+  [PASS] cmdline vs clean (chunk_plane0_stuckff): 512 B BYTE-IDENTICAL, no normalization applied or needed
+  [PASS] cmdline vs clean (erase_block_128k): 512 B BYTE-IDENTICAL, no normalization applied or needed
+  [PASS] regs vs clean (chunk_plane0_stuckff): all 25 register fields identical (rip=0x100000 rsi=0x13ab0 rsp=0x1f784 cr0=0x11 eflags=0x46)
+  [PASS] regs vs clean (erase_block_128k): all 25 register fields identical (rip=0x100000 rsi=0x13ab0 rsp=0x1f784 cr0=0x11 eflags=0x46)
+----------------------------------------------------------------
+B+. The repaired handoff vs BM903's landed PXC1 dumps (pinned copy in evidence/refs)
+----------------------------------------------------------------
+  [PASS] bm903_px_zp_leg0.bin intact: sha256 bc2431d7be0ab1d2..., the reference this row was written against
+  [PASS] clean zp == bm903_px_zp_leg0.bin: 4,096 B, the same executed handoff state the 42-leg medium produced
+  [PASS] chunk_plane0_stuckff zp == bm903_px_zp_leg0.bin: 4,096 B, the same executed handoff state the 42-leg medium produced
+  [PASS] erase_block_128k zp == bm903_px_zp_leg0.bin: 4,096 B, the same executed handoff state the 42-leg medium produced
+  [PASS] bm903_px_cmdline_leg0.bin intact: sha256 30cd829f2a88c80c..., the reference this row was written against
+  [PASS] clean cmdline == bm903_px_cmdline_leg0.bin: 512 B, the same executed handoff state the 42-leg medium produced
+  [PASS] chunk_plane0_stuckff cmdline == bm903_px_cmdline_leg0.bin: 512 B, the same executed handoff state the 42-leg medium produced
+  [PASS] erase_block_128k cmdline == bm903_px_cmdline_leg0.bin: 512 B, the same executed handoff state the 42-leg medium produced
+  [PASS] bm903_px_regs_leg0.json intact: sha256 935d5fe1c23f878e..., the reference this row was written against
+  [PASS] clean regs vs bm903_px_regs_leg0.json: all 25 register fields identical (rip=0x100000 rsi=0x13ab0 rsp=0x1f784 cr0=0x11 eflags=0x46), loader_meta apart from captured_by, which names the file that ran
+  [PASS] chunk_plane0_stuckff regs vs bm903_px_regs_leg0.json: all 25 register fields identical (rip=0x100000 rsi=0x13ab0 rsp=0x1f784 cr0=0x11 eflags=0x46), loader_meta apart from captured_by, which names the file that ran
+  [PASS] erase_block_128k regs vs bm903_px_regs_leg0.json: all 25 register fields identical (rip=0x100000 rsi=0x13ab0 rsp=0x1f784 cr0=0x11 eflags=0x46), loader_meta apart from captured_by, which names the file that ran
+----------------------------------------------------------------
+IDENTITY: GREEN 32  RED 0
+----------------------------------------------------------------
+BM602_IDENTITY_STATUS=GREEN

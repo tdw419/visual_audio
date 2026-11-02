@@ -1,0 +1,153 @@
+     1                                  ; probe_exec_leg.asm -- BM650 scoping probe: how many bytes does the
+     2                                  ; exec-from-data leg of DESIGN_EXEC_FROM_DATA.md actually cost, when it is
+     3                                  ; written the way rung5's landed code writes things?
+     4                                  ;
+     5                                  ; Standalone: the four rung5 helpers it calls (puts, putc, puthex4, puthex8)
+     6                                  ; are declared at the bottom as 3-byte stubs so the block sizes are honest
+     7                                  ; (call rel8 = 5 B near / 3 B short -- we use the same 3-byte `call near`
+     8                                  ; form rung5 uses, and rung5's helpers are in the same segment). Only the
+     9                                  ; NEW code is measured here; the strings are counted in bm650_scope.py.
+    10                                  ;
+    11                                  ; Every number this file produces is a size, not a behaviour: the leg runs
+    12                                  ; nothing. See BM650_SCOPING.md.
+    13                                  
+    14                                  BITS 16
+    15                                  ORG 0
+    16                                  
+    17                                  ; ---- constants as rung5 emits them (rung5_layout.inc + the exec additions)
+    18                                  IMG2_LEN        equ 2048
+    19                                  IMG2_SEG        equ 0x5000
+    20                                  EXEC_SEG        equ IMG2_SEG
+    21                                  EXEC_MAILBOX    equ IMG2_LEN              ; 2048: first byte above the image
+    22                                  EXEC_ARGS       equ EXEC_MAILBOX + 16     ; contract block, 6 words + pad
+    23                                  EXEC_NID_ECHO   equ EXEC_ARGS             ; slot img2 must copy back
+    24                                  
+    25                                  ; =====================================================================
+    26                                  ; 1. contract block + NID hand-off. stage2 owns this memory; img2 reads
+    27                                  ;    it through ES:SI. Word 0 is a version/length so a future img2 grows
+    28                                  ;    the block instead of reordering it.
+    29                                  ; =====================================================================
+    30                                  block_args:
+    31 00000000 1E                          push ds
+    32 00000001 B80050                      mov ax, EXEC_SEG
+    33 00000004 8EC0                        mov es, ax
+    34 00000006 31FF                        xor di, di
+    35 00000008 BF1008                      mov di, EXEC_ARGS
+    36 0000000B 26C7050008                  mov word [es:di], IMG2_LEN            ; 0: img2 length
+    37 00000010 26C745028100                mov word [es:di+2], 129               ; 1: medium LBA of img2
+    38 00000016 26C74504F803                mov word [es:di+4], 0x3F8             ; 2: COM1
+    39 0000001C 26C745060050                mov word [es:di+6], EXEC_SEG          ; 3: trampoline CS
+    40 00000022 26C745083412                mov word [es:di+8], EXPECTED_EXEC_NID ; 4: NID img2 must echo in its banner
+    41 00000028 26C7450A0000                mov word [es:di+10], 0                ; 5: mailbox, cleared before the jump
+    42 0000002E 26C7450C0000                mov word [es:di+12], 0                ; 6: NID echo, cleared too
+    43 00000034 1F                          pop ds
+    44 00000035 C3                          ret
+    45                                  
+    46                                  ; =====================================================================
+    47                                  ; 2. copy-down: IMG2_SEG:2048 -> IMG2_SEG:0, 1024 words, BACKWARD
+    48                                  ;    (R-DESIGN-1: dst = src-2048 with full overlap; a forward rep movsw
+    49                                  ;    reads bytes a lower destination already overwrote).
+    50                                  ; =====================================================================
+    51                                  copy_down:
+    52 00000036 1E                          push ds
+    53 00000037 06                          push es
+    54 00000038 B80050                      mov ax, EXEC_SEG
+    55 0000003B 8ED8                        mov ds, ax
+    56 0000003D 8EC0                        mov es, ax
+    57 0000003F FD                          std                                 ; DF=1
+    58 00000040 BEFE0F                      mov si, IMG2_LEN + IMG2_LEN - 2     ; src: last word of the window
+    59 00000043 BFFE07                      mov di, IMG2_LEN - 2                ; dst: last word of the image
+    60 00000046 B90004                      mov cx, IMG2_LEN / 2
+    61 00000049 F3A5                        rep movsw
+    62 0000004B FC                          cld
+    63 0000004C 07                          pop es
+    64 0000004D 1F                          pop ds
+    65 0000004E C3                          ret
+    66                                  
+    67                                  ; =====================================================================
+    68                                  ; 3. the jump and the receipt. Entry state per the design's table:
+    69                                  ;    CS:IP = EXEC_SEG:0, DS=ES=EXEC_SEG, SS:SP untouched (0:7C00), CLD,
+    70                                  ;    IF=0, ES:SI -> the contract block.
+    71                                  ; =====================================================================
+    72                                  exec_and_receipt:
+    73 0000004F 06                          push es
+    74 00000050 1E                          push ds
+    75 00000051 B80050                      mov ax, EXEC_SEG
+    76 00000054 8ED8                        mov ds, ax
+    77 00000056 8EC0                        mov es, ax
+    78 00000058 BE1008                      mov si, EXEC_ARGS                   ; arg block pointer, per the contract
+    79 0000005B 680050                      push word EXEC_SEG                  ; far return: stage2's receipt label
+    80 0000005E 68[6600]                    push word .back                     ; retf from img2 lands here
+    81 00000061 EA00000050                  jmp EXEC_SEG:0
+    82                                  .back:
+    83                                      ; img2 returns with AX = the mailbox word (redundant echo of memory)
+    84 00000066 26813E1A084F4B              cmp word [es:EXEC_ARGS+10], 0x4B4F
+    85 0000006D 7513                        jne .bad_mailbox
+    86 0000006F 26A11C08                    mov ax, [es:EXEC_ARGS+12]           ; img2's echo
+    87 00000073 263B061808                  cmp ax, [es:EXEC_ARGS+8]            ; vs the NID we handed it
+    88 00000078 7517                        jne .no_banner
+    89 0000007A BE[CC00]                    mov si, msg_execok                  ; 'EXEC=OK'
+    90 0000007D E84700                      call puts
+    91 00000080 EB17                        jmp .done
+    92                                  .bad_mailbox:
+    93 00000082 BE[D600]                    mov si, msg_badmbx
+    94 00000085 E83F00                      call puts
+    95 00000088 26A11A08                    mov ax, [es:EXEC_ARGS+10]
+    96 0000008C E83900                      call puthex4                        ; the actual word, computed-first
+    97 0000008F EB0B                        jmp .receipt_print
+    98                                  .no_banner:
+    99 00000091 BE[E800]                    mov si, msg_nobanner
+   100 00000094 E83000                      call puts
+   101 00000097 EB03                        jmp .receipt_print
+   102                                  .done:
+   103 00000099 1F                          pop ds
+   104 0000009A 07                          pop es
+   105 0000009B C3                          ret
+   106                                  .receipt_print:
+   107 0000009C BE[1401]                    mov si, msg_crlf
+   108 0000009F E82500                      call puts
+   109 000000A2 1F                          pop ds
+   110 000000A3 07                          pop es
+   111 000000A4 EB23                        jmp halt_stub
+   112                                  
+   113                                  ; =====================================================================
+   114                                  ; 4. the whole-string refusal form the design wants for the banner: print
+   115                                  ;    the NID we expected against the echo we got. Measured separately
+   116                                  ;    because it is the version that keeps DEFECT-R4PRINT's order (got
+   117                                  ;    before expected).
+   118                                  ; =====================================================================
+   119                                  banner_receipt_verbose:
+   120 000000A6 BE[F900]                    mov si, msg_bannertok
+   121 000000A9 E81B00                      call puts
+   122 000000AC 26A11C08                    mov ax, [es:EXEC_ARGS+12]
+   123 000000B0 E81500                      call puthex4
+   124 000000B3 BE[0E01]                    mov si, msg_expsep
+   125 000000B6 E80E00                      call puts
+   126 000000B9 26A11808                    mov ax, [es:EXEC_ARGS+8]
+   127 000000BD E80800                      call puthex4
+   128 000000C0 BE[1401]                    mov si, msg_crlf
+   129 000000C3 E80100                      call puts
+   130 000000C6 C3                          ret
+   131                                  
+   132                                  ; ---- stubs so the blocks above assemble as they will in stage2 ---------
+   133                                  puts:                                   ; 3-byte placeholders: rung5's real
+   134 000000C7 C3                          ret                                 ; puts/puthex4 are 24 B / 39 B and
+   135                                  puthex4:                                ; are NOT new cost here.
+   136 000000C8 C3                          ret
+   137                                  halt_stub:
+   138 000000C9 F4                          hlt
+   139 000000CA EBFD                        jmp halt_stub
+   140                                  
+   141 000000CC 455845433D4F4B0D0A-     msg_execok      db 'EXEC=OK', 13, 10, 0
+   141 000000D5 00                 
+   142 000000D6 455845433D4241442D-     msg_badmbx      db 'EXEC=BAD-MAILBOX ', 0
+   142 000000DF 4D41494C424F582000 
+   143 000000E8 455845433D4E4F2D42-     msg_nobanner    db 'EXEC=NO-BANNER', 13, 10, 0
+   143 000000F1 414E4E45520D0A00   
+   144 000000F9 494D47324558454320-     msg_bannertok   db 'IMG2EXEC BANNER NID=', 0
+   144 00000102 42414E4E4552204E49-
+   144 0000010B 443D00             
+   145 0000010E 204558503D00            msg_expsep      db ' EXP=', 0
+   146 00000114 0D0A00                  msg_crlf        db 13, 10, 0
+   147                                  
+   148                                  EXPECTED_EXEC_NID equ 0x1234

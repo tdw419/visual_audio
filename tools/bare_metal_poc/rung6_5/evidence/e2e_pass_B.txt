@@ -1,0 +1,114 @@
+=== [0] provenance: delta fork, image variants, four media, host roundtrip ===
+stage2: 5 deltas, 13,934 B proven text -> 19,424 B (+5,490 B)
+  +  165 B  header: name the fork at the top of the proven text
+  + 1037 B  contract: the arg-block table, shared by name with bm651_img2.asm
+  + 4022 B  BM-651 leg: jump into the verified image, between the write and the halt
+  +  122 B  strings: the two refusal labels and the verdict
+  +  144 B  witness words: stored only by the exec leg, after the write
+consts: 4 deltas, 1,074 B -> 1,490 B
+  +  265 B  docstring: which rung this emitter feeds
+  +   50 B  image path: argv, so one emitter builds every variant
+  +   19 B  emit EXPECTED_EXEC_NID beside EXPECTED_IMG2_CRC
+  +   82 B  derive crc/nid once
+round-trip: undoing every delta newest-first reproduces rung5/stage2.asm and rung5/rung5_consts.py byte-for-byte
+green     2048 B  crc32=101BFE00  exec_nid=EE1B
+noecho    2048 B  crc32=92DD6EF6  exec_nid=FC2B
+nombox    2048 B  crc32=0C818841  exec_nid=84C0
+halt      2048 B  crc32=85E95236  exec_nid=D7DF
+contract offsets agree in both sources: ARG_NID=8, ARG_MBOX=10, ARG_ECHO=12, mailbox=0x4b4f
+EXEC_ARGS=4096 >= 4096: above both image windows, out of reach of the copy-down
+stage2: code=1026B + filler=64510B = 65536B (64 KB)
+stage2: code=1026B + filler=64510B = 65536B (64 KB)
+stage2: code=1026B + filler=64510B = 65536B (64 KB)
+stage2: code=1026B + filler=64510B = 65536B (64 KB)
+rung5 baseline code: 796 B
+  green: code 1026 B, leg 230 B over the rung5 baseline; medium 67108864 B
+  noecho: code 1026 B, leg 230 B over the rung5 baseline; medium 67108864 B
+  nombox: code 1026 B, leg 230 B over the rung5 baseline; medium 67108864 B
+  halt: code 1026 B, leg 230 B over the rung5 baseline; medium 67108864 B
+green_nid=EE1B
+green_img2crc=101BFE00
+green_s2crc=E2A9AC35
+green_stage2code=1026
+noecho_nid=FC2B
+noecho_img2crc=92DD6EF6
+noecho_s2crc=3D25C507
+noecho_stage2code=1026
+nombox_nid=84C0
+nombox_img2crc=0C818841
+nombox_s2crc=B5A0C59A
+nombox_stage2code=1026
+halt_nid=D7DF
+halt_img2crc=85E95236
+halt_s2crc=341EE175
+halt_stage2code=1026
+img2_base=66048
+wr_lba=133
+green: banner string in the image only (img2 1x, stage2 65536 B 0x, stage1 512 B 0x)
+noecho: banner string in the image only (img2 1x, stage2 65536 B 0x, stage1 512 B 0x)
+nombox: banner string in the image only (img2 1x, stage2 65536 B 0x, stage1 512 B 0x)
+halt: banner string in the image only (img2 1x, stage2 65536 B 0x, stage1 512 B 0x)
+=> the transcript line can only have come from the executed pixels
+=== [1] GREEN-A: pixels executed, contract kept, EXEC=OK ===
+PXC1-RUNG5
+GATE4=PASS CRC=E2A9AC35
+PXC1-RUNG5
+IMG2 SUM=37FB
+IMG2 CRC=101BFE00
+WRITE=OK
+STAGE2 SIZE=64 KB
+STAGE2 CKSUM=1323 EXEC
+IMG2EXEC BANNER NID=EE1B
+EXEC=OK
+=== [2] GREEN-B: reboot the SAME medium, no re-encode; pixels unchanged ===
+GREEN-B: identical transcript; the executed image's bytes and the written marker are byte-identical across the reboot
+=== [3] RED-A: image that runs but never echoes its identity -> EXEC=NO-BANNER ===
+PXC1-RUNG5
+GATE4=PASS CRC=3D25C507
+PXC1-RUNG5
+IMG2 SUM=35D1
+IMG2 CRC=92DD6EF6
+WRITE=OK
+STAGE2 SIZE=64 KB
+STAGE2 CKSUM=184F EXEC
+IMG2EXEC BANNER NID=FC2B
+EXEC=NO-BANNER 0000 EXP=FC2B
+=== [4] RED-B: image that keeps the mailbox but not the echo -> EXEC=BAD-MAILBOX ===
+PXC1-RUNG5
+GATE4=PASS CRC=B5A0C59A
+PXC1-RUNG5
+IMG2 SUM=3605
+IMG2 CRC=0C818841
+WRITE=OK
+STAGE2 SIZE=64 KB
+STAGE2 CKSUM=1364 EXEC
+IMG2EXEC BANNER NID=84C0
+EXEC=BAD-MAILBOX 0000 EXP=4B4F
+=== [5] HANG: image that never returns -- only the host can call it ===
+PXC1-RUNG5
+GATE4=PASS CRC=341EE175
+PXC1-RUNG5
+IMG2 SUM=3BE5
+IMG2 CRC=85E95236
+WRITE=OK
+STAGE2 SIZE=64 KB
+STAGE2 CKSUM=177F EXEC
+IMG2EXEC BANNER NID=D7DF
+hang leg: entered, receipt printed, banner last -- and NO verdict in 20s. rc=124 is every leg's end state (the loader halts forever), so this is a host-side absence claim, not a guest watchdog: nothing inside this design can time out its own image.
+=== [6] RED-CRC: corrupt the image's pixels -> the CRC gate refuses BEFORE execution ===
+PXC1-RUNG5
+GATE4=PASS CRC=E2A9AC35
+PXC1-RUNG5
+IMG2 SUM=3702
+IMG2 FAIL CRC=0229EB69 EXP=101BFE00
+=== [7] RE-GREEN: rebuild the medium from the untouched PNG, boot, identical ===
+RE-GREEN: pristine pixels from the archive PNG boot identically after a corrupted medium
+
+=== GATE651 PASS (143 s wall, 18 predictions fixed before the first boot, 7 boots) ===
+serial_gA: BIMG2 CRC=101BFE00WRITE=OKSTAGE2 SIZE=64 KBSTAGE2 CKSUM=1323 EXECIMG2EXEC BANNER NID=EE1BEXEC=OK
+serial_gB: BIMG2 CRC=101BFE00WRITE=OKSTAGE2 SIZE=64 KBSTAGE2 CKSUM=1323 EXECIMG2EXEC BANNER NID=EE1BEXEC=OK
+serial_ra: TE=OKSTAGE2 SIZE=64 KBSTAGE2 CKSUM=184F EXECIMG2EXEC BANNER NID=FC2BEXEC=NO-BANNER 0000 EXP=FC2B
+serial_rb: =OKSTAGE2 SIZE=64 KBSTAGE2 CKSUM=1364 EXECIMG2EXEC BANNER NID=84C0EXEC=BAD-MAILBOX 0000 EXP=4B4F
+serial_h: SUM=3BE5IMG2 CRC=85E95236WRITE=OKSTAGE2 SIZE=64 KBSTAGE2 CKSUM=177F EXECIMG2EXEC BANNER NID=D7DF
+serial_rc: PXC1-RUNG5GATE4=PASS CRC=E2A9AC35PXC1-RUNG5IMG2 SUM=3702IMG2 FAIL CRC=0229EB69 EXP=101BFE00
+serial_rg: BIMG2 CRC=101BFE00WRITE=OKSTAGE2 SIZE=64 KBSTAGE2 CKSUM=1323 EXECIMG2EXEC BANNER NID=EE1BEXEC=OK

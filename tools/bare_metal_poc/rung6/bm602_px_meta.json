@@ -1,0 +1,45 @@
+{
+ "convention": "PXC2-E (PXC1 four-plane interleave + 3 parity planes)",
+ "container_tag": "0x32435850",
+ "planes": 7,
+ "data_planes": 4,
+ "parity_planes": 3,
+ "base_lba": 17,
+ "sector": 512,
+ "chunk_sectors": 8,
+ "group_bytes": 16384,
+ "payload_len": 13631488,
+ "groups": 832,
+ "plane_bytes": 3407872,
+ "plane_sectors": 6656,
+ "medium_sectors": 46609,
+ "medium_bytes": 23863808,
+ "parity_bytes": 10223616,
+ "capacity_over_payload": "75.0%",
+ "reads_per_group": 7,
+ "subimages": [
+  {
+   "start_group": 0,
+   "groups": 1,
+   "dst": "0x20000",
+   "src": "kernel setup+header"
+  },
+  {
+   "start_group": 1,
+   "groups": 262,
+   "dst": "0x100000",
+   "src": "kernel pm payload"
+  },
+  {
+   "start_group": 263,
+   "groups": 566,
+   "dst": "0x10000000",
+   "src": "initrd"
+  }
+ ],
+ "payload_crc32": "393950AA",
+ "payload_sha256": "e6ebe1ab6574a01154551f964e249eea560618d90dbf1c3532460e0dabe4ac0e",
+ "pxc1_payload_sha256": "e6ebe1ab6574a01154551f964e249eea560618d90dbf1c3532460e0dabe4ac0e",
+ "same_payload_as_the_landed_pxc1_medium": true,
+ "corrector_selftest": "10 codeword classes pinned: single-symbol faults fixed, a two-symbol codeword confidently mis-fixed, and the equal-triple fault reported as clean -- the last two for the gate to catch"
+}

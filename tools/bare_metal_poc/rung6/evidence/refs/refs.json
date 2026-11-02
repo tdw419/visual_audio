@@ -1,0 +1,23 @@
+{
+  "convention": "pinned read-only references BM602's B+ half compares its executed handoff against; sha256 re-checked by bm602_identity.py before use (RUNG9_REF_SHA is the code-side pin, this file is the landed record)",
+  "pinned": "2026-09-20",
+  "source": "rung9/bm903_px_*_leg0.{bin,json}, the dumps rung9/run_bm903_e2e.sh captures at its pixel-medium legs (RECEIPT_BM903_E2E.md), copied verbatim on the pin date",
+  "why": "those three files are rung9's capture OUTPUTS, not its sources: they are gitignored working files, so a clean checkout has none of them and a later rung-9 run rewrites them. BM602's claim is about BYTES, so the bytes are landed here and the sha is checked. Cost: a drift in rung9's live dump no longer reaches this check -- it is caught by rung9's own gate. BM653 hit the same dependency first and pinned its copy into ../rung6_5/evidence/refs/.",
+  "files": {
+    "bm903_px_zp_leg0.bin": {
+      "sha256": "bc2431d7be0ab1d2e74b38834b22aecf58cd15096905a55bdc62109b4c2984b7",
+      "bytes": 4096,
+      "what": "zero page (4,096 B) at the kernel entry, PXC1 medium, BM903 leg 0"
+    },
+    "bm903_px_cmdline_leg0.bin": {
+      "sha256": "30cd829f2a88c80cb80bfef1d056c9d0d85683cc9e58dbd7b9e4c62ce03c43c3",
+      "bytes": 512,
+      "what": "command line (512 B) at the kernel entry, PXC1 medium, BM903 leg 0"
+    },
+    "bm903_px_regs_leg0.json": {
+      "sha256": "935d5fe1c23f878eee9cc9bfc67f4ae6676243a02a13331603c8125024e64e27",
+      "bytes": 472,
+      "what": "25 register fields at the kernel entry, PXC1 medium, BM903 leg 0"
+    }
+  }
+}

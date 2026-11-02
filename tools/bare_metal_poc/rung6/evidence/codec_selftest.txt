@@ -1,0 +1,2 @@
+PXC2-E: payload 13,631,488 B / 832 groups identical to PXC1 (sha256 e6ebe1ab6574), 7 planes x 3,407,872 B = medium 46,609 sectors = 23.86 MB (+75% parity, 7 reads per group), CRC=393950AA
+corrector selftest: 10 codeword classes pinned: single-symbol faults fixed, a two-symbol codeword confidently mis-fixed, and the equal-triple fault reported as clean -- the last two for the gate to catch

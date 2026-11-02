@@ -1,0 +1,10 @@
+LDI r10 1
+LDI r1 512
+LDI r2 768
+LDI r3 1
+ :loop
+ST r1 r10
+ADD r1 r3
+CMP r1 r2
+JNZ loop
+HALT

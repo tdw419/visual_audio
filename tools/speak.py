@@ -1,0 +1,782 @@
+#!/usr/bin/env python3
+"""
+speak.py — Speak software into existence through the UPIC engine.
+
+Pipeline:  text  ->  UPIC project (frequency-drawn byte stream)  ->  WAV
+           WAV   ->  STFT symbol decoder  ->  text  ->  executable file
+
+Encoding: 16-tone MFSK drawn as a UPIC frequency envelope. Each byte is two
+hex nibbles; each nibble is one 20 ms symbol at tone f = 800 + 150*n Hz.
+The voice uses base_frequency = 1.0 so the envelope control points ARE the
+literal tone frequencies — the drawn line is the program.
+
+Frame:  magic 'UA' | uint16 payload length | payload | crc32
+
+NOW UNIFIED: Uses codec.phy.Phy16Tone for all spectral encoding/decoding.
+"""
+
+import argparse
+import binascii
+import json
+import os
+import random
+import re
+import struct
+import sys
+
+import numpy as np
+import soundfile as sf
+from scipy import signal
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src'))
+
+from upic_engine import (
+    UPICWaveformTable, UPICEnvelope, UPICVoice, UPICProject,
+    create_basic_waveform,
+)
+from codec.phy import Phy16Tone, frame, unframe
+from codec.phy_ecc import encode_ecc, decode_ecc
+
+# For phoneme ECC
+try:
+    from codec.phoneme_ecc import PhonemeECC, PHONEMES, PHONEME_INDEX, INDEX_TO_PHONEME
+except ImportError:
+    PhonemeECC = None
+    PHONEMES = []
+    PHONEME_INDEX = {}
+    INDEX_TO_PHONEME = {}
+
+# For 'say' mode - phoneme word compiler
+try:
+    from word_compiler import (
+        compile_text, concat_words_audio, get_cmudict
+    )
+except ImportError:
+    from tools.word_compiler import (
+        compile_text, concat_words_audio, get_cmudict
+    )
+
+# For cross-lingual support
+try:
+    from tools.xsampa_to_arpabet import map_xsampa_sequence
+except ImportError:
+    from xsampa_to_arpabet import map_xsampa_sequence
+
+SAMPLE_RATE = 44100
+SYMBOL_SEC = 0.020          # one nibble per 20 ms
+TONE_BASE = 800.0           # Hz for nibble 0x0
+TONE_STEP = 150.0           # Hz between adjacent nibbles
+CHUNK_BYTES = 16            # bytes per sub-project (keeps envelope scans cheap)
+MAGIC = b'UA'
+
+
+def tone_for(nibble: int) -> float:
+    """Get frequency for a nibble (delegated to Phy16Tone)."""
+    return Phy16Tone.tone_for(nibble)
+
+
+def bytes_to_symbols(data: bytes):
+    symbols = []
+    for b in data:
+        symbols.append(b >> 4)
+        symbols.append(b & 0x0F)
+    return symbols
+
+
+def symbols_to_bytes(symbols):
+    if len(symbols) % 2:
+        symbols = symbols[:-1]
+    return bytes((symbols[i] << 4) | symbols[i + 1] for i in range(0, len(symbols), 2))
+
+
+def build_chunk_project(symbols, chunk_index: int, wavetable: UPICWaveformTable) -> UPICProject:
+    """One UPIC project per chunk: a single voice whose frequency envelope
+    steps through the symbol tones. Steps are drawn as near-vertical ramps
+    (control points at 10% and 90% of each symbol) so the decoder's center
+    window sees a stable tone."""
+    duration = len(symbols) * SYMBOL_SEC
+    points = []
+    for i, sym in enumerate(symbols):
+        t0 = (i + 0.1) * SYMBOL_SEC / duration
+        t1 = (i + 0.9) * SYMBOL_SEC / duration
+        f = tone_for(sym)
+        points.append((round(t0, 6), f))
+        points.append((round(t1, 6), f))
+
+    project = UPICProject(f"spoken_chunk_{chunk_index}")
+    project.add_wavetable(wavetable)
+    envelope = UPICEnvelope(f"bytes_{chunk_index}", points)
+    project.add_envelope(envelope)
+
+    voice = UPICVoice(f"data_{chunk_index}", wavetable)
+    voice.base_frequency = 1.0      # envelope values are literal Hz
+    voice.base_amplitude = 0.8
+    voice.set_frequency_envelope(envelope)
+    project.add_voice(voice)
+    return project
+
+
+def encode(payload: bytes, wav_path: str, project_path: str = None, use_ecc: bool = False) -> np.ndarray:
+    # Reed-Solomon is opt-in: it changes the on-air bytes (adds 10 parity per
+    # block), so it must NOT be the default — the clean/file paths, the provenance
+    # fixtures, and the Rust non-ECC interop guard all expect plain MFSK. The
+    # acoustic hop opts in via use_ecc=True (CLI: --ecc), which the Rust
+    # decode_from_wav_ecc path mirrors. Layering: payload -> frame -> RS -> MFSK.
+    framed = frame(payload)
+    if use_ecc:
+        framed = encode_ecc(framed)
+    symbols = bytes_to_symbols(framed)
+
+    wavetable = UPICWaveformTable('sine', create_basic_waveform('sine'), SAMPLE_RATE)
+
+    pieces = []
+    chunk_syms = CHUNK_BYTES * 2
+    n_chunks = (len(symbols) + chunk_syms - 1) // chunk_syms
+    for c in range(n_chunks):
+        chunk = symbols[c * chunk_syms:(c + 1) * chunk_syms]
+        project = build_chunk_project(chunk, c, wavetable)
+        audio = project.synthesize(len(chunk) * SYMBOL_SEC, SAMPLE_RATE)
+        pieces.append(audio)
+        print(f"  synthesized chunk {c + 1}/{n_chunks} ({len(chunk)} symbols)")
+
+    audio = np.concatenate(pieces)
+    sf.write(wav_path, audio, SAMPLE_RATE)
+
+    if project_path:
+        # Canonical single-voice project: the whole program as one drawn line.
+        full = build_chunk_project(symbols, 0, wavetable)
+        full.name = 'spoken_program'
+        full.save_project(project_path)
+
+    return audio
+
+
+def decode(wav_path: str, use_ecc: bool = False) -> bytes:
+    audio, sr = sf.read(wav_path)
+    if audio.ndim > 1:
+        audio = audio.mean(axis=1)
+
+    sym_len = int(round(sr * SYMBOL_SEC))
+    n_syms = len(audio) // sym_len
+
+    # Analyze the center half of each symbol window against all 16 tones.
+    lo, hi = int(sym_len * 0.25), int(sym_len * 0.75)
+    win = hi - lo
+    t = np.arange(win) / sr
+    tones = np.array([tone_for(n) for n in range(16)])
+    probe = np.exp(-2j * np.pi * tones[:, None] * t[None, :])   # 16 x win
+
+    windows = np.stack([audio[i * sym_len + lo: i * sym_len + hi] for i in range(n_syms)])
+    scores = np.abs(windows @ probe.T)                           # n_syms x 16
+    symbols = scores.argmax(axis=1).tolist()
+
+    data = symbols_to_bytes(symbols)
+    if use_ecc:
+        data, valid = decode_ecc(data)
+        if not valid:
+            print("Warning: uncorrectable errors detected in ECC layer")
+
+    if data[:2] != MAGIC:
+        raise ValueError(f"bad magic: {data[:2]!r} (not a spoken-software wav?)")
+    (length,) = struct.unpack('>H', data[2:4])
+    payload = data[4:4 + length]
+    (crc,) = struct.unpack('>I', data[4 + length:8 + length])
+    actual = binascii.crc32(payload) & 0xFFFFFFFF
+    if crc != actual:
+        raise ValueError(f"CRC mismatch: header {crc:08x} != payload {actual:08x}")
+    return payload
+
+
+def encode_dual_band(text: str, software_path: str, wav_path: str, use_ecc: bool = False):
+    """
+    Encode both text (phonemes) and software (bytes) into a single dual-band WAV.
+    
+    Uses low band (500-3000 Hz) for phonemes and high band (4000-8000 Hz) for bytes.
+    The byte codec uses frequency-shifted tones to fit in the high band.
+    
+    Args:
+        text: Text to encode with phonemes
+        software_path: Path to software file to encode with bytes
+        wav_path: Output WAV file path
+    
+    Returns:
+        Mixed audio array
+    """
+    # Read software
+    with open(software_path, 'rb') as f:
+        software_bytes = f.read()
+    
+    # Generate phoneme audio (low band)
+    print(f"Encoding text: {text}")
+    phoneme_audio = say_text(text, '/tmp/temp_phoneme_dual.wav', verbose=False)
+    
+    # Generate byte codec audio using frequency-shifted high-band encoding
+    print(f"Encoding software: {software_path} ({len(software_bytes)} bytes)")
+    
+    # Create frequency-shifted byte audio for high band (4000-8000 Hz)
+    # Use base tone of 4000 Hz (within high band) with 200 Hz spacing
+    # 16 tones: 4000, 4200, 4400, ..., 7000 Hz (all within 4000-8000 Hz band)
+    from codec.phy import Phy16Tone, frame
+    
+    # Create a custom PHY for high band
+    class HighBandPhy(Phy16Tone):
+        TONE_BASE = 4000.0      # Base frequency for high band
+        TONE_STEP = 200.0       # 200 Hz step for 16 tones = 4000 to 7000 Hz
+    
+    # Encode with high-band PHY
+    framed_data = frame(software_bytes)
+    if use_ecc:
+        framed_data = encode_ecc(framed_data)
+    high_band_symbols = HighBandPhy.bytes_to_symbols(framed_data)
+    byte_audio = HighBandPhy.encode_symbols(high_band_symbols)
+    
+    # Normalize both to same duration (pad shorter with silence)
+    max_len = max(len(phoneme_audio), len(byte_audio))
+    if len(phoneme_audio) < max_len:
+        phoneme_audio = np.pad(phoneme_audio, (0, max_len - len(phoneme_audio)))
+    if len(byte_audio) < max_len:
+        byte_audio = np.pad(byte_audio, (0, max_len - len(byte_audio)))
+    
+    # Band allocation using bandpass filters
+    def bandpass_filter(audio, low_freq, high_freq, sr):
+        """Apply bandpass filter to isolate a frequency band."""
+        nyquist = sr / 2
+        low = low_freq / nyquist
+        high = high_freq / nyquist
+        b, a = signal.butter(4, [low, high], btype='band')
+        return signal.filtfilt(b, a, audio)
+    
+    # Phonemes: 500-3000 Hz (low band - human-legible)
+    phoneme_filtered = bandpass_filter(phoneme_audio, 500, 3000, SAMPLE_RATE)
+    
+    # Bytes: 4000-8000 Hz (high band - machine-readable)
+    byte_filtered = bandpass_filter(byte_audio, 4000, 8000, SAMPLE_RATE)
+    
+    # Mix both bands
+    mixed = phoneme_filtered + byte_filtered
+    
+    # Normalize to prevent clipping
+    if np.max(np.abs(mixed)) > 0:
+        mixed = mixed / np.max(np.abs(mixed)) * 0.95
+    
+    # Save
+    sf.write(wav_path, mixed, SAMPLE_RATE)
+    duration = len(mixed) / SAMPLE_RATE
+    
+    print(f"Dual-band encoded: {wav_path}")
+    print(f"  Duration: {duration:.2f}s")
+    print(f"  Phonemes: 500-3000 Hz (human-legible)")
+    print(f"  Bytes: 4000-8000 Hz (machine-readable, tones: 4000-7000 Hz)")
+    
+    return mixed
+
+
+def decode_dual_band(wav_path: str, output_text_path: str = None, output_software_path: str = None, use_ecc: bool = False):
+    """
+    Decode both text (phonemes) and software (bytes) from dual-band audio.
+    
+    Args:
+        wav_path: Dual-band WAV file
+        output_text_path: Optional path to save decoded text
+        output_software_path: Optional path to save decoded software
+    
+    Returns:
+        Tuple of (text, software_bytes) - each can be None if not requested
+    """
+    import tempfile
+    from codec.phy import Phy16Tone, unframe
+    
+    def bandpass_filter(audio, low_freq, high_freq, sr):
+        """Apply bandpass filter to isolate a frequency band."""
+        nyquist = sr / 2
+        low = low_freq / nyquist
+        high = high_freq / nyquist
+        b, a = signal.butter(4, [low, high], btype='band')
+        return signal.filtfilt(b, a, audio)
+    
+    audio, sr = sf.read(wav_path)
+    if audio.ndim > 1:
+        audio = audio.mean(axis=1)
+    
+    # Decode low band (phonemes - 500-3000 Hz)
+    text = None
+    if output_text_path:
+        print("Extracting low band (phonemes)...")
+        low_band = bandpass_filter(audio, 500, 3000, SAMPLE_RATE)
+        
+        # For phoneme decoding, we need to use a speech-to-text approach
+        # For now, save the filtered audio and note the limitation
+        temp_phoneme_path = '/tmp/temp_phoneme_decoded.wav'
+        sf.write(temp_phoneme_path, low_band, SAMPLE_RATE)
+        print(f"  Low-band audio saved to {temp_phoneme_path}")
+        print(f"  Note: Phoneme-to-text decoding requires speech recognition (not yet implemented)")
+        
+        # Create placeholder text file
+        with open(output_text_path, 'w') as f:
+            f.write("[Phoneme band audio extracted - speech-to-text pending]")
+        print(f"  Placeholder text saved to {output_text_path}")
+    
+    # Decode high band (bytes - 4000-8000 Hz)
+    software_bytes = None
+    if output_software_path:
+        print("Extracting high band (bytes)...")
+        high_band = bandpass_filter(audio, 4000, 8000, SAMPLE_RATE)
+        
+        # Use high-band PHY for decoding
+        class HighBandPhy(Phy16Tone):
+            TONE_BASE = 4000.0      # Base frequency for high band
+            TONE_STEP = 200.0       # 200 Hz step for 16 tones = 4000 to 7000 Hz
+        
+        # Decode symbols using high-band PHY
+        symbols = HighBandPhy.decode_symbols(high_band)
+        framed_data = HighBandPhy.symbols_to_bytes(symbols)
+        
+        if use_ecc:
+            framed_data, ecc_valid = decode_ecc(framed_data)
+            if not ecc_valid:
+                print("  WARNING: uncorrectable errors detected in ECC layer")
+
+        # Unframe and validate CRC
+        software_bytes, valid = unframe(framed_data)
+        
+        if not valid:
+            print(f"  WARNING: CRC validation failed - data may be corrupted")
+        
+        # Save
+        with open(output_software_path, 'wb') as f:
+            f.write(software_bytes)
+        
+        print(f"  Decoded software: {output_software_path} ({len(software_bytes)} bytes)")
+        if valid:
+            print(f"  ✓ CRC verification passed")
+    
+    return text, software_bytes
+
+
+def ascii_spectrogram(wav_path: str, width: int = 100, bands: int = 16):
+    """Render the spoken program as text: rows are the 16 tones, columns are time."""
+    audio, sr = sf.read(wav_path)
+    if audio.ndim > 1:
+        audio = audio.mean(axis=1)
+    sym_len = int(round(sr * SYMBOL_SEC))
+    n_syms = min(len(audio) // sym_len, width)
+    t = np.arange(sym_len) / sr
+    tones = np.array([tone_for(n) for n in range(bands)])
+    probe = np.exp(-2j * np.pi * tones[:, None] * t[None, :])
+    grid = np.zeros((bands, n_syms))
+    for i in range(n_syms):
+        grid[:, i] = np.abs(probe @ audio[i * sym_len:(i + 1) * sym_len])
+    grid /= grid.max() or 1.0
+    shades = ' .:*#@'
+    lines = []
+    for row in range(bands - 1, -1, -1):
+        cells = ''.join(shades[min(int(v * (len(shades) - 1) + 0.5), len(shades) - 1)]
+                        for v in grid[row])
+        lines.append(f"{int(tones[row]):>5} Hz |{cells}|")
+    return '\n'.join(lines)
+
+
+def say_text(text: str, wav_path: str, project_path: str = None, verbose: bool = False, lang: str = 'en-us', use_neural: bool = True, use_ecc: bool = False, voice_profile: str = 'sine'):
+    """
+    Speak text using phoneme-based word synthesis.
+    
+    Args:
+        text: Text to speak
+        wav_path: Output WAV file path
+        project_path: Optional UPIC project file path
+        verbose: Print detailed output
+        lang: Language code (e.g., 'en-us', 'es-es', 'de-de')
+        use_neural: Use neural model for coarticulation (default: True)
+        use_ecc: Use Reed-Solomon ECC over the phoneme sequence (default: False)
+        voice_profile: Waveform type (default: 'sine')
+    
+    Returns:
+        Audio array
+    """
+    # Use CMUdict for English by default
+    if lang.startswith('en'):
+        if verbose:
+            print(f"Using CMUdict word compiler for English language '{lang}'")
+        try:
+            from word_compiler import compile_text, get_cmudict
+        except ImportError:
+            from tools.word_compiler import compile_text, get_cmudict
+        cmudict = get_cmudict()
+        word_audios = compile_text(text, cmudict, force=False, verbose=verbose, use_neural=use_neural, voice_profile=voice_profile)
+    else:
+        # Use phonemizer for multi-lingual support
+        try:
+            import phonemizer
+            from phonemizer.backend import EspeakBackend
+            try:
+                from tools.ipa_to_arpabet import map_ipa_sequence
+            except ImportError:
+                from ipa_to_arpabet import map_ipa_sequence
+            try:
+                from word_compiler import build_word_project_with_crossfade
+            except ImportError:
+                from tools.word_compiler import build_word_project_with_crossfade
+
+            # Create backend with specified language
+            backend = EspeakBackend(lang)
+
+            # Get phonemes from text (phonemizer uses IPA by default)
+            phonemes_text = backend.phonemize([text])
+            ipa_words = phonemes_text[0].split()
+
+            if verbose:
+                print(f"Language: {lang}")
+                print(f"Text: {text}")
+                print(f"IPA Words: {ipa_words}")
+
+            word_audios = []
+
+            for i, ipa_word in enumerate(ipa_words):
+                # Map IPA to ARPAbet for our templates
+                arpa_phonemes_str = map_ipa_sequence(ipa_word)
+                arpa_phonemes = arpa_phonemes_str.split()
+
+                if verbose:
+                    print(f"Word {i+1} ARPAbet: {arpa_phonemes}")
+
+                if arpa_phonemes:
+                    audio = build_word_project_with_crossfade(f"word_{i}", arpa_phonemes, use_neural=use_neural, voice_profile=voice_profile)
+                    word_audios.append((f"word_{i}", audio))
+                else:
+                    if verbose:
+                        print(f"Warning: No valid phonemes for word '{ipa_word}', skipping")
+
+        except ImportError:
+            print(f"WARNING: phonemizer not installed or failed, falling back to CMUdict (English only)")
+            try:
+                from word_compiler import compile_text, get_cmudict
+            except ImportError:
+                from tools.word_compiler import compile_text, get_cmudict
+            cmudict = get_cmudict()
+            word_audios = compile_text(text, cmudict, force=False, verbose=verbose, use_neural=use_neural, voice_profile=voice_profile)
+    
+    
+    if not word_audios:
+        raise ValueError("No words could be compiled from text")
+
+    if use_ecc:
+        if PhonemeECC is None:
+            print("WARNING: --ecc flag set but PhonemeECC not available - ECC disabled")
+            parity_audio = np.zeros(100)  # Placeholder: minimal silent burst
+            word_audios.append(("parity_burst", parity_audio))
+        else:
+            if verbose:
+                print("Applying Reed-Solomon ECC over phoneme sequence...")
+            # Re-extract all phonemes from the words
+            from word_compiler import get_phonemes_for_word
+            
+            all_phonemes = []
+            for word in text.split():
+                # Clean word punctuation (simple version)
+                clean_word = re.sub(r'[^\w\-]', '', word).lower()
+                if clean_word:
+                    try:
+                        word_phonemes = get_phonemes_for_word(clean_word, get_cmudict())
+                        all_phonemes.extend(word_phonemes)
+                    except:
+                        # Fallback: skip words without CMUdict entries
+                        pass
+                    
+            if not all_phonemes:
+                print("WARNING: No phonemes extracted from input text - ECC disabled")
+                parity_audio = np.zeros(100)
+                word_audios.append(("parity_burst", parity_audio))
+            else:
+                ecc = PhonemeECC(ecc_symbols=8)
+                encoded_phonemes = ecc.encode(all_phonemes)
+                parity_phonemes = encoded_phonemes[len(all_phonemes):]
+                
+                if verbose:
+                    print(f"  Generated {len(parity_phonemes)} parity phonemes: {parity_phonemes[:10]}...")
+                    
+                # Compile the parity phonemes into audio
+                from word_compiler import build_word_project_with_crossfade
+                parity_audio = build_word_project_with_crossfade("ecc_parity", parity_phonemes, use_neural=use_neural, voice_profile=voice_profile)
+                
+                # Append to word_audios as a pseudo-word
+                word_audios.append(("parity_burst", parity_audio))
+        
+    # Concatenate with brief gaps
+    audio = concat_words_audio(word_audios, gap_ms=50.0)
+    
+    # Save WAV
+    sf.write(wav_path, audio, SAMPLE_RATE)
+    
+    if verbose:
+        print(f"Spoke {len(word_audios)} words -> {wav_path}")
+        print(f"  Duration: {len(audio) / SAMPLE_RATE:.2f}s")
+        print(f"  Rate: {len(word_audios) / (len(audio) / SAMPLE_RATE):.1f} words/sec")
+    
+    # Save project metadata
+    if project_path:
+        project_data = {
+            'name': f'spoken_{len(audio)}_samples',
+            'mode': 'phoneme',
+            'language': lang,
+            'voice': voice_profile,
+            'words': [{'word': os.path.basename(p), 'path': p} for p, _ in word_audios],
+            'total_duration': len(audio) / SAMPLE_RATE,
+            'word_count': len(word_audios)
+        }
+        with open(project_path, 'w') as f:
+            json.dump(project_data, f, indent=2)
+        if verbose:
+            print(f"  Project metadata: {project_path}")
+    
+    return audio
+
+
+def say_parallel(tracks: list, wav_path: str, verbose: bool = False):
+    """
+    Synthesize multiple tracks in parallel and mix them (polyphony/chords).
+    
+    Args:
+        tracks: List of dicts, each with 'text', 'voice', 'lang' (optional), etc.
+        wav_path: Output WAV file
+        verbose: Print detailed output
+    """
+    if not tracks:
+        raise ValueError("No tracks provided for parallel synthesis")
+        
+    audios = []
+    max_len = 0
+    
+    for i, track in enumerate(tracks):
+        text = track.get('text')
+        voice = track.get('voice', 'sine')
+        lang = track.get('lang', 'en-us')
+        
+        if not text:
+            continue
+            
+        if verbose:
+            print(f"Synthesizing Track {i+1}: '{text}' (voice: {voice}, lang: {lang})")
+            
+        # Synthesize track to temporary file/array
+        audio = say_text(text, '/tmp/temp_parallel.wav', verbose=verbose, lang=lang, voice_profile=voice)
+        audios.append(audio)
+        if len(audio) > max_len:
+            max_len = len(audio)
+            
+    if not audios:
+        raise ValueError("No valid tracks generated audio")
+        
+    # Pad and mix
+    mixed = np.zeros(max_len)
+    for audio in audios:
+        padded = np.pad(audio, (0, max_len - len(audio)))
+        mixed += padded
+        
+    # Normalize to prevent clipping
+    if np.max(np.abs(mixed)) > 0:
+        mixed = mixed / np.max(np.abs(mixed)) * 0.95
+        
+    # Save
+    sf.write(wav_path, mixed, SAMPLE_RATE)
+    
+    if verbose:
+        print(f"Mixed {len(audios)} tracks -> {wav_path}")
+        print(f"  Duration: {max_len / SAMPLE_RATE:.2f}s")
+        
+    return mixed
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Speak software into existence via UPIC synthesis")
+    sub = parser.add_subparsers(dest='cmd', required=True)
+
+    p_enc = sub.add_parser('encode', help='text/file -> UPIC project + WAV')
+    p_enc.add_argument('input', help='source file to speak')
+    p_enc.add_argument('-o', '--wav', default='spoken.wav')
+    p_enc.add_argument('-p', '--project', default='spoken.upic.json')
+    p_enc.add_argument('--ecc', action='store_true',
+                       help='add Reed-Solomon parity for the noisy acoustic channel (opt-in; changes on-air bytes)')
+
+    p_dec = sub.add_parser('decode', help='WAV -> recovered file')
+    p_dec.add_argument('wav')
+    p_dec.add_argument('-o', '--output', required=True)
+    p_dec.add_argument('--ecc', action='store_true',
+                       help='decode a WAV that was encoded with --ecc')
+
+    p_viz = sub.add_parser('viz', help='ASCII spectrogram of a spoken WAV')
+    p_viz.add_argument('wav')
+    p_viz.add_argument('--width', type=int, default=100)
+
+    p_say = sub.add_parser('say', help='speak text using phoneme-based word synthesis')
+    p_say.add_argument('text', help='text to speak (or file path if -f is given)')
+    p_say.add_argument('-o', '--wav', default='spoken.wav', help='output WAV file')
+    p_say.add_argument('-p', '--project', help='output project metadata file')
+    p_say.add_argument('-f', '--file', action='store_true', help='treat argument as file path, not text')
+    p_say.add_argument('-v', '--verbose', action='store_true', help='print detailed output')
+    p_say.add_argument('--lang', default='en-us', help='language code (e.g., en-us, es-es, de-de)')
+    p_say.add_argument('--no-neural', action='store_true', help='disable neural coarticulation, use static envelopes')
+    p_say.add_argument('--ecc', action='store_true', help='add Reed-Solomon parity to the phoneme sequence')
+    p_say.add_argument('--voice', default='sine', choices=['sine', 'triangle', 'square', 'sawtooth'], help='voice waveform profile (timbre)')
+
+    p_parallel = sub.add_parser('parallel', help='synthesize multiple texts in parallel (chords/counterpoint)')
+    p_parallel.add_argument('tracks_file', help='JSON file defining the tracks [{"text": "...", "voice": "sine"}, ...]')
+    p_parallel.add_argument('-o', '--wav', default='parallel.wav', help='output WAV file')
+    p_parallel.add_argument('-v', '--verbose', action='store_true', help='print detailed output')
+
+    # Dual-band encoding commands
+    p_enc_dual = sub.add_parser('encode_dual', help='encode text + software to dual-band WAV')
+    p_enc_dual.add_argument('-t', '--text', required=True, help='text or text file to encode with phonemes')
+    p_enc_dual.add_argument('-f', '--file', action='store_true', help='treat -t argument as file path')
+    p_enc_dual.add_argument('-b', '--software', required=True, help='software or software file to encode with bytes')
+    p_enc_dual.add_argument('-o', '--output', default='dual_band.wav', help='output WAV file')
+    p_enc_dual.add_argument('--ecc', action='store_true', help='add Reed-Solomon parity (opt-in, for the acoustic channel)')
+
+    p_dec_dual = sub.add_parser('decode_dual', help='decode text + software from dual-band WAV')
+    p_dec_dual.add_argument('wav', help='dual-band WAV file')
+    p_dec_dual.add_argument('-t', '--text', help='output text file (optional)')
+    p_dec_dual.add_argument('-b', '--software', required=True, help='output software file')
+    p_dec_dual.add_argument('--ecc', action='store_true', help='decode a dual-band WAV encoded with --ecc')
+
+    p_verify_ecc = sub.add_parser('verify-ecc',
+        help='simulate phoneme corruption and confirm Reed-Solomon recovery (no real STT exists yet, '
+             'so this tests the ECC layer against a simulated noisy channel rather than real audio)')
+    p_verify_ecc.add_argument('text', help='text whose phoneme sequence will be protected and corrupted')
+    p_verify_ecc.add_argument('--errors', type=int, default=4,
+        help='number of phonemes to corrupt (data + parity combined); default 4 = the correction '
+             'limit for ecc_symbols=8')
+    p_verify_ecc.add_argument('--seed', type=int, default=None, help='random seed for reproducible corruption')
+
+    args = parser.parse_args()
+
+    if args.cmd == 'encode':
+        with open(args.input, 'rb') as f:
+            payload = f.read()
+        audio = encode(payload, args.wav, args.project, use_ecc=args.ecc)
+        rate = len(payload) / (len(audio) / SAMPLE_RATE)
+        print(f"spoke {len(payload)} bytes into {args.wav} "
+              f"({len(audio) / SAMPLE_RATE:.1f}s, {rate:.0f} bytes/sec)")
+        print(f"UPIC project: {args.project}")
+
+    elif args.cmd == 'decode':
+        payload = decode(args.wav, use_ecc=args.ecc)
+        with open(args.output, 'wb') as f:
+            f.write(payload)
+        print(f"decoded {len(payload)} bytes -> {args.output} (CRC verified)")
+
+    elif args.cmd == 'viz':
+        print(ascii_spectrogram(args.wav, width=args.width))
+
+    elif args.cmd == 'say':
+        if args.file:
+            with open(args.text, 'r') as f:
+                text = f.read()
+        else:
+            text = args.text
+        
+        use_neural = not args.no_neural
+        audio = say_text(text, args.wav, args.project, verbose=args.verbose, lang=args.lang, use_neural=use_neural, use_ecc=args.ecc, voice_profile=args.voice)
+        print(f"Spoke text -> {args.wav}")
+        print(f"  Duration: {len(audio) / SAMPLE_RATE:.2f}s")
+
+    elif args.cmd == 'parallel':
+        with open(args.tracks_file, 'r') as f:
+            tracks = json.load(f)
+        say_parallel(tracks, args.wav, verbose=args.verbose)
+
+    elif args.cmd == 'encode_dual':
+        # Always treat -t as file path for dual-band encoding
+        with open(args.text, 'r') as f:
+            text = f.read().strip()
+        
+        # Handle software input (already a file path for binary data or JSON)
+        encode_dual_band(text, args.software, args.output, use_ecc=args.ecc)
+
+    elif args.cmd == 'decode_dual':
+        decode_dual_band(args.wav, args.text, args.software, use_ecc=args.ecc)
+
+    elif args.cmd == 'verify-ecc':
+        if PhonemeECC is None:
+            print("ERROR: PhonemeECC module not available")
+            print("Install reedsolo: pip install reedsolo")
+            sys.exit(1)
+            
+        from word_compiler import get_phonemes_for_word
+        
+        cmudict = get_cmudict()
+        all_phonemes = []
+        for word in args.text.split():
+            clean_word = re.sub(r'[^\w\-]', '', word).lower()
+            if clean_word:
+                try:
+                    word_phonemes = get_phonemes_for_word(clean_word, cmudict)
+                    all_phonemes.extend(word_phonemes)
+                except:
+                    pass
+
+        if not all_phonemes:
+            print("No phonemes extracted from input text.")
+            sys.exit(1)
+
+        ecc = PhonemeECC(ecc_symbols=8)
+        encoded = ecc.encode(all_phonemes)
+        print(f"Original phonemes ({len(all_phonemes)}): {all_phonemes}")
+        print(f"Encoded with RS parity ({len(encoded)}): {encoded}")
+
+        # Get symbols and RS-encode
+        encoded_symbols = [PHONEME_INDEX.get(p, 0) for p in encoded]
+        rs_encoded = ecc.rs_codec.encode(bytes(encoded_symbols))
+        print(f"RS encoded bytes ({len(rs_encoded)}): {list(rs_encoded)[:12]}... (data) + {list(rs_encoded)[12:]}... (parity)")
+        
+        # Corrupt at the BYTE level in the RS-encoded block
+        rng = random.Random(args.seed)
+        corrupted_rs = bytearray(rs_encoded)
+        error_positions = rng.sample(range(len(corrupted_rs)), min(args.errors, len(corrupted_rs)))
+        for i in error_positions:
+            # Small realistic corruption (not full inversion)
+            corrupted_rs[i] = (corrupted_rs[i] + rng.randint(1, 10)) % 256
+            
+        print(f"\nSimulated {len(error_positions)} corrupted byte positions in RS block: {sorted(error_positions)}")
+        print(f"Corrupted RS bytes at those positions: {[corrupted_rs[i] for i in sorted(error_positions)]}")
+        
+        # RS-decode the corrupted block
+        try:
+            decoded_msg, decoded_ecc, errata_pos = ecc.rs_codec.decode(bytes(corrupted_rs))
+            print(f"RS decode succeeded. Errors corrected: {len(errata_pos)} at positions {list(errata_pos)}")
+            rs_success = True
+        except Exception as e:
+            print(f"RS decode failed: {type(e).__name__}")
+            decoded_msg = corrupted_rs
+            errata_pos = []
+            rs_success = False
+        
+        # Convert decoded bytes back to phonemes
+        decoded_symbols = list(decoded_msg)
+        # The decoded message is the RS data+parity block. Extract just data portion
+        # RS returned the full corrected block (data + parity)
+        # We need to extract only the data portion (first len(encoded_symbols) bytes)
+        data_symbols = decoded_symbols[:len(encoded_symbols)]
+        
+        decoded_phonemes = [INDEX_TO_PHONEME.get(s, 'SIL') for s in data_symbols]
+        print(f"Decoded phonemes ({len(decoded_phonemes)}): {decoded_phonemes}")
+        
+        # Extract only the original data phonemes (not the parity added by encode)
+        recovered_data = decoded_phonemes[:len(all_phonemes)]
+        match = recovered_data == all_phonemes
+        print(f"\nRecovered: {recovered_data}")
+        print(f"RS decode valid: {rs_success}")
+        print(f"Errors fixed: {len(errata_pos)}")
+        print(f"Matches original exactly: {match}")
+
+        if rs_success and match:
+            print(f"\n✓ Reed-Solomon recovered the original phoneme sequence "
+                  f"despite {len(error_positions)} corrupted bytes.")
+        elif rs_success and not match:
+            print(f"\n✗ RS decode reported success but output does not match original — bug.")
+        else:
+            print(f"\n✗ Corruption ({len(error_positions)} errors) exceeded the correction "
+                  f"capacity for ecc_symbols=8 (max floor(8/2)=4 errors). This is expected, "
+                  f"honestly-reported failure, not silent data corruption.")
+        
+
+if __name__ == '__main__':
+    main()

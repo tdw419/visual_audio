@@ -1,0 +1,34 @@
+# Extract of the clean-tree pair (git archive HEAD + ancestor recipe), 2026-09-20.
+# Driver: bm602_cleanroom_pair.sh, landed beside this file (its own header states what it
+# tests and where the two trees came from). The scratch tree is gone; these are the
+# lines that mattered.
+
+## run 1 (HEAD identity stage: no pin, no landed reference)
+          [RED ] bm903_px_zp_leg0.bin is not in rung9 -- no landed reference to match
+          [RED ] bm903_px_cmdline_leg0.bin is not in rung9 -- no landed reference to match
+identity rc=1 IDENTITY: GREEN 23  RED 2
+GREEN 14  RED 1  skipped 0
+BM602_RUN_STATUS=RED (1 legs)
+
+## run 2 (same tree, pinned + landed reference copied in)
+          [PASS] bm903_px_zp_leg0.bin intact: sha256 bc2431d7be0ab1d2..., the reference this row was written against
+          [PASS] bm903_px_cmdline_leg0.bin intact: sha256 30cd829f2a88c80c..., the reference this row was written against
+          [PASS] bm903_px_regs_leg0.json intact: sha256 935d5fe1c23f878e..., the reference this row was written against
+          [PASS] clean zp == bm903_px_zp_leg0.bin: 4,096 B, the same executed handoff state the 42-leg medium produced
+          [PASS] chunk_plane0_stuckff zp == bm903_px_zp_leg0.bin: 4,096 B, the same executed handoff state the 42-leg medium produced
+          [PASS] erase_block_128k zp == bm903_px_zp_leg0.bin: 4,096 B, the same executed handoff state the 42-leg medium produced
+          [PASS] clean cmdline == bm903_px_cmdline_leg0.bin: 512 B, the same executed handoff state the 42-leg medium produced
+          [PASS] chunk_plane0_stuckff cmdline == bm903_px_cmdline_leg0.bin: 512 B, the same executed handoff state the 42-leg medium produced
+          [PASS] erase_block_128k cmdline == bm903_px_cmdline_leg0.bin: 512 B, the same executed handoff state the 42-leg medium produced
+identity rc=0 IDENTITY: GREEN 32  RED 0
+GREEN 15  RED 0  skipped 0
+BM602_RUN_STATUS=GREEN
+
+## The label run 1 put on a missing reference (an accusation about the medium, not the failure)
+  [RED ] identity: a repaired boot is not the clean boot -- see the spans above
+
+## Determinism across the two trees
+All 18 dumps this tree captured (rung6/captures/) compared byte-for-byte against
+the lane records in ../dumps/: 18 compared, 0 differ. The two bm602_fixtures.json
+agree too, once replay_seconds_clean_walk and scalar_over_full_payload_seconds
+(host timings) are removed.

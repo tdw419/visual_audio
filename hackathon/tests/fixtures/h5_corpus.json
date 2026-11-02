@@ -1,0 +1,49 @@
+{
+ "meta": {
+  "purpose": "h5 Muse Spark semantic-layer corpus (RED fixture set)",
+  "ground_truth_chain": "rv32i ELF -> tools/rv64i_to_glyph.transpile_elf_to_glyph (reference asm, transpiler corpus is ground truth) -> assemble_glyph_to_pixels -> GlyphCPUv2; results cross-checked against native x86 execution of the same C",
+  "qemu_note": "qemu-riscv32-static exists on the build host but is sandbox-walled (EPERM on MAP_FIXED at guest address 0; -B guest-base workaround hangs) -- the lane uses the corpus's own QEMU-diff-verified engine chain instead; see .factory/receipts/h5_RECEIPT.md",
+  "toolchain": {
+   "gcc": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+   "riscv64-unknown-elf-gcc": "riscv64-unknown-elf-gcc (13.2.0-11ubuntu1+12) 13.2.0"
+  }
+ },
+ "cases": [
+  {
+   "name": "sum",
+   "description": "Compute the sum of the integers from 1 through 10 using a loop and leave the result in return register a0.",
+   "c_source": "__attribute__((noinline)) int run(void) { volatile int n = 10; int s = 0; for (volatile int i = 1; i <= n; i++) s += i; return s; }\nvoid _start(void) { __asm__ volatile (\"li sp, 0x4000\\n call run\\n ecall\\n\"); }\n",
+   "reference_asm": "# Transpiled from RV32I/RV64I by rv64i_to_glyph.py\n:__entry\nLDI r31 4607            ; initialize hardware call stack pointer\nJMP :_start\n\n:run\n:pc_00000000\nLDI r29 0xfffffff0\nADD r2 r29\n:pc_00000004\nLDI r15 0xa\n:pc_00000008\nLDI r30 0xc\nADD r30 r2\nLDI r29 2\nSHR r30 r29\nST r30 r15\n:pc_0000000c\nLDI r15 0x1\n:pc_00000010\nLDI r30 0x8\nADD r30 r2\nLDI r29 2\nSHR r30 r29\nST r30 r15\n:pc_00000014\nLDI r30 0x8\nADD r30 r2\nLDI r29 2\nSHR r30 r29\nLD r14 r30\n:pc_00000018\nLDI r30 0xc\nADD r30 r2\nLDI r29 2\nSHR r30 r29\nLD r15 r30\n:pc_0000001c\nPUSH r28\nPUSH r29\nPUSH r30\nLDI r30 0\nADD r30 r15\nSUB r30 r14\nLDI r29 31\nSHR r30 r29\nLDI r28 1\nCMP r30 r28\nPOP r30\nPOP r29\nPOP r28\nJZ :pc_0000004c\n:pc_00000020\nLDI r10 0x0\n:pc_00000024\nLDI r30 0x8\nADD r30 r2\nLDI r29 2\nSHR r30 r29\nLD r15 r30\n:pc_00000028\nADD r10 r15\n:pc_0000002c\nLDI r30 0x8\nADD r30 r2\nLDI r29 2\nSHR r30 r29\nLD r15 r30\n:pc_00000030\nLDI r29 0x1\nADD r15 r29\n:pc_00000034\nLDI r30 0x8\nADD r30 r2\nLDI r29 2\nSHR r30 r29\nST r30 r15\n:pc_00000038\nLDI r30 0x8\nADD r30 r2\nLDI r29 2\nSHR r30 r29\nLD r14 r30\n:pc_0000003c\nLDI r30 0xc\nADD r30 r2\nLDI r29 2\nSHR r30 r29\nLD r15 r30\n:pc_00000040\nPUSH r28\nPUSH r29\nPUSH r30\nLDI r30 0\nADD r30 r15\nSUB r30 r14\nLDI r29 31\nSHR r30 r29\nLDI r28 0\nCMP r30 r28\nPOP r30\nPOP r29\nPOP r28\nJZ :pc_00000024\n:pc_00000044\nLDI r29 0x10\nADD r2 r29\n:pc_00000048\nRET\n:pc_0000004c\nLDI r10 0x0\n:pc_00000050\nJMP :pc_00000044\n:_start\n:pc_00000054\nLDI r2 0x4000\n:pc_00000058\nLDI r1 0x5c\nCALL :run\n:pc_0000005c\nHALT\n:pc_00000060\nRET\n",
+   "ground_truth": {
+    "native_result": 55,
+    "glyph_result": 55,
+    "halted": true,
+    "instruction_count": 93
+   }
+  },
+  {
+   "name": "fib",
+   "description": "Iterate the Fibonacci sequence for 10 steps starting from a=0, b=1 and return the tenth value in a0.",
+   "c_source": "__attribute__((noinline)) int run(void) { volatile int n = 10; int a = 0, b = 1; for (volatile int i = 0; i < n; i++) { int t = a + b; a = b; b = t; } return a; }\nvoid _start(void) { __asm__ volatile (\"li sp, 0x4000\\n call run\\n ecall\\n\"); }\n",
+   "reference_asm": "# Transpiled from RV32I/RV64I by rv64i_to_glyph.py\n:__entry\nLDI r31 4607            ; initialize hardware call stack pointer\nJMP :_start\n\n:run\n:pc_00000000\nLDI r29 0xfffffff0\nADD r2 r29\n:pc_00000004\nLDI r15 0xa\n:pc_00000008\nLDI r30 0xc\nADD r30 r2\nLDI r29 2\nSHR r30 r29\nST r30 r15\n:pc_0000000c\nLDI r30 0x8\nADD r30 r2\nLDI r29 2\nSHR r30 r29\nLDI r28 0\nST r30 r28\n:pc_00000010\nLDI r30 0x8\nADD r30 r2\nLDI r29 2\nSHR r30 r29\nLD r14 r30\n:pc_00000014\nLDI r30 0xc\nADD r30 r2\nLDI r29 2\nSHR r30 r29\nLD r15 r30\n:pc_00000018\nPUSH r28\nPUSH r29\nPUSH r30\nLDI r30 0\nADD r30 r14\nSUB r30 r15\nLDI r29 31\nSHR r30 r29\nLDI r28 0\nCMP r30 r28\nPOP r30\nPOP r29\nPOP r28\nJZ :pc_00000050\n:pc_0000001c\nLDI r14 0x1\n:pc_00000020\nLDI r15 0x0\n:pc_00000024\nLDI r10 0\nADD r10 r14\n:pc_00000028\nADD r14 r15\n:pc_0000002c\nLDI r30 0x8\nADD r30 r2\nLDI r29 2\nSHR r30 r29\nLD r15 r30\n:pc_00000030\nLDI r29 0x1\nADD r15 r29\n:pc_00000034\nLDI r30 0x8\nADD r30 r2\nLDI r29 2\nSHR r30 r29\nST r30 r15\n:pc_00000038\nLDI r30 0x8\nADD r30 r2\nLDI r29 2\nSHR r30 r29\nLD r12 r30\n:pc_0000003c\nLDI r30 0xc\nADD r30 r2\nLDI r29 2\nSHR r30 r29\nLD r13 r30\n:pc_00000040\nLDI r15 0\nADD r15 r10\n:pc_00000044\nPUSH r28\nPUSH r29\nPUSH r30\nLDI r30 0\nADD r30 r12\nSUB r30 r13\nLDI r29 31\nSHR r30 r29\nLDI r28 1\nCMP r30 r28\nPOP r30\nPOP r29\nPOP r28\nJZ :pc_00000024\n:pc_00000048\nLDI r29 0x10\nADD r2 r29\n:pc_0000004c\nRET\n:pc_00000050\nLDI r10 0x0\n:pc_00000054\nJMP :pc_00000048\n:_start\n:pc_00000058\nLDI r2 0x4000\n:pc_0000005c\nLDI r1 0x60\nCALL :run\n:pc_00000060\nHALT\n:pc_00000064\nRET\n",
+   "ground_truth": {
+    "native_result": 55,
+    "glyph_result": 55,
+    "halted": true,
+    "instruction_count": 93
+   }
+  },
+  {
+   "name": "max2",
+   "description": "Compare the values 17 and 42 and return the larger one in a0.",
+   "c_source": "__attribute__((noinline)) int run(void) { volatile int x = 17; volatile int y = 42; return (x > y) ? x : y; }\nvoid _start(void) { __asm__ volatile (\"li sp, 0x4000\\n call run\\n ecall\\n\"); }\n",
+   "reference_asm": "# Transpiled from RV32I/RV64I by rv64i_to_glyph.py\n:__entry\nLDI r31 4351            ; initialize hardware call stack pointer\nJMP :_start\n\n:run\n:pc_00000000\nLDI r29 0xfffffff0\nADD r2 r29\n:pc_00000004\nLDI r15 0x11\n:pc_00000008\nLDI r30 0xc\nADD r30 r2\nLDI r29 2\nSHR r30 r29\nST r30 r15\n:pc_0000000c\nLDI r15 0x2a\n:pc_00000010\nLDI r30 0x8\nADD r30 r2\nLDI r29 2\nSHR r30 r29\nST r30 r15\n:pc_00000014\nLDI r30 0xc\nADD r30 r2\nLDI r29 2\nSHR r30 r29\nLD r14 r30\n:pc_00000018\nLDI r30 0x8\nADD r30 r2\nLDI r29 2\nSHR r30 r29\nLD r15 r30\n:pc_0000001c\nPUSH r28\nPUSH r29\nPUSH r30\nLDI r30 0\nADD r30 r15\nSUB r30 r14\nLDI r29 31\nSHR r30 r29\nLDI r28 0\nCMP r30 r28\nPOP r30\nPOP r29\nPOP r28\nJZ :pc_0000002c\n:pc_00000020\nLDI r30 0xc\nADD r30 r2\nLDI r29 2\nSHR r30 r29\nLD r10 r30\n:pc_00000024\nLDI r29 0x10\nADD r2 r29\n:pc_00000028\nRET\n:pc_0000002c\nLDI r30 0x8\nADD r30 r2\nLDI r29 2\nSHR r30 r29\nLD r10 r30\n:pc_00000030\nJMP :pc_00000024\n:_start\n:pc_00000034\nLDI r2 0x4000\n:pc_00000038\nLDI r1 0x3c\nCALL :run\n:pc_0000003c\nHALT\n:pc_00000040\nRET\n",
+   "ground_truth": {
+    "native_result": 42,
+    "glyph_result": 42,
+    "halted": true,
+    "instruction_count": 59
+   }
+  }
+ ]
+}

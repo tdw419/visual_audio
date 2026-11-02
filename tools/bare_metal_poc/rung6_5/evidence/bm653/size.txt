@@ -1,0 +1,5 @@
+baseline (rung6/bm602_stage2_px.asm): code end 3,776 B -- exactly BM652 §6's number for this file, so the methods agree
+fork     (build/bm653_stage2_px.asm): code end 4,128 B  ->  the leg cost 352 B, against BM652's priced estimate of 392 B (-40 B, 90 % of it)
+control  (build/bm653_stage2_beeoff.asm): code end 4,128 B ->  +0 B against the fork
+budget: 4,064 B of the 8,192 B stage2 container still free (50.4 % used); BM652 measured 4,416 B free in the baseline, so the leg spent 352 B of it
+BM653_SIZE_STATUS=GREEN

@@ -1,0 +1,11 @@
+:__entry
+LDI r15 750
+LD r1 r15
+XOR r2 r2
+LDI r13 1
+ADD r2 r1
+SHL r2 r13
+ADD r2 r1
+LDI r15 754
+ST r15 r2
+HALT

@@ -1,0 +1,29 @@
+{
+ "id": "chatcmpl-01a18a40-aaf0-742d-a020-27479b2a319c",
+ "choices": [
+  {
+   "finish_reason": "stop",
+   "index": 0,
+   "message": {
+    "content": "```asm\nLDI r1 5\nST r1 s1a\nST r1 s1b\nST r1 s1c\nST r1 s1d\nLDI r2 9\nST r2 s2a\nST r2 s2b\nST r2 s2c\nST r2 s2d\nLDI r3 12\nST r3 s3a\nST r3 s3b\nST r3 s3c\nST r3 s3d\nLDI r10 3\nJMP end\n :s1a\n :s1b\n :s1c\n :s1d\nJMP mid\n :s2a\n :s2b\n :s2c\n :s2d\nJMP end2\n :mid\nJMP end2\n :s3a\n :s3b\n :s3c\n :s3d\n :end\nADD r10 r10\n :end2\nHALT\n```",
+    "refusal": null,
+    "role": "assistant"
+   },
+   "logprobs": null
+  }
+ ],
+ "created": 1793320856,
+ "model": "muse-spark-1.3",
+ "object": "chat.completion",
+ "usage": {
+  "completion_tokens": 1599,
+  "prompt_tokens": 367,
+  "total_tokens": 1966,
+  "completion_tokens_details": {
+   "reasoning_tokens": 1377
+  },
+  "prompt_tokens_details": {
+   "cached_tokens": 241
+  }
+ }
+}

@@ -1,0 +1,18 @@
+{
+ "canonical_frame": {
+  "origin": "top-left",
+  "width_px": 512,
+  "height_px": 512,
+  "cell_px": 8,
+  "grid": 64,
+  "hilbert_order": 6
+ },
+ "payload_hex": "68656c6c6f2066726f6d2074686520676c79706820706f737465723a2053414d20332e31206465636f6465642074686973207061796c6f61640a",
+ "payload_md5": "3292333c9470c37fbf4960b07dbeea79",
+ "framed_hex": "474c5931003a68656c6c6f2066726f6d2074686520676c79706820706f737465723a2053414d20332e31206465636f6465642074686973207061796c6f61640a",
+ "framed_md5": "5e9a290a6bdf7f0c37b4879de36dd72b",
+ "poster_png_md5": "5bfc17499589b238e89bc0acb3c23a21",
+ "bit_encoding": "framed bytes MSB-first; bit d -> cell hilbert_d2xy(order=6, d); cell filled=1 (ink 0x00), empty=0 (background 0xFF)",
+ "framing": "b\"GLY1\" + >H payload length + payload + zero pad to 4096 bits",
+ "mask_wire": "RLE pairs 'run,bit' comma-separated, row-major over the 64x64 cell grid"
+}

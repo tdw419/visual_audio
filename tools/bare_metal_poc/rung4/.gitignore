@@ -1,0 +1,9 @@
+# rung-4 gate artifacts (regenerable by run_gate4.sh) — not source
+*.raw
+*.log
+*.bin
+*.meta.json
+dbg_*
+serial_*
+stage1_const.inc
+payload_host*.bin

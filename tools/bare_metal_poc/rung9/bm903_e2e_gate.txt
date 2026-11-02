@@ -1,0 +1,143 @@
+----------------------------------------------------------------
+S0  input pins (nothing downstream is trusted past this line)
+  [PASS] pin ../rung7/core.gz
+  [PASS] pin bm902_zp.bin
+  [PASS] pin vmlinuz64.extracted
+  [PASS] pin oracle_cmdline_leg0.bin
+  [PASS] pin oracle_zp_leg0.bin
+  [PASS] pin bm902_cmdline.bin
+  [PASS] EXPECTED_CRC 393950AA == codec meta (one source of truth)
+  [PASS] probe bm903_anchor_boot.py
+  [PASS] probe bm903_norm_transcript.py
+  [PASS] probe bm903_px_corrupt.py
+----------------------------------------------------------------
+S0b lane guard: no other bm903 boot may be alive
+lane clear: no bm903 qemu alive
+  [PASS] lane clear
+----------------------------------------------------------------
+S1  build both media (step-1 contiguous and step-2 pixel) from source
+  [PASS] bm903_consts.py
+  [PASS] bm903_mkimg.py (step-1 medium)
+  [PASS] bm903_mkimg_px.py (pixel medium)
+      wrote bm903_medium_px.raw: 13640192 B = 26641 sectors, payload 13631488 B / 832 groups, CRC=393950AA; walk replay + sub-image slotting + CRC parity all green
+  [PASS] nasm clean (no warnings)
+  [PASS] bm903_medium.raw present (13565440 B)
+  [PASS] bm903_medium_px.raw present (13640192 B)
+  [PASS] pixel medium 26641 sectors == layout (every plane chunk is inside the file)
+----------------------------------------------------------------
+L1  boot the PIXEL medium, stop on the kernel's first insn, diff vs BM902
+        leg 0: last-checkpoint=BM903-S2 HANDOFF BUILT (6/6) stop=stopped on the handoff wall=0.7s
+      leg 0: CAPTURED rip=0x100000 rsi=0x13ab0 rsp=0x1f784 cr0=0x11 eflags=0x46
+        leg 1: last-checkpoint=BM903-S2 HANDOFF BUILT (6/6) stop=stopped on the handoff wall=0.7s
+      leg 1: CAPTURED rip=0x100000 rsi=0x13ab0 rsp=0x1f784 cr0=0x11 eflags=0x46
+  [PASS] capture rc=0 (both legs stopped at 0x100000 with HdrS at $rsi)
+  [PASS] leg 0 executed the walk AND passed gate v2 (serial, not host-side)
+  [PASS] leg 1 executed the walk AND passed gate v2 (serial, not host-side)
+      L1 PASS: 4 zeropage byte(s) differ from bm902_zp.bin, all inside the whitelist union (517 offsets): 0x21b, 0x21c, 0x21d, 0x21e
+      L2 PASS: cmdline byte-identical all 512 B (82 chars)
+      L2b PASS: ramdisk_image=0x10000000 ramdisk_size=0x8d4f07 == bm903_layout.json (constructed, not copied)
+      L3 PASS: all 25 registers match the oracle, including rsp=0x1f784 (BM902 whitelisted it)
+      BM903 DIFFER PASS: L1+L2+L2b+L3 green
+  [PASS] leg 0 L1 green (whitelist-only diffs)
+      L1 PASS: 4 zeropage byte(s) differ from bm902_zp.bin, all inside the whitelist union (517 offsets): 0x21b, 0x21c, 0x21d, 0x21e
+      L2 PASS: cmdline byte-identical all 512 B (82 chars)
+      L2b PASS: ramdisk_image=0x10000000 ramdisk_size=0x8d4f07 == bm903_layout.json (constructed, not copied)
+      L3 PASS: all 25 registers match the oracle, including rsp=0x1f784 (BM902 whitelisted it)
+      BM903 DIFFER PASS: L1+L2+L2b+L3 green
+  [PASS] leg 1 L1 green (whitelist-only diffs)
+----------------------------------------------------------------
+L1b the pixel medium and the contiguous medium construct the SAME handoff
+  [PASS] step-1 medium re-captured
+  [PASS] bm903_px_zp_leg0.bin == bm903_zp_leg0.bin (byte-identical)
+  [PASS] bm903_px_cmdline_leg0.bin == bm903_cmdline_leg0.bin (byte-identical)
+----------------------------------------------------------------
+L2  GPRs / segments / CR0 / EFLAGS / rsp at 0x100000 vs the oracle
+      pinned rsp=0x1f784 cr0=0x11 eflags=0x46 cs=0x10 ss/ds/es=0x18 rsi=0x13ab0 rip=rax=0x100000; 15 more = 0 -> ALL 26 MATCH
+  [PASS] L2 green on both pixel legs (the differ's L3 line checked all 25 vs the oracle; this re-pins the load-bearing ones)
+----------------------------------------------------------------
+L3  the kernel speaks on serial and reaches 'tc@box'
+    (up to 8 boots x 45s — which tty autologin wins is Tiny Core's, not ours)
+        [+   1.0s] stage2 enter
+        [+   1.0s] a20 ok
+        [+   1.0s] walk done
+        [+   1.0s] gate verdict
+        [+   1.0s] handoff
+        [+   3.0s] busybox init
+        [+   5.0s] extensions
+        [+  11.0s] login msg
+        [+  11.0s] anchor
+        walk done    seen
+        gate line    seen
+                     computed=393950AA expected=393950AA MATCH
+        pass verdict seen
+        handoff      seen
+        anchor       seen
+      medium=bm903_medium_px.raw log=/tmp/bm903_e2e_leg0.log elapsed=11.0s rc=0
+  [PASS] L3 green: pixel medium -> kernel -> tc@box on boot 1 of 8 (45s each, rc=0)
+      control medium=bm903_medium.raw log=/tmp/bm903_e2e_ctrl.log elapsed=11.0s rc=0
+  [PASS] control: the contiguous medium reaches tc@box (boot 1, rc=0) — the rig boots
+----------------------------------------------------------------
+L4  two boots of the pixel medium: transcripts and dumps
+      boot 1/8 rc=1: no tc@box on serial (45s budget; guest autologin race)
+  [PASS] second pixel boot reached tc@box (boot 2 of 8, rc=0)
+        bm903_e2e_leg0.log: 1306 B -> 881 B compared   fired: T2 login pid=2, T3 spinner cycles=2, T4 cut=881 B, at the first issue banner
+            tail not compared: 329 B sha256 de5a4891da6c9817…
+        bm903_e2e_leg1.log: 1306 B -> 881 B compared   fired: T2 login pid=2, T3 spinner cycles=2, T4 cut=881 B, at the first login record
+            tail not compared: 329 B sha256 ce6afa30fdbdf797…
+  [PASS] transcripts byte-identical after T1-T4 (compared up to the getty race)
+  [PASS] handoff dumps: bm903_px_zp_leg0.bin == bm903_px_zp_leg1.bin (strict, no normalization)
+  [PASS] handoff dumps: bm903_px_cmdline_leg0.bin == bm903_px_cmdline_leg1.bin (strict, no normalization)
+  [PASS] handoff dumps: bm903_px_regs_leg0.json == bm903_px_regs_leg1.json (strict, no normalization)
+----------------------------------------------------------------
+L5  RED — flip ONE zeropage byte outside the whitelist; the differ must name it
+  mutant: 0x244 0x00 -> 0x01 (outside every whitelist row)
+      L2 PASS: cmdline byte-identical all 512 B (82 chars)
+      L2b PASS: ramdisk_image=0x10000000 ramdisk_size=0x8d4f07 == bm903_layout.json (constructed, not copied)
+      L3 PASS: all 25 registers match the oracle, including rsp=0x1f784 (BM902 whitelisted it)
+      L1 FAIL: 1 zeropage diff(s) vs bm902_zp.bin outside whitelist: 0x244
+      RED LEG OK: differ exited non-zero as required
+  [PASS] L5 green: mutant caught, differ exits non-zero naming 0x244
+      control L1 PASS: 5 zeropage byte(s) differ from bm902_zp.bin, all inside the whitelist union (517 offsets): 0x210, 0x21b, 0x21c, 0x21d, 0x21e
+  [PASS] L5 control: a whitelisted change stays green
+----------------------------------------------------------------
+L6  RED — corrupt ONE medium byte: gate refuses, host arithmetic cross-checks, NO jump
+      corrupt: payload byte 4000000 (inside the pm kernel) at medium offset 0xf6440, 0xe5 -> 0xe4  (1 byte of 13640192 changed)
+      host decode cross-check: clean medium -> 393950AA == EXPECTED; corrupt medium -> 6AB8F2D3
+      wrote /tmp/bm903_medium_px_corrupt.raw (13640192 B) and /tmp/bm903_medium_px_corrupt.crc
+        [+   1.0s] stage2 enter
+        [+   1.0s] a20 ok
+        [+   1.0s] walk done
+        [+   1.0s] gate verdict
+        walk done    seen
+        gate line    seen
+                     computed=6AB8F2D3 expected=393950AA MISMATCH
+        pass verdict MISSING
+        handoff      MISSING
+        anchor       MISSING
+      medium=bm903_medium_px_corrupt.raw log=/tmp/bm903_e2e_l6.log elapsed=1.0s rc=1
+      guest printed: BM903-S2 GATE2 CRC=6AB8F2D3 EXP=393950AA
+      host predicted: BM903-S2 GATE2 CRC=6AB8F2D3 EXP=393950AA
+  [PASS] L6 cross-check: the guest's computed CRC == the host's independent prediction, and != EXPECTED
+  [PASS] L6 refusal present (rung-4 format: computed then expected, then the verdict)
+  [PASS] no 'HANDOFF BUILT' after the refusal
+  [PASS] no anchor from the corrupted medium
+        leg 0: last-checkpoint=BM903-S2 GATE2 (5/6) stop=NO STOP (timeout or hung loader) wall=20.0s
+      leg 0: NO CAPTURE (gdb never stopped on the handoff)
+        leg 1: last-checkpoint=BM903-S2 GATE2 (5/6) stop=NO STOP (timeout or hung loader) wall=20.0s
+      leg 1: NO CAPTURE (gdb never stopped on the handoff)
+  [PASS] L6 no-jump proven under gdb: no stop at 0x100000 within 20s x2 legs (rc=1)
+----------------------------------------------------------------
+R1  the step-1 gate still passes with these files in place
+      BM903 STEP 1 GREEN: our executed stage2 constructs the BM902 handoff
+      (diff: 4 bytes, all the constructed initrd pair, all whitelisted).
+      This gate closes STEP 1 ONLY: the pixel medium and the serial anchor are
+      run_bm903_e2e.sh's legs, not this script's — see RECEIPT_BM903_E2E.md.
+  [PASS] step-1 gate green
+----------------------------------------------------------------
+BM903 E2E TALLY: 42 pass, 0 red
+BM903 ROW GREEN: the PXC1 pixel medium carries bzImage+initrd, executed
+stage2 builds the BM902 handoff (4 whitelisted bytes), CRC32 gate v2 is
+the only path to it (and refuses on a single corrupted byte, with the
+guest's own arithmetic matching the host's), and the kernel reaches
+'tc@box' on serial (guest-autologin-race allowance: 8 boots x
+45s, each named). Both RED legs fired.

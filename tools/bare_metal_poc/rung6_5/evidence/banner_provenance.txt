@@ -1,0 +1,5 @@
+green: banner string in the image only (img2 1x, stage2 65536 B 0x, stage1 512 B 0x)
+noecho: banner string in the image only (img2 1x, stage2 65536 B 0x, stage1 512 B 0x)
+nombox: banner string in the image only (img2 1x, stage2 65536 B 0x, stage1 512 B 0x)
+halt: banner string in the image only (img2 1x, stage2 65536 B 0x, stage1 512 B 0x)
+=> the transcript line can only have come from the executed pixels
