@@ -53,6 +53,10 @@ contributes each mechanic the game-server model needs:
 
 ## Post-deadline horizon (staked, not claimed)
 
+**Measured since submission (2026-11-02):** fork-on-restore at N=2 — two
+concurrent Linux seats restored from one master snapshot on one RTX 5090,
+zero state leakage, ~83M steps/seat — `MULTI_SEAT_RECEIPT.md`.
+
 1. **VRAM-side snapshot restore** — `copy_buffer_to_buffer` clones of the
    six buffers stay on-device; restore drops from seconds to sub-millisecond,
    so a dirty session resets inside one display frame.
