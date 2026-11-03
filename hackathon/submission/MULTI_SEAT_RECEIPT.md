@@ -19,8 +19,10 @@ GPU_POWER=high python tools/gpu_shell_multi_seat.py \
 
 Two `gpu_shell_live.py` processes launch concurrently. Each restores the
 identical 18.5 MB snapshot (six buffers: memory 64 MB, registers, state,
-CSR, UART ring, TLB) into its own private GPU buffer set (~1.8 GB VRAM
-per seat) and runs its own scripted command stream at the prompt.
+CSR, UART ring, TLB) into its own private GPU buffer set (VRAM per seat
+not re-measured in this specific multi-seat run; single-process baseline
+observed at 1,858 MiB via nvidia-smi) and runs its own scripted command
+stream at the prompt.
 
 ## Result: PASS — all_isolated: true
 
@@ -50,8 +52,11 @@ bin  init  newroot  root  seat2.txt  var  dev  lib  note.txt  run  sys ...
 
 Each seat's `ls /` lists ONLY its own seat file. Alice's full serial log
 contains zero occurrences of `User 2`; Bob's contains zero of `User 1`.
-Logs: `/tmp/h12_multiseat/seat{1,2}_*.log`, machine-readable verdict in
-`/tmp/h12_multiseat/summary.json`.
+Logs: `/tmp/h12_multiseat/seat{1,2}_*.log`. The step and wall numbers in
+the table above are machine-readable provenance from
+`/tmp/h12_multiseat/summary.json` (written by the orchestrator at run
+end); the isolation verdict is the corrected verifier's output, also
+recorded there.
 
 ## Honesty notes
 
@@ -69,6 +74,11 @@ Logs: `/tmp/h12_multiseat/seat{1,2}_*.log`, machine-readable verdict in
 3. **Scope:** two host processes, each owning private buffer sets on one
    WebGPU device/adapter. The in-shader N-hart scheduler and shared
    compositor remain staked future work (ROADMAP post-deadline horizon).
+4. **Auditor hardening (2026-11-02):** the adversarial receipt auditor
+   (`factory audit`, Meta Model API) flagged the VRAM figure and the
+   summary numbers as un-cited provenance. This section was hardened in
+   response — the feedback loop (build auditor → auditor flags own
+   team's receipt → provenance hardened) is itself part of the record.
 
 ## Verification gate added
 
