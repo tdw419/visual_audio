@@ -130,14 +130,18 @@ Why is memory blitting structurally superior to OS installation?
 * **Zero-Copy VRAM-to-VRAM Blit (`copy_buffer_to_buffer`):**
   Internal memory bandwidth on the RTX 5090 is **$> 1.7 \text{ TB/s}$** ($1{,}700{,}000 \text{ MB/s}$).
   $$\text{Latency} = \frac{64 \text{ MB}}{1{,}700{,}000 \text{ MB/s}} \approx \mathbf{37.6 \text{ microseconds}}$$
+  *(Raw-bus floor only — ignores driver dispatch and queue submission. The shipped implementation measures **~76 ms per seat** end-to-end; see below.)*
 
-**Result:** With the disk-snapshot path **measured and shipped today**, a fully
-booted, interactive Linux session resumes in **124 seconds**. The VRAM-to-VRAM
-blit is the staked next step (see ROADMAP "Post-deadline horizon"): the same
-restore performed entirely on-device is **arithmetic on hardware specs, not a
-shipped capability** — projected at ~37.6 microseconds, more than 400 times
-faster than a single 60 FPS video frame. We claim the 124 seconds; we stake
-the 37.6.
+**Result:** The full provisioning ladder is now **measured on RTX 5090 hardware**:
+68-minute cold boot → 124-second disk-snapshot resume → **~76 ms per-seat
+in-VRAM clone** (0.153 s to materialize $N{=}2$ seats from ONE restore in a single
+host process via `copy_buffer_to_buffer`, zero cross-seat leakage, receipted and
+probe-signed by the guest itself). The 37.6-microsecond figure above was raw bus
+arithmetic — a floor that driver dispatch and queue submission overhead erase in
+practice. We initially staked the 37.6 µs; the measurement says ~76 ms. We claim
+the 124 seconds **and** the 76 milliseconds — both measured, neither projected.
+At 76 ms, a new seat materializes in about four display frames at 60 FPS:
+instantaneous to the user clicking a launcher.
 
 ---
 
@@ -175,7 +179,7 @@ In Geometry OS, **"The Screen is the Hard Drive"**:
 | Dimension | Traditional VDI | Geometry OS Game-Server Model |
 | :--- | :--- | :--- |
 | **Provisioning Unit** | Full VM / OS Installation | Memory Blit (`copy_buffer_to_buffer`) |
-| **Provisioning Time** | 10 seconds – 2 minutes | 124 s measured (disk snapshot); ~37.6 µs projected (VRAM-to-VRAM, staked) |
+| **Provisioning Time** | 10 seconds – 2 minutes | 124 s measured (disk snapshot); 76 ms measured (in-VRAM clone per seat, N=2, one host process — Rung 29) |
 | **State Representation** | Opaque hypervisor memory | 6 explicit WGPU storage buffers |
 | **Compositor Path** | DRAM $\to$ PCIe $\to$ VRAM $\to$ NVENC | Direct in-VRAM texture read (Zero-Copy) |
 | **Reproducibility** | Non-deterministic (clock drift) | Bit-exact serial hash verification |

@@ -67,8 +67,8 @@ same model for desktops: a full Linux kernel and interactive shell
 executing inside GPU compute, image I/O in both directions, and
 byte-identical deterministic state on every boot. Because the entire
 machine state is encapsulated in six GPU buffers, provisioning a new user
-session collapses from an OS installation into a memory blit (68 min → 124s
-snapshot resume measured; sub-millisecond VRAM clone staked). One GPU serving many
+session collapses from an OS installation into a memory blit (68 min cold boot → 124 s
+snapshot resume → 76 ms per-seat in-VRAM clone, all measured on RTX 5090). One GPU serving many
 desktops — each user's screen just an image, any device able to sit at
 it — is the destination. Architectural analysis: `hackathon/submission/GAME_SERVER_OS_CONCEPT.md`.
 The build order (persistent virtio root, N harts, framebuffer-as-image,
