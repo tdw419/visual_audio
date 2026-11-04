@@ -19,11 +19,11 @@ against the machine's ISA conventions, executed on the canvas, halted clean.
 
 ## Demo video
 
-`hackathon/demo/video/demo_v1.mp4` (60.7s). Every frame is a real artifact:
+[hackathon/demo/video/demo_v1.mp4](https://github.com/tdw419/visual_audio/blob/hackathon-submission/hackathon/demo/video/demo_v1.mp4) (60.7s). Every frame is a real artifact:
 live-captured runs of the frozen one-command pipeline
-(`hackathon/demo/freeze/E2E.sh`, `FALLBACK_DEMO.sh`), the committed
+([hackathon/demo/freeze/E2E.sh](https://github.com/tdw419/visual_audio/blob/hackathon-submission/hackathon/demo/freeze/E2E.sh), `FALLBACK_DEMO.sh`), the committed
 art-blend poster, and the committed live-authoring artifact. Production
-receipt: `hackathon/demo/video/PRODUCTION_RECEIPT.md`.
+receipt: [hackathon/demo/video/PRODUCTION_RECEIPT.md](https://github.com/tdw419/visual_audio/blob/hackathon-submission/hackathon/demo/video/PRODUCTION_RECEIPT.md).
 
 ## Use of Meta AI tooling (beyond basic integration)
 
@@ -67,13 +67,14 @@ same model for desktops: a full Linux kernel and interactive shell
 executing inside GPU compute, image I/O in both directions, and
 byte-identical deterministic state on every boot. Because the entire
 machine state is encapsulated in six GPU buffers, provisioning a new user
-session collapses from an OS installation into a memory blit (68 min cold boot → 124 s
-snapshot resume → 76 ms per-seat in-VRAM clone, all measured on RTX 5090). One GPU serving many
+session collapses from an OS installation into a memory blit (68 min cold boot
+→ 124 s snapshot resume → 76 ms per-seat in-VRAM clone; N=2 isolated seats from one
+host process, zero cross-leakage — all measured on RTX 5090). One GPU serving many
 desktops — each user's screen just an image, any device able to sit at
-it — is the destination. Architectural analysis: `hackathon/submission/GAME_SERVER_OS_CONCEPT.md`.
+it — is the destination. Architectural analysis: [hackathon/submission/GAME_SERVER_OS_CONCEPT.md](https://github.com/tdw419/visual_audio/blob/hackathon-submission/hackathon/submission/GAME_SERVER_OS_CONCEPT.md).
 The build order (persistent virtio root, N harts, framebuffer-as-image,
 compositor-as-game-loop, deterministic migration) and the honest current
-blockers are in `hackathon/submission/ROADMAP.md`.
+blockers are in [hackathon/submission/ROADMAP.md](https://github.com/tdw419/visual_audio/blob/hackathon-submission/hackathon/submission/ROADMAP.md).
 
 ## Impact
 
@@ -86,7 +87,7 @@ computing: software that lives in, and is read back from, images.
 
 ## Verify it yourself
 
-Don't take the video's word for anything — `hackathon/demo/VERIFY.md`
+Don't take the video's word for anything — [hackathon/demo/VERIFY.md](https://github.com/tdw419/visual_audio/blob/hackathon-submission/hackathon/demo/VERIFY.md)
 lists four self-service tests ranked by time to verdict: the pytest
 suite (~7s), the offline glyph decode (~10s, no GPU), the one-command
 end-to-end spine — decode + Linux kernel boot — (~90s, GPU), and the
@@ -94,8 +95,8 @@ live interactive shell: one command (`./hackathon/demo/BOOT_LINUX.sh`),
 an unattended ~75-minute boot, then you type your own commands at
 Linux on the GPU core (`ls`, `cat`, `free`, the whole busybox toolbox
 — committed transcript:
-`hackathon/tests/fixtures/gpu_shell_live_interactive_2026-11-01.log`).
+[hackathon/tests/fixtures/gpu_shell_live_interactive_2026-11-01.log](https://github.com/tdw419/visual_audio/blob/hackathon-submission/hackathon/tests/fixtures/gpu_shell_live_interactive_2026-11-01.log)).
 The committed shell transcript
-(`hackathon/tests/fixtures/gpu_shell_session_2026-10-30.log`) and the
+([hackathon/tests/fixtures/gpu_shell_session_2026-10-30.log](https://github.com/tdw419/visual_audio/blob/hackathon-submission/hackathon/tests/fixtures/gpu_shell_session_2026-10-30.log)) and the
 scene-to-artifact production receipt let you audit the video frame by
 frame without running anything.
